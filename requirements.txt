@@ -5,3 +5,5 @@ joblib
 scikit_learn
 xgboost
 catboost
+requests
+beautifulsoup4
