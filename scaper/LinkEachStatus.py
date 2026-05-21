@@ -12,8 +12,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-BASE_URL = "https://i-nhadat.com"
-LIST_PAGE = BASE_URL + "/can-ban-nha-dat/ben-tre-t13/p{}.htm"
+BASE_URL = "https://alonhadat.com.vn"
+LIST_PAGE = BASE_URL + "/can-ban-nha/ho-chi-minh/trang-{}"
 
 HEADERS = {
     "User-Agent": (
@@ -104,7 +104,7 @@ def fetch_soup_with_manual_captcha(url: str, target_selector: str, captcha_selec
                 except EOFError:
                     pass
 
-            wait = WebDriverWait(driver, 60)
+            wait = WebDriverWait(driver, 120)
             wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, target_selector)))
             return BeautifulSoup(driver.page_source, "html.parser")
         except Exception as e:
@@ -115,34 +115,43 @@ def fetch_soup_with_manual_captcha(url: str, target_selector: str, captcha_selec
             _safe_quit(driver)
 
 def extract_list_page(page_url: str) -> list[dict]:
-    soup = fetch_soup_with_manual_captcha(page_url, ".content-items .content-item")
+    soup = fetch_soup_with_manual_captcha(page_url, "article.property-item")
     if soup is None:
         return []
-
     rows = []
-    items = soup.select(".content-items .content-item")
-    for item in items:
-        # prefer the main link inside thumbnail or title; fall back to first anchor
-        link_tag = item.select_one(".thumbnail a") or item.select_one(".ct_title a") or item.select_one("a")
-        if not link_tag:
+
+    articles = soup.select("article.property-item")
+    for article in articles:
+        link_tag = article.select_one("a.link")
+        addr_tag = article.select_one("p.new-address")
+        area_tag = article.select_one(".property-details .area, .property-details .size, .property-details [itemprop='floorSize'] .value")
+
+        if not link_tag or not addr_tag:
             continue
 
-        href = link_tag.get("href", "").strip()
-        if not href:
-            continue
+        street_tag = addr_tag.select_one("span[itemprop='streetAddress']")
+        locality_tag = addr_tag.select_one("span[itemprop='addressLocality']")
+        region_tag = addr_tag.select_one("span[itemprop='addressRegion']")
 
-        rows.append({"link": urljoin(BASE_URL, href)})
+        rows.append({
+            "link": urljoin(BASE_URL, link_tag.get("href", "").strip()),
+            "street": street_tag.get_text(strip=True) if street_tag else None,
+            "locality": locality_tag.get_text(strip=True) if locality_tag else None,
+            "region": region_tag.get_text(strip=True) if region_tag else None,
+            "Diện tích": area_tag.get_text(" ", strip=True).replace("Diện tích:", "").strip() if area_tag else None,
+        })
 
     return rows
 
 
-def extract_more_info(url: str):
+def extract_more_info(url: str, listing_data: dict | None = None):
     try:
         soup = fetch_soup_with_manual_captcha(url, ".moreinfor1, .property-details")
         if soup is None:
             return None
 
-        data = {"link": url}
+        data = dict(listing_data or {})
+        data["link"] = url
 
         title_tag = soup.select_one("h1, .title, .property-title")
         if title_tag:
@@ -189,7 +198,7 @@ def extract_more_info(url: str):
 def main():
     all_rows = []
 
-    for page in range(1, 4):
+    for page in range(200, 300):
         page_url = LIST_PAGE.format(page)
         print(f"Scraping: {page_url}")
 
@@ -209,9 +218,8 @@ def main():
 
     print(df)
 
-    # write listings only (details will be fetched in a later step)
-    df.to_csv("inhadat_listings.csv", index=False, encoding="utf-8-sig")
-    print(f"Wrote {len(df)} listings to inhadat_listings.csv. Detail extraction skipped.")
+    df.to_csv("alonhadat_listings.csv", index=False, encoding="utf-8-sig")
+    print(f"Wrote {len(df)} listings to alonhadat_listings.csv. Detail scraping is handled by Link2details.py.")
 
 if __name__ == "__main__":
     main()
