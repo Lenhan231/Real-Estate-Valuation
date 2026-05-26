@@ -1,6 +1,8 @@
 # Virtual environment
 .venv/
 venv/
+.venv/Lib/site-packages
 
 # VSCode
 .vscode/
+scaper/__pycache__
