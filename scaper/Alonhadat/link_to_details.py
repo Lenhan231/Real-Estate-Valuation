@@ -4,10 +4,13 @@ import requests
 import subprocess
 import pandas as pd
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.common import WebDriverException
+from urllib.parse import urljoin
 import os
 
+from selenium.common import TimeoutException
+
+INPUT_FILE = r".\data\raw\alonhadat_listings.csv"
+OUTPUT_FILE = r".\data\raw\alonhadat_details.csv"
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -23,9 +26,6 @@ BLOCKED_MARKERS = [
     "imagecaptcha.ashx",
 ]
 
-chrome_options = webdriver.ChromeOptions()
-chrome_options.add_argument("--window-size=1280,1600")
-
 def run(cmd: list[str]) -> str:
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     return result.stdout.strip()
@@ -33,7 +33,6 @@ def run(cmd: list[str]) -> str:
 def looks_blocked(html: str) -> bool:
     lowered = html.lower()
     return any(m in lowered for m in BLOCKED_MARKERS)
-
 
 def parse_detail_page(soup: BeautifulSoup) -> dict:
     data = {}
@@ -108,13 +107,78 @@ def parse_detail_page(soup: BeautifulSoup) -> dict:
                             data[key] = val
                     i += 2
 
+    # ---- contact info ----
+    name_tag = soup.select_one(".contact-info .name")
+    if name_tag:
+        data["Tên liên hệ"] = _clean_value(name_tag.get_text(" ", strip=True))
+
+    phone_tag = soup.select_one(".contact-info .fone a[href^='tel:']")
+    if phone_tag:
+        data["Số Điện Thoại"] = _clean_value(phone_tag.get_text(" ", strip=True))
+    else:
+        phone_fallback = soup.select_one(".contact-info .fone")
+        if phone_fallback:
+            data["Số Điện Thoại"] = _clean_value(phone_fallback.get_text(" ", strip=True))
+
+    # ---- review score ----
+    review_label = soup.select_one(".review-box .review-score")
+    review_rate = soup.select_one(".review-box .review-star .rate")
+    if review_label or review_rate:
+        score_text = ""
+        if review_label:
+            score_text = _clean_value(review_label.get_text(" ", strip=True)).replace("Được đánh giá:", "").strip()
+
+        if review_rate:
+            style = review_rate.get("style", "")
+            # width:60%; -> 3/5 stars if the site uses 5-star scaling
+            if "width:" in style:
+                width_part = style.split("width:", 1)[1].split(";", 1)[0].strip().replace("%", "")
+                try:
+                    pct = float(width_part)
+                    data["được đánh giá"] = f"{pct/20:.1f}/5"
+                except ValueError:
+                    if score_text:
+                        data["được đánh giá"] = score_text
+            elif score_text:
+                data["được đánh giá"] = score_text
+        elif score_text:
+            data["được đánh giá"] = score_text        
         # project extraction removed per user request
 
-    # also check anywhere else for project link
+    desc_tag = soup.select_one(
+    "section.detail.text-content p[itemprop='description']"
+    )
+
+    if desc_tag:
+        data["Thông tin chi tiết"] = " ".join(
+            desc_tag.get_text(" ", strip=True).split()
+        )
+
+    BASE_URL = "https://alonhadat.com.vn"
+
+    img_tags = soup.select("ul.image-list li img[src]")
+
+    # fallback for single-image pages
+    if not img_tags:
+        img_tags = soup.select("section.images div.imageview img[src]")
+
+    images = [
+        urljoin(BASE_URL, img["src"])
+        for img in img_tags
+    ]
+
+    data["Hình ảnh"] = images
+
+        # also check anywhere else for project link
     # project extraction intentionally omitted
 
     return data
 
+def _clean_key(text: str) -> str:
+    return text.replace(":", "").strip()
+
+def _clean_value(text: str) -> str:
+    return " ".join(text.split()).strip()
 
 def fetch(url: str) -> (BeautifulSoup | None):
     try:
@@ -131,56 +195,37 @@ def fetch(url: str) -> (BeautifulSoup | None):
 
 
 def fetch_via_selenium_manual(url: str) -> (BeautifulSoup | None):
-    print(f"Opening browser for manual verification: {url}")
+    print(f"Retrying with WARP reconnect: {url}")
+
     try:
-        driver = webdriver.Chrome(options=chrome_options)
-    except WebDriverException as e:
-        print("Could not start Chrome WebDriver:", e)
+        print(run(["warp-cli", "disconnect"]))
+        time.sleep(2)
+
+        print(run(["warp-cli", "connect"]))
+        time.sleep(5)
+
+    except Exception as e:
+        print("WARP reconnect failed:", e)
         return None
 
     try:
-        driver.get(url)
+        resp = requests.get(url, headers=HEADERS, timeout=20)
+        resp.raise_for_status()
 
-        # initial check
-        page_html = driver.page_source
-        if not looks_blocked(page_html):
-            return BeautifulSoup(page_html, "html.parser")
-
-        try:
-            print(run(["warp-cli", "disconnect"]))
-            print(run(["warp-cli", "connect"]))   
-        except EOFError:
-            ans = ""
-
-        if ans == "s":
+        if looks_blocked(resp.text):
+            print("Still blocked after reconnect.")
             return None
 
-        # wait for user to solve — poll page source for removal of block markers
-        timeout_seconds = 300
-        poll = 5
-        waited = 0
-        while waited < timeout_seconds:
-            time.sleep(poll)
-            waited += poll
-            page_html = driver.page_source
-            if not looks_blocked(page_html):
-                return BeautifulSoup(page_html, "html.parser")
+        return BeautifulSoup(resp.text, "html.parser")
 
-        print("Timed out waiting for manual verification.")
+    except Exception as e:
+        print("Retry fetch failed:", e)
         return None
-    except WebDriverException as e:
-        print("Selenium error while loading page:", e)
-        return None
-    finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
 
 
 def main():
     try:
-        df = pd.read_csv(r"HousePricePrediction\data\raw\alonhadat_listings.csv")
+        df = pd.read_csv(INPUT_FILE)
     except Exception as e:
         print("Could not read alonhadat_listings.csv:", e)
         return
@@ -197,7 +242,7 @@ def main():
         if not url or not isinstance(url, str):
             # drop malformed row
             df = df.iloc[1:].reset_index(drop=True)
-            df.to_csv(r"HousePricePrediction\data\raw\alonhadat_listings.csv", index=False, encoding="utf-8-sig")
+            df.to_csv(INPUT_FILE, index=False, encoding="utf-8-sig")
             continue
 
         print(f"Processing (remaining {len(df)}): {url}")
@@ -210,7 +255,7 @@ def main():
                 break
             first = df.iloc[0:1]
             df = pd.concat([df.iloc[1:].reset_index(drop=True), first]).reset_index(drop=True)
-            df.to_csv(r"HousePricePrediction\data\raw\alonhadat_listings.csv", index=False, encoding="utf-8-sig")
+            df.to_csv(INPUT_FILE, index=False, encoding="utf-8-sig")
             time.sleep(random.uniform(1, 2))
             continue
 
@@ -223,14 +268,15 @@ def main():
 
         # enforce canonical column order and align with existing file if present
         canonical = [
-            "link", "street", "locality", "region", "Diện tích",
+            "link", "title", "post_day", "price", "street", "locality", "region", "area", "old_address",
             "Mã tin", "Hướng", "Phòng ăn", "Loại tin", "Đường trước nhà", "Nhà bếp",
             "Loại BDS", "Pháp lý", "Sân thượng", "Chiều ngang", "Số lầu", "Chổ để xe hơi",
-            "Chiều dài", "Số phòng ngủ", "Chính chủ", "Giá",
+            "Chiều dài", "Số phòng ngủ", "Chính chủ", "Giá", "Thông tin chi tiết",
+            "Hình ảnh", "Số Điện Thoại", "được đánh giá"
         ]
 
         # existing file -> reuse its header order
-        details_path = r"HousePricePrediction\data\raw\alonhadat_details.csv"
+        details_path = OUTPUT_FILE
         if os.path.exists(details_path):
             try:
                 existing_df = pd.read_csv(details_path)
@@ -251,7 +297,7 @@ def main():
 
         # remove processed link from listings and persist progress
         df = df.iloc[1:].reset_index(drop=True)
-        df.to_csv(r"HousePricePrediction\data\raw\alonhadat_listings.csv", index=False, encoding="utf-8-sig")
+        df.to_csv(INPUT_FILE, index=False, encoding="utf-8-sig")
         print("  saved detail and removed from listings")
         time.sleep(random.uniform(1, 2))
 
