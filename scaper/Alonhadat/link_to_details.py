@@ -222,7 +222,6 @@ def fetch_via_selenium_manual(url: str) -> (BeautifulSoup | None):
         print("Retry fetch failed:", e)
         return None
 
-
 def main():
     try:
         df = pd.read_csv(INPUT_FILE)
