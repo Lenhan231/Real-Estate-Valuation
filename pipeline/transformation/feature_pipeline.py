@@ -1,26 +1,101 @@
-from air_quality import get_aqi
+import pandas as pd
+from pipeline.transformation.get_nearest_metro import get_nearest_metro
+from pipeline.transformation.get_nearest_poi import get_nearest_poi
 
+def get_additional_features(df) -> pd.DataFrame:
+    # Education
+    df[["nearest_school_km", "school_count_3km"]] = df.apply(
+        lambda row: pd.Series(
+            get_nearest_poi(
+                row["lat"],
+                row["lon"],
+                "amenity",
+                "school",
+                3000
+            )
+        ),
+        axis=1
+    )
 
-# 1) dedupe coordinates first
-coords = (
-    df[["lat", "lon"]]
-    .dropna()
-    .drop_duplicates()
-    .reset_index(drop=True)
-)
+    # Healthcare
+    df[["nearest_hospital_km", "hospital_count_5km"]] = df.apply(
+        lambda row: pd.Series(
+            get_nearest_poi(
+                row["lat"],
+                row["lon"],
+                "amenity",
+                "hospital",
+                5000
+            )
+        ),
+        axis=1
+    )
 
-# 2) fetch in parallel
-results = []
-with ThreadPoolExecutor(max_workers=20) as executor:
-    futures = [
-        executor.submit(get_aqi, row.lat, row.lon)
-        for row in coords.itertuples(index=False)
-    ]
+    # Marketplace
+    df[["nearest_marketplace_km", "marketplace_count_3km"]] = df.apply(
+        lambda row: pd.Series(
+            get_nearest_poi(
+                row["lat"],
+                row["lon"],
+                "amenity",
+                "marketplace",
+                3000
+            )
+        ),
+        axis=1
+    )
 
-    for fut in as_completed(futures):
-        results.append(fut.result())
+    # Supermarket
+    df[["nearest_supermarket_km", "supermarket_count_3km"]] = df.apply(
+        lambda row: pd.Series(
+            get_nearest_poi(
+                row["lat"],
+                row["lon"],
+                "shop",
+                "supermarket",
+                3000
+            )
+        ),
+        axis=1
+    )
 
-aqi_df = pd.DataFrame(results)
+    # Mall
+    df[["nearest_mall_km", "mall_count_3km"]] = df.apply(
+        lambda row: pd.Series(
+            get_nearest_poi(
+                row["lat"],
+                row["lon"],
+                "shop",
+                "mall",
+                3000
+            )
+        ),
+        axis=1
+    )
 
-# 3) merge back to original df
-df = df.merge(aqi_df, on=["lat", "lon"], how="left", suffixes=("", "_new"))
+    # Bus stop
+    df[["nearest_bus_stop_km", "bus_stop_count_1km"]] = df.apply(
+        lambda row: pd.Series(
+            get_nearest_poi(
+                row["lat"],
+                row["lon"],
+                "highway",
+                "bus_stop",
+                1000
+            )
+        ),
+        axis=1
+    )
+
+    # Metro
+    df[["nearest_metro_km", "metro_count_5km"]] = df.apply(
+        lambda row: pd.Series(
+            get_nearest_metro(
+                row["lat"],
+                row["lon"],
+                5000
+            )
+        ),
+        axis=1
+    )
+    return df

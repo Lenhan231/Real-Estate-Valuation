@@ -2,6 +2,8 @@ import re
 import numpy as np
 import pandas as pd
 
+pd.set_option('future.no_silent_downcasting', True)
+
 BINARY_COLS_VI = [
     "Phòng ăn",
     "Nhà bếp",
@@ -126,9 +128,10 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
 
     for col in BINARY_COLS_VI:
         if col in df.columns:
-            df[col] = df[col].replace(["---", "_"], 0).infer_objects(copy=False)
-            df[col] = df[col].fillna(1)
-            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+            df[col] = (df[col]
+                      .replace(["---", "_"], "0")
+                      .fillna("1")
+                      .astype("Int64"))
 
     cols_to_clean = [col for col in df.columns if col not in BINARY_COLS_VI]
     df[cols_to_clean] = df[cols_to_clean].replace(MISSING_MARKERS, np.nan)

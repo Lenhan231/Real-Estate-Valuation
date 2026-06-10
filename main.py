@@ -7,7 +7,7 @@ from pipeline.ingestion.load_density import merge_density_with_alonhadat
 from pipeline.ingestion.load_pois import add_coordinates
 from pipeline.ingestion.load_pois import distance_to_center
 
-
+from pipeline.transformation.feature_pipeline import get_additional_features
 
 if __name__ == "__main__":
     df = pd.read_csv(r"data\raw\alonhadat_details.csv")
@@ -20,5 +20,8 @@ if __name__ == "__main__":
     # Lat, lon, distance to center
     df = add_coordinates(df) 
     df = distance_to_center(df)
-    
-    
+
+    # Additional features
+    df = get_additional_features(df)
+
+    df.to_csv(r"data\processed\alonhadat_features.csv", index=False)
