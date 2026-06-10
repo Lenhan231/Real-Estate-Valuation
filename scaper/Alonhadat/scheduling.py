@@ -22,8 +22,8 @@ TYPES = [
     "can-ban-nha-trong-hem",
 ]
 
-START_PAGE = 1
-END_PAGE = 50
+START_PAGE = 55
+END_PAGE = START_PAGE + 25
 
 
 def build_list_page(region_slug: str, type_slug: str) -> str:

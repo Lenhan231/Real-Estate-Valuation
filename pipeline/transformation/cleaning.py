@@ -183,3 +183,6 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     cols_to_keep = [c for c in cols_to_keep if c in df.columns]
 
     return df[cols_to_keep].copy()
+
+def final_clean(df: pd.DataFrame) -> pd.DataFrame:
+    pass

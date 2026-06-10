@@ -9,7 +9,7 @@ import os
 
 from selenium.common import TimeoutException
 
-INPUT_PAGE = 100
+INPUT_PAGE = 1
 BASE_URL = "https://alonhadat.com.vn"
 LIST_PAGE = BASE_URL + "/can-ban-nha/ho-chi-minh/trang-{}" # changing the url for others region if need
 OUTPUT_FILE = r"data\raw\alonhadat_listings.csv"
