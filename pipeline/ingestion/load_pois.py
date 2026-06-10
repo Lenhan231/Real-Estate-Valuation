@@ -6,6 +6,7 @@ import pandas as pd
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 import time
+import re
 
 geolocator = Nominatim(user_agent="housing_project")
 
@@ -16,12 +17,17 @@ HN_CENTER = (21.0285, 105.8542)
 failed = []
 
 def geocode_with_fallback(row):
+    old_address = str(row["old_address"])
+
+    old_address = re.sub(r"\s*\(cũ\)", "", old_address)
+    old_address = re.sub(r"\s+", " ", old_address).strip()
+
     candidates = [
-        f"{row['Old_address']}",
-        f"{row['street']}, {row['locality']}, {row['region']}",
-        f"{row['street']}, {row['region']}",
-        f"{row['locality']}, {row['region']}",
-        f"{row['region']}"
+        f"{old_address}, Vietnam",
+        f"{row['street']}, {row['locality']}, {row['region']}, Vietnam",
+        f"{row['street']}, {row['region']}, Vietnam",
+        f"{row['locality']}, {row['region']}, Vietnam",
+        f"{row['region']}, Vietnam"
     ]
 
     for addr in candidates:
@@ -35,9 +41,15 @@ def geocode_with_fallback(row):
 
     return pd.Series([None, None, None])
 
-df[["lat", "lon", "matched_address"]] = df.apply(geocode_with_fallback, axis=1)
+def add_coordinates(df):
+    df[["lat", "lon", "matched_address"]] = df.apply(
+        geocode_with_fallback,
+        axis=1
+    )
+    return df
 
-df["distance_to_center_km"] = df.apply(
+def distance_to_center(df):
+    df["distance_to_center_km"] = df.apply(
     lambda r: geodesic(
         (r["lat"], r["lon"]),
         HCM_CENTER if str(r["region"]).strip().lower() in ["hồ chí minh", "ho chi minh"]
@@ -46,5 +58,8 @@ df["distance_to_center_km"] = df.apply(
     if pd.notnull(r["lat"]) and pd.notnull(r["lon"])
     else None,
     axis=1
-)
+    )
+
+    return df
+
 
