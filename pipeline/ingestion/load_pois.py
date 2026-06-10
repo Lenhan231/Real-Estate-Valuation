@@ -1,3 +1,7 @@
+"""
+Load POIs and calculate distances to city centers
+This script reads the POI data, geocodes the addresses to get latitude and longitude, and then calculates the distance from each POI to the city center (HCM or HN). The results are saved to a new CSV file.
+"""
 import pandas as pd
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
@@ -13,6 +17,7 @@ failed = []
 
 def geocode_with_fallback(row):
     candidates = [
+        f"{row['Old_address']}",
         f"{row['street']}, {row['locality']}, {row['region']}",
         f"{row['street']}, {row['region']}",
         f"{row['locality']}, {row['region']}",
@@ -30,12 +35,6 @@ def geocode_with_fallback(row):
 
     return pd.Series([None, None, None])
 
-df["full_address"] = (
-    df["street"].fillna("").str.strip() + ", " +
-    df["locality"].fillna("").str.strip() + ", " +
-    df["region"].fillna("").str.strip()
-)
-
 df[["lat", "lon", "matched_address"]] = df.apply(geocode_with_fallback, axis=1)
 
 df["distance_to_center_km"] = df.apply(
@@ -49,12 +48,3 @@ df["distance_to_center_km"] = df.apply(
     axis=1
 )
 
-# Save
-df.to_csv("khoangcach.csv", index=False)
-
-print(df[[
-    "full_address",
-    "lat",
-    "lon",
-    "distance_to_center_km"
-]].head())
