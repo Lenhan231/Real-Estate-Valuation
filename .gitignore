@@ -10,3 +10,8 @@ scaper/__pycache__
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Claude
+.claude/
+.claude/
+

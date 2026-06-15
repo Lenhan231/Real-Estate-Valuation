@@ -28,12 +28,12 @@ from pipeline.transformation.feature_pipeline import (
 )
 
 OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
-BATCH_SIZE = 50  # Process 50 records at a time
-SAVE_FREQUENCY = 50  # Save after each batch (every 50 records)
+BATCH_SIZE = 10  # Process 10 records at a time
+SAVE_FREQUENCY = 10  # Save after each batch (every 10 records)
 
 
 def process_batch(batch_df, school_radius=3000, hospital_radius=5000,
-                  marketplace_radius=3000, supermarket_radius=3000,
+                   marketplace_radius=3000, supermarket_radius=3000,
                   mall_radius=3000, bus_stop_radius=1000, metro_radius=5000):
     """Process single batch through feature pipeline"""
     return get_additional_features(
