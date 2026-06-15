@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python main.py)",
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Name python -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(cd \"c:\\\\Users\\\\nhanl\\\\OneDrive\\\\Desktop\\\\School\\\\DSP391m\\\\HousePricePrediction\"; try { python main.py 2>&1 } catch { Write-Host \"Error: $_\" })",
+      "PowerShell($file = \"c:\\\\Users\\\\nhanl\\\\OneDrive\\\\Desktop\\\\School\\\\DSP391m\\\\HousePricePrediction\\\\data\\\\processed\\\\alonhadat_features.csv\"; $content = Get-Content $file; Write-Host \"Total lines: $\\($content.Count\\)\"; Write-Host \"File size: $\\(\\(Get-Item $file\\).Length / 1MB\\) MB\"; \\(Get-Content $file -TotalCount 1\\).Split\\(','\\).Count | Write-Host \"Total columns: $\\(Get-Content $file -TotalCount 1\\).Split\\(','\\).Count\")"
+    ]
+  }
+}

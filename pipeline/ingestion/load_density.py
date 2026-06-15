@@ -88,29 +88,28 @@ def _normalize_case(df: pd.DataFrame, columns: list) -> pd.DataFrame:
     return df
 
 
-def load_density(
-    raw_xa_path: str = r"data\raw\density_xa.csv",
-    raw_phuong_path: str = r"data\raw\density_phuong.csv",
-    output_path: str = r"data\external\density.csv"
-) -> pd.DataFrame:
-    density_xa = pd.read_csv(raw_xa_path)
+def load_density() -> pd.DataFrame:
+    print("Scraping density xã from Wikipedia...")
+    density_xa = _scrape_wiki_table(SCRAPE_XA_URL)
     density_xa = _clean_density_data(
         density_xa,
         locality_type="xã",
         population_col="Dân số năm 2025 (người)",
-        drop_cols=["Unnamed: 0", "STT", "Năm thành lập", "Dân số năm 2025 (người)"]
+        drop_cols=["STT", "Năm thành lập", "Dân số năm 2025 (người)"]
     )
 
-    density_phuong = pd.read_csv(raw_phuong_path)
+    print("Scraping density phường from Wikipedia...")
+    density_phuong = _scrape_wiki_table(SCRAPE_PHUONG_URL)
     density_phuong = _clean_density_data(
         density_phuong,
         locality_type="phường",
         population_col="Dân số năm 2024 (người)",
-        drop_cols=["Unnamed: 0", "STT", "Năm thành lập", "Loại đô thị [ 2 ] (năm công nhận)", "Dân số năm 2024 (người)"]
+        drop_cols=["STT", "Năm thành lập", "Loại đô thị [ 2 ] (năm công nhận)", "Dân số năm 2024 (người)"]
     )
 
     density = pd.concat([density_xa, density_phuong], ignore_index=True)
-    
+    print(f"✓ Loaded {len(density)} density records")
+
     return density
 
 
@@ -132,4 +131,6 @@ def merge_density_with_alonhadat(
     return merged_df
 
 
-    
+if __name__ == "__main__":
+    density_df = load_density()
+    print(density_df.head())

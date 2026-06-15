@@ -1,4 +1,18 @@
+"""
+Main ETL pipeline with batch processing and checkpointing.
+
+IMPORTANT: Before running this script for the first time, download POI data:
+    python pipeline/ingestion/download_pois.py
+
+Processing flow:
+1. Load & clean all data
+2. Add density & coordinates
+3. Extract geospatial features in batches
+4. Save incrementally to avoid data loss
+"""
 import pandas as pd
+import time
+from pathlib import Path
 
 from pipeline.transformation.cleaning import clean_data, final_clean
 from pipeline.ingestion.load_density import (
@@ -13,26 +27,94 @@ from pipeline.transformation.feature_pipeline import (
     get_additional_features
 )
 
-if __name__ == "__main__":
+OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
+BATCH_SIZE = 50  # Process 50 records at a time
+SAVE_FREQUENCY = 50  # Save after each batch (every 50 records)
+
+
+def process_batch(batch_df, school_radius=3000, hospital_radius=5000,
+                  marketplace_radius=3000, supermarket_radius=3000,
+                  mall_radius=3000, bus_stop_radius=1000, metro_radius=5000):
+    """Process single batch through feature pipeline"""
+    return get_additional_features(
+        batch_df,
+        school_radius=school_radius,
+        hospital_radius=hospital_radius,
+        marketplace_radius=marketplace_radius,
+        supermarket_radius=supermarket_radius,
+        mall_radius=mall_radius,
+        bus_stop_radius=bus_stop_radius,
+        metro_radius=metro_radius
+    )
+
+
+def main():
+    t0 = time.time()
+
+    print("=" * 60)
+    print("HOUSE PRICE PREDICTION - ETL PIPELINE")
+    print("=" * 60 + "\n")
+
+    # Stage 1: Load & Clean
+    print("[1/5] Loading raw data...")
     df = pd.read_csv(r"data\raw\alonhadat_details.csv")
+    print(f"      Loaded {len(df)} records")
+
+    print("[2/5] Cleaning data...")
     df = clean_data(df)
-    
-    # Density
+    print(f"      ✓ Cleaned")
+
+    # Stage 2: Add base features
+    print("[3/5] Adding base features...")
     density_df = load_density()
     df = merge_density_with_alonhadat(df, density_df)
-
-    # Lat, lon, distance to center
-    df = add_coordinates(df) 
+    df = add_coordinates(df)
     df = distance_to_center(df)
+    print(f"      ✓ Added density, coordinates, distance\n")
 
-    # Additional features
-    df = get_additional_features(df, 
-                                school_radius=3000, 
-                                hospital_radius=5000, 
-                                marketplace_radius=3000,
-                                supermarket_radius=3000, 
-                                mall_radius=3000, 
-                                bus_stop_radius=1000, 
-                                metro_radius=5000)
+    # Stage 3: Extract geospatial features in batches
+    print(f"[4/5] Extracting geospatial features (batch_size={BATCH_SIZE})...")
+    t1 = time.time()
 
-    df.to_csv(r"data\processed\alonhadat_features.csv", index=False)
+    processed_batches = []
+    n_batches = (len(df) + BATCH_SIZE - 1) // BATCH_SIZE
+
+    for i in range(n_batches):
+        start_idx = i * BATCH_SIZE
+        end_idx = min((i + 1) * BATCH_SIZE, len(df))
+        batch = df.iloc[start_idx:end_idx].copy()
+
+        # Process batch
+        batch = process_batch(batch)
+        processed_batches.append(batch)
+
+        # Progress
+        progress = f"      [{i+1}/{n_batches}] Processed rows {start_idx}-{end_idx}"
+        elapsed_batch = time.time() - t1
+        print(f"{progress} ({elapsed_batch:.1f}s)")
+
+        # Checkpoint: save after every batch
+        df_combined = pd.concat(processed_batches, ignore_index=True)
+        df_combined.to_csv(OUTPUT_FILE, index=False)
+
+    t2 = time.time()
+    batch_time = t2 - t1
+    print(f"      ✓ {len(df)} rows in {batch_time:.2f}s\n")
+
+    # Stage 4: Final save
+    print("[5/5] Finalizing...")
+    df_final = pd.concat(processed_batches, ignore_index=True)
+    df_final.to_csv(OUTPUT_FILE, index=False)
+    print(f"      ✓ Saved {len(df_final)} records to {OUTPUT_FILE}\n")
+
+    # Summary
+    elapsed = time.time() - t0
+    print("=" * 60)
+    print(f"✅ Pipeline complete in {elapsed:.2f}s")
+    print(f"   Features: {len(df_final.columns)} columns")
+    print(f"   Records:  {len(df_final)} rows")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()
