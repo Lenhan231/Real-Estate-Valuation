@@ -12,50 +12,29 @@ from pathlib import Path
 HCM_CENTER = (10.7769, 106.7009)
 HN_CENTER = (21.0285, 105.8542)
 CACHE_FILE = Path(__file__).parent.parent.parent / "data" / "geocode_cache.csv"
-
-# Fast local mapping of common Vietnamese districts/wards to approximate coordinates
-# Format: "locality" or "locality,region" -> (lat, lon)
-LOCALITY_COORDS = {
-    "phường 1": (10.7769, 106.7009),
-    "phường 2": (10.7769, 106.7109),
-    "phường 3": (10.7669, 106.7009),
-    "phường 4": (10.7669, 106.7109),
-    "phường 5": (10.7569, 106.7009),
-    "phường 6": (10.7569, 106.7109),
-    "phường 7": (10.7469, 106.7009),
-    "phường 8": (10.7469, 106.7109),
-    "phường 9": (10.7369, 106.7009),
-    "phường 10": (10.7369, 106.7109),
-    "phường 11": (10.7269, 106.7009),
-    "phường 12": (10.7269, 106.7109),
-    "phường 13": (10.7169, 106.7009),
-    "phường 14": (10.8045, 106.6985),
-    "phường 15": (10.7969, 106.7109),
-    "phường 16": (10.8169, 106.7009),
-    "phường bình thạnh": (10.8045, 106.6985),
-    "phường sài gòn": (10.7803, 106.7055),
-    "quận 1": (10.7769, 106.7009),
-    "quận 2": (10.7969, 106.7509),
-    "quận 3": (10.7669, 106.7009),
-    "quận 4": (10.7369, 106.7009),
-    "quận 5": (10.7569, 106.6809),
-    "quận 6": (10.7369, 106.6609),
-    "quận 7": (10.7169, 106.7209),
-    "quận 8": (10.7169, 106.6909),
-    "quận 9": (10.7769, 106.7909),
-    "quận 10": (10.7469, 106.6609),
-    "quận 11": (10.7469, 106.6309),
-    "quận 12": (10.8269, 106.7309),
-    "quận bình tân": (10.7969, 106.6209),
-    "quận bình thạnh": (10.8045, 106.6985),
-    "quận gò vấp": (10.8369, 106.6909),
-    "quận phú nhuận": (10.7869, 106.7509),
-    "quận tân bình": (10.8169, 106.6609),
-    "quận tân phú": (10.8069, 106.6009),
-    "quận thủ đức": (10.8569, 106.7709),
-}
+LOCALITY_FILE = Path(__file__).parent.parent.parent / "data" / "localities.csv"
 
 geocode_cache = {}
+locality_coords = {}
+
+
+def load_locality_coords():
+    """Load locality coordinates from CSV file"""
+    global locality_coords
+    if LOCALITY_FILE.exists():
+        try:
+            df = pd.read_csv(LOCALITY_FILE)
+            for _, row in df.iterrows():
+                locality = str(row['locality']).lower().strip()
+                region = str(row.get('region', '')).lower().strip()
+                lat = row['lat']
+                lon = row['lon']
+                locality_coords[(locality, region)] = (lat, lon)
+            print(f"  ✓ Loaded {len(locality_coords)} locality coordinates from CSV")
+        except Exception as e:
+            print(f"  Warning: Failed to load localities.csv: {e}")
+    else:
+        print(f"  Note: {LOCALITY_FILE} not found. Using Nominatim for all locations.")
 
 
 def load_cache_from_csv():
@@ -87,7 +66,8 @@ def save_cache_to_csv():
     print(f"  ✓ Saved {len(geocode_cache)} coordinates to cache")
 
 
-# Load cache on import
+# Load data on import
+load_locality_coords()
 load_cache_from_csv()
 
 
@@ -100,8 +80,8 @@ def get_locality_key(row):
 
 def geocode_with_fallback(row):
     """
-    Geocode using Nominatim API with caching.
-    Tries locality+region first (most reliable), then falls back to region, then old_address.
+    Geocode using locality CSV, then cache, then Nominatim API.
+    Priority: locality_coords CSV > geocode_cache > Nominatim API > region center
     """
     old_address = str(row.get("old_address", "")).lower().strip()
     locality = str(row.get("locality", "")).lower().strip()
@@ -111,6 +91,12 @@ def geocode_with_fallback(row):
     old_address = re.sub(r"\s*\(cũ\)", "", old_address)
     old_address = re.sub(r"\s+", " ", old_address).strip()
 
+    # Try locality CSV first
+    locality_key = (locality, region)
+    if locality_key in locality_coords:
+        lat, lon = locality_coords[locality_key]
+        return pd.Series([lat, lon, f"Locality: {locality}"])
+
     candidates = [
         (f"{locality},{region}", f"{locality}, {region}, Vietnam"),
         ((locality, region), f"{locality}, Vietnam"),
@@ -119,7 +105,7 @@ def geocode_with_fallback(row):
     ]
 
     for cache_key, addr_str in candidates:
-        # Check cache first
+        # Check cache
         if cache_key in geocode_cache:
             lat, lon = geocode_cache[cache_key]
             return pd.Series([lat, lon, addr_str])
