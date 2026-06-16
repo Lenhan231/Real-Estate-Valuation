@@ -1,14 +1,17 @@
 """
-Main ETL pipeline with batch processing and checkpointing.
+Main ETL pipeline with batch processing, caching, and checkpointing.
 
 IMPORTANT: Before running this script for the first time, download POI data:
     python pipeline/ingestion/download_pois.py
 
 Processing flow:
 1. Load & clean all data
-2. Add density & coordinates
+2. Add density & coordinates (uses geocode cache for speed)
 3. Extract geospatial features in batches
 4. Save incrementally to avoid data loss
+
+Note: Geocoding cache is automatically saved to data/geocode_cache.csv
+for faster processing on subsequent runs.
 """
 import pandas as pd
 import time
@@ -28,8 +31,7 @@ from pipeline.transformation.feature_pipeline import (
 )
 
 OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
-BATCH_SIZE = 10  # Process 10 records at a time
-SAVE_FREQUENCY = 10  # Save after each batch (every 10 records)
+BATCH_SIZE = 50  # Process 50 records at a time (faster processing)
 
 
 def process_batch(batch_df, school_radius=3000, hospital_radius=5000,

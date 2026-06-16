@@ -7,9 +7,11 @@ from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 import time
 import re
+from pathlib import Path
 
 HCM_CENTER = (10.7769, 106.7009)
 HN_CENTER = (21.0285, 105.8542)
+CACHE_FILE = Path(__file__).parent.parent.parent / "data" / "geocode_cache.csv"
 
 # Fast local mapping of common Vietnamese districts/wards to approximate coordinates
 # Format: "locality" or "locality,region" -> (lat, lon)
@@ -56,6 +58,39 @@ LOCALITY_COORDS = {
 geocode_cache = {}
 
 
+def load_cache_from_csv():
+    """Load geocoding cache from CSV file"""
+    global geocode_cache
+    if CACHE_FILE.exists():
+        try:
+            df = pd.read_csv(CACHE_FILE)
+            for _, row in df.iterrows():
+                key = (row['locality'], row['region'])
+                geocode_cache[key] = (row['lat'], row['lon'])
+            print(f"  ✓ Loaded {len(geocode_cache)} cached coordinates")
+        except Exception as e:
+            print(f"  Warning: Failed to load cache: {e}")
+
+
+def save_cache_to_csv():
+    """Save geocoding cache to CSV file"""
+    if not geocode_cache:
+        return
+
+    cache_data = []
+    for (locality, region), (lat, lon) in geocode_cache.items():
+        cache_data.append({'locality': locality, 'region': region, 'lat': lat, 'lon': lon})
+
+    df = pd.DataFrame(cache_data)
+    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(CACHE_FILE, index=False)
+    print(f"  ✓ Saved {len(geocode_cache)} coordinates to cache")
+
+
+# Load cache on import
+load_cache_from_csv()
+
+
 def get_locality_key(row):
     """Create cache key from locality + region"""
     locality = str(row.get("locality", "")).lower().strip()
@@ -63,43 +98,49 @@ def get_locality_key(row):
     return (locality, region)
 
 
-def geocode_with_fast_fallback(row):
+def geocode_with_fallback(row):
     """
-    Fast geocoding: local mapping → cache → API fallback
-    Order: 1. Local map, 2. Cache, 3. Nominatim (slow)
+    Geocode using Nominatim API with caching.
+    Tries locality+region first (most reliable), then falls back to region, then old_address.
     """
+    old_address = str(row.get("old_address", "")).lower().strip()
     locality = str(row.get("locality", "")).lower().strip()
     region = str(row.get("region", "")).lower().strip()
-    cache_key = (locality, region)
 
-    # 1. Check local mapping
-    if locality in LOCALITY_COORDS:
-        lat, lon = LOCALITY_COORDS[locality]
-        return pd.Series([lat, lon, f"Local: {locality}"])
+    # Clean address
+    old_address = re.sub(r"\s*\(cũ\)", "", old_address)
+    old_address = re.sub(r"\s+", " ", old_address).strip()
 
-    # 2. Check cache
-    if cache_key in geocode_cache:
-        lat, lon, addr = geocode_cache[cache_key]
-        return pd.Series([lat, lon, addr])
+    candidates = [
+        (f"{locality},{region}", f"{locality}, {region}, Vietnam"),
+        ((locality, region), f"{locality}, Vietnam"),
+        ((region,), f"{region}, Vietnam"),
+        (old_address, f"{old_address}, Vietnam")
+    ]
 
-    # 3. Try Nominatim (only for truly unknown locations)
-    try:
-        geolocator = Nominatim(user_agent="housing_project")
-        time.sleep(0.2)  # Minimal delay
-        addr_str = f"{locality}, {region}, Vietnam"
-        location = geolocator.geocode(addr_str, timeout=5)
-        if location:
-            result = (location.latitude, location.longitude, addr_str)
-            geocode_cache[cache_key] = result
-            return pd.Series([location.latitude, location.longitude, addr_str])
-    except Exception:
-        pass
+    for cache_key, addr_str in candidates:
+        # Check cache first
+        if cache_key in geocode_cache:
+            lat, lon = geocode_cache[cache_key]
+            return pd.Series([lat, lon, addr_str])
 
-    # 4. Fallback: use region center
+        # Try Nominatim
+        try:
+            geolocator = Nominatim(user_agent="housing_project")
+            time.sleep(0.3)  # Rate limiting
+            location = geolocator.geocode(addr_str, timeout=10)
+            if location:
+                result = (location.latitude, location.longitude)
+                geocode_cache[cache_key] = result
+                return pd.Series([location.latitude, location.longitude, addr_str])
+        except Exception:
+            pass
+
+    # Fallback to region center if all else fails
     if "hồ chí minh" in region.lower() or "ho chi minh" in region.lower():
-        return pd.Series([HCM_CENTER[0], HCM_CENTER[1], f"Region center: {region}"])
+        return pd.Series([HCM_CENTER[0], HCM_CENTER[1], f"Region: {region}"])
     elif "hà nội" in region.lower() or "ha noi" in region.lower():
-        return pd.Series([HN_CENTER[0], HN_CENTER[1], f"Region center: {region}"])
+        return pd.Series([HN_CENTER[0], HN_CENTER[1], f"Region: {region}"])
 
     return pd.Series([None, None, None])
 
@@ -113,9 +154,10 @@ def add_coordinates(df):
 
     print("  Adding coordinates (using local mapping + cache)...")
     df[["lat", "lon", "matched_address"]] = df.apply(
-        geocode_with_fast_fallback,
+        geocode_with_fallback,
         axis=1
     )
+    save_cache_to_csv()
     return df
 
 
