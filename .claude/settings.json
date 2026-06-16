@@ -9,7 +9,9 @@
       "PowerShell($csv = \"c:\\\\Users\\\\nhanl\\\\OneDrive\\\\Desktop\\\\School\\\\DSP391m\\\\HousePricePrediction\\\\data\\\\processed\\\\alonhadat_features.csv\"; if \\(Test-Path $csv\\) { $lines = @\\(Get-Content $csv\\).Count; Write-Host \"CSV Status: $lines lines\"; \\(Get-Item $csv\\).LastWriteTime | Write-Host \"Last modified: $_\" } else { Write-Host \"CSV not found yet\" }; Write-Host \"\"; Get-Process python -ErrorAction SilentlyContinue | Select-Object Name, CPU, @{N=\"Memory\\(MB\\)\";E={$_.WorkingSet/1MB}} | Write-Host \"Python processes:\"; $_)",
       "Bash(timeout 30 python -c ' *)",
       "Bash(timeout 60 python -c ' *)",
-      "Bash(timeout 120 python -c ' *)"
+      "Bash(timeout 120 python -c ' *)",
+      "Bash(git rm *)",
+      "Bash(git mv *)"
     ]
   }
 }
