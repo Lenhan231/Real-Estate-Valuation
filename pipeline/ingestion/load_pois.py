@@ -19,18 +19,29 @@ locality_coords = {}
 
 
 def load_locality_coords():
-    """Load locality coordinates from CSV file"""
+    """Load locality and street coordinates from CSV file"""
     global locality_coords
     if LOCALITY_FILE.exists():
         try:
             df = pd.read_csv(LOCALITY_FILE)
             for _, row in df.iterrows():
-                locality = str(row['locality']).lower().strip()
-                region = str(row.get('region', '')).lower().strip()
+                # Support both with/without street columns
+                if 'street' in df.columns and pd.notna(row.get('street')):
+                    # Street-level mapping: (street, locality, region) -> (lat, lon)
+                    street = str(row['street']).lower().strip()
+                    locality = str(row['locality']).lower().strip()
+                    region = str(row.get('region', '')).lower().strip()
+                    key = (street, locality, region)
+                else:
+                    # Locality/region-level mapping: (locality, region) -> (lat, lon)
+                    locality = str(row['locality']).lower().strip()
+                    region = str(row.get('region', '')).lower().strip()
+                    key = (locality, region)
+
                 lat = row['lat']
                 lon = row['lon']
-                locality_coords[(locality, region)] = (lat, lon)
-            print(f"  ✓ Loaded {len(locality_coords)} locality coordinates from CSV")
+                locality_coords[key] = (lat, lon)
+            print(f"  ✓ Loaded {len(locality_coords)} coordinates from CSV")
         except Exception as e:
             print(f"  Warning: Failed to load localities.csv: {e}")
     else:
@@ -81,9 +92,10 @@ def get_locality_key(row):
 def geocode_with_fallback(row):
     """
     Geocode using locality CSV, then cache, then Nominatim API.
-    Priority: locality_coords CSV > geocode_cache > Nominatim API > region center
+    Priority: street CSV > locality CSV > geocode_cache > Nominatim API > region center
     """
     old_address = str(row.get("old_address", "")).lower().strip()
+    street = str(row.get("street", "")).lower().strip()
     locality = str(row.get("locality", "")).lower().strip()
     region = str(row.get("region", "")).lower().strip()
 
@@ -91,7 +103,14 @@ def geocode_with_fallback(row):
     old_address = re.sub(r"\s*\(cũ\)", "", old_address)
     old_address = re.sub(r"\s+", " ", old_address).strip()
 
-    # Try locality CSV first
+    # Try street-level CSV first (highest priority)
+    if street:
+        street_key = (street, locality, region)
+        if street_key in locality_coords:
+            lat, lon = locality_coords[street_key]
+            return pd.Series([lat, lon, f"Street: {street}"])
+
+    # Try locality/region CSV
     locality_key = (locality, region)
     if locality_key in locality_coords:
         lat, lon = locality_coords[locality_key]
