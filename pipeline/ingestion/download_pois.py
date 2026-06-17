@@ -21,11 +21,6 @@ HCM_AREAS = [
     "10.40,106.367,10.633,106.900",   # North half
     "10.167,106.367,10.40,106.900",   # South half
 ]
-# Hà Nội: split North/South
-HN_AREAS = [
-    "20.93,105.283,21.300,106.033",   # North half
-    "20.567,105.283,20.93,106.033",   # South half
-]
 
 
 def query_overpass(query, max_retries=5, base_sleep=2):
