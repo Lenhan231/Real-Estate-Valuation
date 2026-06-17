@@ -1,118 +1,188 @@
 import pandas as pd
-import numpy as np
-from sklearn.neighbors import BallTree
 from pathlib import Path
+from .metro_features import get_metro_features
+from .poi_features import get_poi_features
 
-# Load POI data once on import
-POI_DATA = {}
-POI_TREES = {}
+LOCALITY_FILE = Path(__file__).parent.parent.parent / "data" / "localities.csv"
 
-def _load_poi_trees():
-    """Load all POI parquet files and build spatial indices"""
-    global POI_DATA, POI_TREES
-
-    data_dir = Path(__file__).parent.parent.parent / "data" / "pois"
-    poi_types = ["schools", "hospitals", "marketplaces", "supermarkets", "malls", "bus_stops", "metro_stations"]
-
-    for poi_type in poi_types:
-        parquet_file = data_dir / f"{poi_type}.parquet"
-        if parquet_file.exists():
-            df = pd.read_parquet(parquet_file)
-            POI_DATA[poi_type] = df
-
-            # Build BallTree for spatial queries
-            if len(df) > 0:
-                coords = np.radians(df[["lat", "lon"]].values)
-                POI_TREES[poi_type] = BallTree(coords, metric="haversine")
-            else:
-                POI_TREES[poi_type] = None
-
-# Load POI data on module import
-_load_poi_trees()
+# Feature cache loaded from localities.csv
+feature_cache = {}
 
 
-def compute_poi_features(lat, lon):
-    """Compute POI features using BallTree on accurate parquet data"""
-    if pd.isna(lat) or pd.isna(lon):
-        return None
+def load_feature_cache():
+    """Load cached POI features from localities.csv"""
+    global feature_cache
+    if LOCALITY_FILE.exists():
+        try:
+            df = pd.read_csv(LOCALITY_FILE)
+            for _, row in df.iterrows():
+                lat = row.get('lat')
+                lon = row.get('lon')
+                if pd.isna(lat) or pd.isna(lon):
+                    continue
 
-    features = {}
+                # Use rounded coords as key
+                key = (round(lat, 4), round(lon, 4))
 
-    # Define radius for each POI type (in meters)
-    poi_config = [
-        ("schools", 3000),
-        ("hospitals", 5000),
-        ("marketplaces", 3000),
-        ("supermarkets", 3000),
-        ("malls", 3000),
-        ("bus_stops", 1000),
-        ("metro_stations", 5000),
-    ]
+                # Extract all feature columns (not address columns)
+                features = {}
+                address_cols = {'street', 'locality', 'region', 'old_address', 'lat', 'lon'}
+                for col in df.columns:
+                    if col not in address_cols and pd.notna(row[col]):
+                        features[col] = row[col]
 
-    query_point = np.radians([[lat, lon]])
+                if features:
+                    feature_cache[key] = features
 
-    for poi_type, radius_meters in poi_config:
-        tree = POI_TREES.get(poi_type)
-
-        if tree is None or poi_type not in POI_DATA:
-            features[f"nearest_{poi_type.rstrip('s')}_km"] = np.nan
-            features[f"{poi_type.rstrip('s')}_count_{radius_meters//1000}km"] = 0
-            continue
-
-        # Find nearest POI
-        radius_km = radius_meters / 1000.0
-        radius_rad = radius_km / 6371.0
-
-        distances_rad, indices = tree.query(query_point, k=1, return_distance=True)
-        nearest_dist_km = distances_rad[0][0] * 6371.0
-
-        # Count within radius
-        count_indices = tree.query_radius(query_point, r=radius_rad, return_distance=False)[0]
-        count = len(count_indices)
-
-        # Store features
-        feature_name = poi_type.rstrip('s')
-        features[f"nearest_{feature_name}_km"] = nearest_dist_km if nearest_dist_km > 0 else np.nan
-        features[f"{feature_name}_count_{radius_meters//1000}km"] = count
-
-    return features
+            print(f"  ✓ Loaded {len(feature_cache)} cached feature sets from localities.csv")
+        except Exception as e:
+            print(f"  Warning: Failed to load feature cache: {e}")
 
 
-def get_additional_features(df) -> pd.DataFrame:
-    """Compute POI features for all rows using parquet files with BallTree"""
+def save_features_to_localities(df):
+    """Save computed features to localities.csv for persistent caching"""
+    if not df.shape[0]:
+        return
 
-    # Initialize feature columns
-    feature_columns = {
-        "nearest_school_km": np.nan,
-        "school_count_3km": np.nan,
-        "nearest_hospital_km": np.nan,
-        "hospital_count_5km": np.nan,
-        "nearest_marketplace_km": np.nan,
-        "marketplace_count_3km": np.nan,
-        "nearest_supermarket_km": np.nan,
-        "supermarket_count_3km": np.nan,
-        "nearest_mall_km": np.nan,
-        "mall_count_3km": np.nan,
-        "nearest_bus_stop_km": np.nan,
-        "bus_stop_count_1km": np.nan,
-        "nearest_metro_km": np.nan,
-        "metro_count_5km": np.nan,
-    }
+    try:
+        LOCALITY_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-    for col in feature_columns:
-        df[col] = feature_columns[col]
+        # Select ONLY address info + computed POI/metro features (nothing else)
+        address_cols = ['street', 'locality', 'region', 'old_address', 'lat', 'lon']
+        feature_keywords = ['nearest_', 'school_count', 'hospital_count', 'marketplace_count',
+                           'supermarket_count', 'mall_count', 'bus_stop_count', 'metro_count']
 
-    # Compute features for all rows
-    computed = 0
-    for idx, row in df.iterrows():
-        lat, lon = row.get("lat"), row.get("lon")
-        if pd.notna(lat) and pd.notna(lon):
-            features = compute_poi_features(lat, lon)
-            if features:
-                for col, val in features.items():
-                    if col in df.columns:
-                        df.loc[idx, col] = val
-                computed += 1
+        # Get only feature columns that exist
+        feature_cols = [col for col in df.columns
+                       if any(kw in col for kw in feature_keywords)]
 
-    print(f"      POI Features: {computed} rows computed from parquet files")
+        # Save only these columns
+        save_cols = [col for col in address_cols if col in df.columns] + feature_cols
+        save_df = df[save_cols].copy()
+
+        if LOCALITY_FILE.exists():
+            existing_df = pd.read_csv(LOCALITY_FILE)
+
+            # Update existing rows with new features
+            for idx, row in save_df.iterrows():
+                lat = row.get('lat')
+                lon = row.get('lon')
+                if pd.isna(lat) or pd.isna(lon):
+                    continue
+
+                # Find matching row by rounded lat/lon
+                mask = (existing_df['lat'].round(4) == round(lat, 4)) & (existing_df['lon'].round(4) == round(lon, 4))
+                if mask.any():
+                    match_idx = existing_df[mask].index[0]
+                    # Update all columns (especially features)
+                    for col in save_cols:
+                        existing_df.loc[match_idx, col] = row[col]
+
+            existing_df.to_csv(LOCALITY_FILE, index=False)
+        else:
+            save_df.to_csv(LOCALITY_FILE, index=False)
+    except Exception as e:
+        print(f"Warning: Failed to save features to localities.csv: {e}")
+
+
+def get_additional_features(df, school_radius=3000, hospital_radius=5000, marketplace_radius=3000, supermarket_radius=3000, mall_radius=3000, bus_stop_radius=1000, metro_radius=5000) -> pd.DataFrame:
+    # Education
+    df[["nearest_school_km", f"school_count_{school_radius//1000}km"]] = df.apply(
+        lambda row: pd.Series(
+            get_poi_features(
+                row["lat"],
+                row["lon"],
+                "amenity",
+                "school",
+                school_radius
+            )
+        ),
+        axis=1
+    )
+
+    # Healthcare
+    df[["nearest_hospital_km", f"hospital_count_{hospital_radius//1000}km"]] = df.apply(
+        lambda row: pd.Series(
+            get_poi_features(
+                row["lat"],
+                row["lon"],
+                "amenity",
+                "hospital",
+                hospital_radius
+            )
+        ),
+        axis=1
+    )
+
+    # Marketplace
+    df[["nearest_marketplace_km", f"marketplace_count_{marketplace_radius//1000}km"]] = df.apply(
+        lambda row: pd.Series(
+            get_poi_features(
+                row["lat"],
+                row["lon"],
+                "amenity",
+                "marketplace",
+                marketplace_radius
+            )
+        ),
+        axis=1
+    )
+
+    # Supermarket
+    df[["nearest_supermarket_km", f"supermarket_count_{supermarket_radius//1000}km"]] = df.apply(
+        lambda row: pd.Series(
+            get_poi_features(
+                row["lat"],
+                row["lon"],
+                "shop",
+                "supermarket",
+                supermarket_radius
+            )
+        ),
+        axis=1
+    )
+
+    # Mall
+    df[["nearest_mall_km", f"mall_count_{mall_radius//1000}km"]] = df.apply(
+        lambda row: pd.Series(
+            get_poi_features(
+                row["lat"],
+                row["lon"],
+                "shop",
+                "mall",
+                mall_radius
+            )
+        ),
+        axis=1
+    )
+
+    # Bus stop
+    df[["nearest_bus_stop_km", f"bus_stop_count_{bus_stop_radius//1000}km"]] = df.apply(
+        lambda row: pd.Series(
+            get_poi_features(
+                row["lat"],
+                row["lon"],
+                "highway",
+                "bus_stop",
+                bus_stop_radius
+            )
+        ),
+        axis=1
+    )
+
+    # Metro
+    df[["nearest_metro_km", f"metro_count_{metro_radius//1000}km"]] = df.apply(
+        lambda row: pd.Series(
+            get_metro_features(
+                row["lat"],
+                row["lon"],
+                metro_radius
+            )
+        ),
+        axis=1
+    )
+
+    # Save computed features to localities.csv for persistent caching
+    save_features_to_localities(df)
+
     return df

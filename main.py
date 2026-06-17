@@ -25,6 +25,7 @@ import pandas as pd
 import time
 from pathlib import Path
 
+
 from pipeline.transformation.cleaning import clean_data, final_clean
 from pipeline.ingestion.load_density import (
     load_density,
@@ -32,16 +33,14 @@ from pipeline.ingestion.load_density import (
 )
 from pipeline.ingestion.load_pois import (
     add_coordinates,
-    distance_to_center,
-    append_to_localities_csv,
-    get_cached_features
+    distance_to_center
 )
 from pipeline.transformation.feature_pipeline import (
     get_additional_features
 )
 
 OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
-BATCH_SIZE = 50  # Process 50 records at a time
+BATCH_SIZE = 2  # Process 2 records at a time
 
 FEATURE_COLS = [
     'nearest_school_km', 'school_count_3km',
@@ -56,34 +55,22 @@ FEATURE_COLS = [
 
 def process_batch(batch_df):
     """
-    Process batch: add POI features (cache first, compute from parquet if needed),
-    fill NaN values with defaults, save to CSV, and cache new features
+    Process batch: compute POI features from parquet files, fill NaN values, return
     """
     batch_df = batch_df.copy()
 
-    # Add POI features (checks cache by lat/lon, computes from parquet if needed)
+    # Add POI features from parquet files using BallTree
     batch_df = get_additional_features(batch_df)
 
-    # Fill NaN values with sensible defaults
-    # Count features: 0 = no POIs found
-    # Distance features: keep NaN (will show no data)
+    # Fill NaN count values with 0 (no POIs found within radius)
     for col in FEATURE_COLS:
-        if 'count' in col:  # Count features
+        if 'count' in col:
             batch_df[col] = batch_df[col].fillna(0)
 
-    # Keep rows that have at least some features (not all NaN)
+    # Keep rows that have at least some valid coordinates
     batch_df_before = len(batch_df)
-    batch_df = batch_df.dropna(subset=[col for col in FEATURE_COLS if 'nearest' in col], how='all')
+    batch_df = batch_df.dropna(subset=['lat', 'lon'], how='any')
     rows_dropped = batch_df_before - len(batch_df)
-
-    # Cache newly computed features for future runs
-    for _, row in batch_df.iterrows():
-        lat = row.get("lat")
-        lon = row.get("lon")
-        if pd.notna(lat) and pd.notna(lon):
-            features = {col: row[col] for col in FEATURE_COLS if col in batch_df.columns}
-            if any(pd.notna(v) for v in features.values()):  # At least one feature present
-                append_to_localities_csv(lat, lon, features=features)
 
     return batch_df, len(batch_df), rows_dropped
 
@@ -97,7 +84,7 @@ def main():
 
     # Stage 1: Load & Clean
     print("[1/5] Loading raw data...")
-    df = pd.read_csv(r"data\raw\hold.csv")  # Full dataset: 4,642 records
+    df = pd.read_csv(r"data\raw\alonhadat_details.csv")  # Full dataset: 4,642 records
     print(f"      Loaded {len(df)} records")
 
     print("[2/5] Cleaning data...")
@@ -108,9 +95,7 @@ def main():
     print("[3/5] Adding base features...")
     density_df = load_density()
     df = merge_density_with_alonhadat(df, density_df)
-    df = add_coordinates(df)
-    df = distance_to_center(df)
-    print(f"      ✓ Added density, coordinates, distance\n")
+    print(f"      ✓ Merged density")
 
     # Stage 3: Extract geospatial features in batches
     print(f"[4/5] Extracting geospatial features (batch_size={BATCH_SIZE})...")
@@ -124,7 +109,11 @@ def main():
     for i in range(n_batches):
         start_idx = i * BATCH_SIZE
         end_idx = min((i + 1) * BATCH_SIZE, len(df))
+
         batch = df.iloc[start_idx:end_idx].copy()
+
+        batch = add_coordinates(batch)
+        batch = distance_to_center(batch)
 
         # Process batch: add features from cache, drop incomplete rows, save
         batch, kept, dropped = process_batch(batch)
@@ -140,8 +129,8 @@ def main():
 
         # Progress
         elapsed_batch = time.time() - t1
-        print(f"      [{i+1}/{n_batches}] Rows {start_idx}-{end_idx} | "
-              f"Kept: {kept}, Dropped: {dropped} | {elapsed_batch:.1f}s")
+        batch_pct = (end_idx / len(df)) * 100
+        print(f"      [{i+1}/{n_batches}] {batch_pct:.1f}% | Kept: {kept}, Dropped: {dropped} | {elapsed_batch:.1f}s")
 
     t2 = time.time()
     batch_time = t2 - t1
@@ -152,6 +141,15 @@ def main():
     print("[5/5] Finalizing...")
     if processed_batches:
         df_final = pd.concat(processed_batches, ignore_index=True)
+
+        # Keep only relevant columns for modeling (strict selection)
+        model_cols = FEATURE_COLS + ['price_vnd']
+        available_cols = [col for col in model_cols if col in df_final.columns]
+
+        # Only these columns in this exact order
+        df_final = df_final[available_cols].copy()
+
+        print(f"      Output columns: {list(df_final.columns)}")
         df_final.to_csv(OUTPUT_FILE, index=False)
         final_count = len(df_final)
         print(f"      ✓ Saved {final_count} records to {OUTPUT_FILE}\n")

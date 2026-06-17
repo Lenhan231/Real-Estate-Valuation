@@ -8,87 +8,83 @@ from geopy.distance import geodesic
 import time
 import re
 from pathlib import Path
+import subprocess
 
-HCM_CENTER = (10.7769, 106.7009)
-HN_CENTER = (21.0285, 105.8542)
-CACHE_FILE = Path(__file__).parent.parent.parent / "data" / "geocode_cache.csv"
 LOCALITY_FILE = Path(__file__).parent.parent.parent / "data" / "localities.csv"
 
+# City centers - used for distance_to_center calculation only
+HCM_CENTER = (10.7769, 106.7009)
+HN_CENTER = (21.0285, 105.8542)
+
 geocode_cache = {}
-locality_coords = {}
-locality_features = {}  # Cache for POI features by location
 
 
-def load_locality_coords():
-    """Load coordinates and POI features from CSV, indexed by lat/lon (rounded to 4 decimals)"""
-    global locality_coords, locality_features
+def load_cache_from_csv():
+    """Load geocoding cache from localities.csv"""
+    global geocode_cache
     if LOCALITY_FILE.exists():
         try:
             df = pd.read_csv(LOCALITY_FILE)
-            feature_cols = [
-                'nearest_school_km', 'school_count_3km',
-                'nearest_hospital_km', 'hospital_count_5km',
-                'nearest_marketplace_km', 'marketplace_count_3km',
-                'nearest_supermarket_km', 'supermarket_count_3km',
-                'nearest_mall_km', 'mall_count_3km',
-                'nearest_bus_stop_km', 'bus_stop_count_1km',
-                'nearest_metro_km', 'metro_count_5km'
-            ]
-            has_features = all(col in df.columns for col in feature_cols)
-
+            # Index by various combinations for cache lookup
             for _, row in df.iterrows():
+                old_address = str(row.get('old_address', '')).lower().strip()
+                street = str(row.get('street', '')).lower().strip()
+                locality = str(row.get('locality', '')).lower().strip()
+                region = str(row.get('region', '')).lower().strip()
                 lat = row['lat']
                 lon = row['lon']
 
                 if pd.isna(lat) or pd.isna(lon):
                     continue
 
-                # Use rounded lat/lon as key (4 decimals ≈ 11m precision)
-                key = (round(lat, 4), round(lon, 4))
-                locality_coords[key] = (lat, lon)
+                # Apply same cleaning as geocode_with_fallback
+                old_address = re.sub(r"\s*\(cũ\)", "", old_address)
+                old_address = re.sub(r"\s+", " ", old_address).strip()
 
-                # Load features if available
-                if has_features:
-                    features = {col: row[col] for col in feature_cols if pd.notna(row[col])}
-                    if features:
-                        locality_features[key] = features
+                # Index by meaningful address combinations only
+                if old_address:
+                    geocode_cache[(old_address,)] = (lat, lon)
+                if street and locality and region:
+                    geocode_cache[(street, locality, region)] = (lat, lon)
+                if locality and region:
+                    geocode_cache[(locality, region)] = (lat, lon)
+                if locality:
+                    geocode_cache[(locality,)] = (lat, lon)
 
-            loaded_coords = len(locality_coords)
-            loaded_features = len(locality_features)
-            print(f"  ✓ Loaded {loaded_coords} lat/lon coordinates, {loaded_features} with cached features")
+            print(f"  ✓ Loaded {len(geocode_cache)} geocoding cache keys from {len(df)} records")
         except Exception as e:
             print(f"  Warning: Failed to load localities.csv: {e}")
     else:
-        print(f"  Note: {LOCALITY_FILE} not found.")
+        print(f"  Note: {LOCALITY_FILE} not found (will be created on first geocoding)")
 
 
-def load_cache_from_csv():
-    """Load geocoding cache from CSV file"""
-    global geocode_cache
-    if CACHE_FILE.exists():
-        try:
-            df = pd.read_csv(CACHE_FILE)
-            for _, row in df.iterrows():
-                key = (row['locality'], row['region'])
-                geocode_cache[key] = (row['lat'], row['lon'])
-            print(f"  ✓ Loaded {len(geocode_cache)} cached coordinates")
-        except Exception as e:
-            print(f"  Warning: Failed to load cache: {e}")
-
-
-def save_cache_to_csv():
-    """Save geocoding cache to CSV file"""
-    if not geocode_cache:
+def save_coordinate_to_localities(lat, lon, street="", locality="", region="", old_address=""):
+    """Append a single coordinate to localities.csv immediately"""
+    if pd.isna(lat) or pd.isna(lon):
         return
 
-    cache_data = []
-    for (locality, region), (lat, lon) in geocode_cache.items():
-        cache_data.append({'locality': locality, 'region': region, 'lat': lat, 'lon': lon})
+    try:
+        LOCALITY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        new_row = pd.DataFrame([{
+            'street': street,
+            'locality': locality,
+            'region': region,
+            'old_address': old_address,
+            'lat': lat,
+            'lon': lon
+        }])
 
-    df = pd.DataFrame(cache_data)
-    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(CACHE_FILE, index=False)
-    print(f"  ✓ Saved {len(geocode_cache)} coordinates to cache")
+        if LOCALITY_FILE.exists():
+            df = pd.read_csv(LOCALITY_FILE)
+            # Avoid duplicates: check if this lat/lon already exists
+            if not ((df['lat'].round(4) == round(lat, 4)) & (df['lon'].round(4) == round(lon, 4))).any():
+                df = pd.concat([df, new_row], ignore_index=True)
+                df.to_csv(LOCALITY_FILE, index=False)
+        else:
+            new_row.to_csv(LOCALITY_FILE, index=False)
+    except Exception as e:
+        pass  # Silent fail
+
 
 
 def append_to_localities_csv(lat, lon, features=None):
@@ -126,27 +122,14 @@ def append_to_localities_csv(lat, lon, features=None):
         pass  # Silent fail - don't break pipeline if CSV update fails
 
 
-def get_cached_features(lat_lon_key):
-    """Get cached POI features for a lat/lon coordinate (rounded to 4 decimals)"""
-    return locality_features.get(lat_lon_key)
-
-
 # Load data on import
-load_locality_coords()
 load_cache_from_csv()
-
-
-def get_locality_key(row):
-    """Create cache key from locality + region"""
-    locality = str(row.get("locality", "")).lower().strip()
-    region = str(row.get("region", "")).lower().strip()
-    return (locality, region)
 
 
 def geocode_with_fallback(row):
     """
-    Geocode with priority: exact address > street > locality > cache > Nominatim > region center.
-    Automatically saves successful Nominatim results to localities.csv.
+    Geocode with priority: cache > Nominatim API > region center.
+    Check cache FIRST with proper keys, then call API.
     """
     old_address = str(row.get("old_address", "")).lower().strip()
     street = str(row.get("street", "")).lower().strip()
@@ -157,75 +140,75 @@ def geocode_with_fallback(row):
     old_address = re.sub(r"\s*\(cũ\)", "", old_address)
     old_address = re.sub(r"\s+", " ", old_address).strip()
 
-    # Try exact old_address match from localities.csv (highest priority)
+    # Build candidates: (cache_key, api_query, label)
+    # Only match meaningful address combinations, not individual components
+    candidates = []
     if old_address:
-        addr_key = ('old_address', old_address)
-        if addr_key in locality_coords:
-            lat, lon = locality_coords[addr_key]
-            return pd.Series([lat, lon, f"Address: {old_address}"])
+        candidates.append(((old_address,), f"{old_address}, Vietnam", f"Address: {old_address}"))
+    if street and locality and region:
+        candidates.append(((street, locality, region), f"{street}, {locality}, {region}, Vietnam", f"Street: {street}, {locality}, {region}"))
+    if locality and region:
+        candidates.append(((locality, region), f"{locality}, {region}, Vietnam", f"Locality: {locality}, {region}"))
 
-    # Try street-level CSV
-    if street:
-        street_key = (street, locality, region)
-        if street_key in locality_coords:
-            lat, lon = locality_coords[street_key]
-            return pd.Series([lat, lon, f"Street: {street}"])
-
-    # Try locality/region CSV
-    locality_key = (locality, region)
-    if locality_key in locality_coords:
-        lat, lon = locality_coords[locality_key]
-        return pd.Series([lat, lon, f"Locality: {locality}"])
-
-    candidates = [
-        (f"{locality},{region}", f"{locality}, {region}, Vietnam"),
-        ((locality, region), f"{locality}, Vietnam"),
-        ((region,), f"{region}, Vietnam"),
-        (old_address, f"{old_address}, Vietnam")
-    ]
-
-    for cache_key, addr_str in candidates:
-        # Check cache
+    # Debug: show what we're looking for
+    for i, (cache_key, api_query, label) in enumerate(candidates):
+        # CHECK CACHE FIRST
         if cache_key in geocode_cache:
             lat, lon = geocode_cache[cache_key]
-            return pd.Series([lat, lon, addr_str])
+            print(f"    Cache HIT {i+1}: {repr(cache_key)}")
+            return pd.Series([lat, lon, f"Cache: {label}"])
+        else:
+            print(f"    Cache MISS {i+1}: {repr(cache_key)} (cache has {len(geocode_cache)} keys)")
 
-    # Try Nominatim API to get accurate lat/lon (just coordinates, not full geocoding)
-    if old_address:
-        try:
-            geolocator = Nominatim(user_agent="housing_project")
-            time.sleep(0.1)  # Reduced rate limiting for just coordinates
-            location = geolocator.geocode(old_address + ", Vietnam", timeout=5)
-            if location:
-                lat = location.latitude
-                lon = location.longitude
-                geocode_cache[('api', old_address)] = (lat, lon)
-                return pd.Series([lat, lon, f"API: {old_address}"])
-        except Exception:
-            pass
+    # If not in cache, try API calls in order
+    for cache_key, api_query, label in candidates:
+        attempt = 0
+        while True:
+            try:
+                time.sleep(3)  # 3s per request to avoid rate limit
+                geolocator = Nominatim(user_agent="housing_project", timeout=10)
+                location = geolocator.geocode(api_query, timeout=10)
+                if location:
+                    lat = location.latitude
+                    lon = location.longitude
+                    geocode_cache[cache_key] = (lat, lon)
+                    save_coordinate_to_localities(lat, lon, street, locality, region, old_address)
+                    return pd.Series([lat, lon, f"API: {label}"])
+                else:
+                    break  # No result found, try next candidate
+            except Exception as e:
+                if "429" in str(e):
+                    # Rate limited: keep retrying with exponential backoff
+                    print(run(["warp-cli", "disconnect"]))
+                    print(run(["warp-cli", "connect"]))
+                    attempt += 1
+                    wait = attempt
+                    print(f"    Rate limited (attempt {attempt}), waiting {wait}s...")
+                    time.sleep(wait)
+                    continue
+                else:
+                    # Other error: try next candidate
+                    break
 
-    # Fallback to region center if API fails
-    if "hồ chí minh" in region.lower() or "ho chi minh" in region.lower():
-        return pd.Series([HCM_CENTER[0], HCM_CENTER[1], f"Region: {region}"])
-    elif "hà nội" in region.lower() or "ha noi" in region.lower():
-        return pd.Series([HN_CENTER[0], HN_CENTER[1], f"Region: {region}"])
-
+    # No fallback - return NaN if can't geocode, will be dropped later
     return pd.Series([None, None, None])
 
+def run(cmd: list[str]) -> str:
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    return result.stdout.strip()
 
 def add_coordinates(df):
-    """Add coordinates using fast local mapping + cache"""
+    """Add coordinates using cache + Nominatim API (saves to localities.csv)"""
     if "lat" in df.columns and "lon" in df.columns:
-        if df[["lat", "lon"]].notna().all().any():
+        if df[["lat", "lon"]].notna().all(axis=1).all():
             print("  ✓ Coordinates already present")
             return df
 
-    print("  Adding coordinates (using local mapping + cache)...")
+    print(f"  Adding coordinates (cache has {len(geocode_cache)} keys)...")
     df[["lat", "lon", "matched_address"]] = df.apply(
         geocode_with_fallback,
         axis=1
     )
-    save_cache_to_csv()
     return df
 
 

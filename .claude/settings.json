@@ -11,7 +11,12 @@
       "Bash(timeout 60 python -c ' *)",
       "Bash(timeout 120 python -c ' *)",
       "Bash(git rm *)",
-      "Bash(git mv *)"
+      "Bash(git mv *)",
+      "Bash(git checkout *)",
+      "Bash(python)",
+      "Bash(tee pipeline.log)",
+      "PowerShell(python -c \"import pandas as pd; df = pd.read_parquet\\('c:\\\\Users\\\\nhanl\\\\OneDrive\\\\Desktop\\\\School\\\\DSP391m\\\\HousePricePrediction\\\\data\\\\pois\\\\metro_stations.parquet'\\); print\\(f'Records: {len\\(df\\)}'\\); print\\(df.head\\(\\)\\)\")",
+      "PowerShell(python -c \"import pandas as pd; df = pd.read_parquet\\('c:/Users/nhanl/OneDrive/Desktop/School/DSP391m/HousePricePrediction/data/pois/metro_stations.parquet'\\); print\\(f'Records: {len\\(df\\)}'\\); print\\(df.head\\(\\) if len\\(df\\) > 0 else 'EMPTY'\\)\")"
     ]
   }
 }

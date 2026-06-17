@@ -1,38 +1,6 @@
-street,locality,region,old_address,lat,lon
-,phường 1,ho chi minh,,10.7769,106.7009
-,phường 2,ho chi minh,10.7769,106.7109
-,phường 3,ho chi minh,10.7669,106.7009
-,phường 4,ho chi minh,10.7669,106.7109
-,phường 5,ho chi minh,10.7569,106.7009
-,phường 6,ho chi minh,10.7569,106.7109
-,phường 7,ho chi minh,10.7469,106.7009
-,phường 8,ho chi minh,10.7469,106.7109
-,phường 9,ho chi minh,10.7369,106.7009
-,phường 10,ho chi minh,10.7369,106.7109
-,phường 11,ho chi minh,10.7269,106.7009
-,phường 12,ho chi minh,10.7269,106.7109
-,phường 13,ho chi minh,10.7169,106.7009
-,phường 14,ho chi minh,10.8045,106.6985
-,phường 15,ho chi minh,10.7969,106.7109
-,phường 16,ho chi minh,10.8169,106.7009
-,phường bình thạnh,ho chi minh,10.8045,106.6985
-,phường sài gòn,ho chi minh,10.7803,106.7055
-,quận 1,ho chi minh,10.7769,106.7009
-,quận 2,ho chi minh,10.7969,106.7509
-,quận 3,ho chi minh,10.7669,106.7009
-,quận 4,ho chi minh,10.7369,106.7009
-,quận 5,ho chi minh,10.7569,106.6809
-,quận 6,ho chi minh,10.7369,106.6609
-,quận 7,ho chi minh,10.7169,106.7209
-,quận 8,ho chi minh,10.7169,106.6909
-,quận 9,ho chi minh,10.7769,106.7909
-,quận 10,ho chi minh,10.7469,106.6609
-,quận 11,ho chi minh,10.7469,106.6309
-,quận 12,ho chi minh,10.8269,106.7309
-,quận bình tân,ho chi minh,10.7969,106.6209
-,quận bình thạnh,ho chi minh,10.8045,106.6985
-,quận gò vấp,ho chi minh,10.8369,106.6909
-,quận phú nhuận,ho chi minh,10.7869,106.7509
-,quận tân bình,ho chi minh,10.8169,106.6609
-,quận tân phú,ho chi minh,10.8069,106.6009
-,quận thủ đức,ho chi minh,10.8569,106.7709
+street,locality,region,old_address,lat,lon,nearest_school_km,school_count_3km,nearest_hospital_km,hospital_count_5km,nearest_marketplace_km,marketplace_count_3km,nearest_supermarket_km,supermarket_count_3km,nearest_mall_km,mall_count_3km,nearest_bus_stop_km,bus_stop_count_1km,nearest_metro_km,metro_count_5km
+đường lê quang định,phường bình thạnh,hồ chí minh,"Đường Lê Quang Định, Phường 14, Quận Bình Thạnh, Hồ Chí Minh (cũ)",10.8045369,106.6985299,0.1536564277820822,117.0,0.3253671289426457,47.0,0.3173412790612379,16.0,0.127429078630904,61.0,3.0678526059733926,0.0,0.1082694455382833,47.0,2.0800873263501067,7.0
+đường lê thánh tôn,phường sài gòn,hồ chí minh,"Đường Lê Thánh Tôn, Phường Bến Nghé, Quận 1, Hồ Chí Minh (cũ)",10.7803088,106.7054885,0.4752517013792162,114.0,0.3183914802084917,68.0,0.915369003541698,22.0,0.3312733645976148,97.0,0.690744449731313,15.0,0.0895344751277696,68.0,0.3523202858879943,7.0
+đường nguyễn trọng tuyển,phường phú nhuận,hồ chí minh,"Đường Nguyễn Trọng Tuyển, Phường 10, Quận Phú Nhuận, Hồ Chí Minh (cũ)",10.7978431,106.674643,0.4288570629001585,154.0,0.3118117616331108,76.0,0.5711071626172188,19.0,0.2563639381331828,53.0,1.9454943767766408,6.0,0.15531226033686343,47.0,3.900284792001561,4.0
+đường trịnh như khuê,xã bình chánh,hồ chí minh,"Đường Trịnh Như Khuê, Xã Bình Chánh, Huyện Bình Chánh, Hồ Chí Minh (cũ)",10.6638681,106.5703407,0.4280784417305304,11.0,3.4931253947015146,3.0,0.2548342903826288,1.0,,0.0,,0.0,0.1251590262960086,12.0,,0.0
+đường nguyễn phi khanh,phường tân định,hồ chí minh,"Đường Nguyễn Phi Khanh, Phường Tân Định, Quận 1, Hồ Chí Minh (cũ)",10.7913566,106.6925536,0.1299335621271443,143.0,0.3411335731658335,72.0,0.3175800768819949,27.0,0.0986909513623184,98.0,1.4975080964543197,13.0,0.0976871077550514,50.0,2.024950050348848,6.0

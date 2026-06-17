@@ -14,7 +14,6 @@ BASE_URL = "https://alonhadat.com.vn"
 
 REGIONS = [
     "ho-chi-minh",
-    "ha-noi",
 ]
 
 TYPES = [
