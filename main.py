@@ -35,20 +35,9 @@ OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
 BATCH_SIZE = 10  # Process 10 records at a time (faster processing)
 
 
-def process_batch(batch_df, school_radius=3000, hospital_radius=5000,
-                   marketplace_radius=3000, supermarket_radius=3000,
-                  mall_radius=3000, bus_stop_radius=1000, metro_radius=5000):
-    """Process single batch through feature pipeline and cache features"""
-    batch_df = get_additional_features(
-        batch_df,
-        school_radius=school_radius,
-        hospital_radius=hospital_radius,
-        marketplace_radius=marketplace_radius,
-        supermarket_radius=supermarket_radius,
-        mall_radius=mall_radius,
-        bus_stop_radius=bus_stop_radius,
-        metro_radius=metro_radius
-    )
+def process_batch(batch_df):
+    """Process single batch: get POI features from cache or API"""
+    batch_df = get_additional_features(batch_df)
 
     # Save computed features to localities.csv for future use
     feature_cols = [
@@ -69,8 +58,9 @@ def process_batch(batch_df, school_radius=3000, hospital_radius=5000,
         lat = row.get("lat")
         lon = row.get("lon")
 
-        features = {col: row[col] for col in feature_cols if col in batch_df.columns}
-        append_to_localities_csv(street, locality, region, old_address, lat, lon, features=features)
+        features = {col: row[col] for col in feature_cols if col in batch_df.columns and pd.notna(row[col])}
+        if features:  # Only save if we have computed features
+            append_to_localities_csv(street, locality, region, old_address, lat, lon, features=features)
 
     return batch_df
 
