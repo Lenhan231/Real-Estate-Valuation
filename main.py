@@ -152,9 +152,13 @@ def main():
 
     # Remove ALL processed rows from input file (checkpoint) - even those dropped
     if all_processed_indices:
+        print(f"\n  Checkpoint: Removing {len(all_processed_indices)} rows from input file...")
+        print(f"    Original input rows: {len(df)}")
         df_remaining = df.drop(all_processed_indices, errors='ignore')
+        print(f"    Remaining rows: {len(df_remaining)}")
         df_remaining.to_csv(INPUT_FILE, index=False)
-        print(f"\n  ✓ Checkpoint: Removed {len(all_processed_indices)} processed rows from input")
+        print(f"    ✓ Saved to {INPUT_FILE}")
+        print(f"  ✓ Checkpoint complete: {len(all_processed_indices)} rows removed")
 
     t2 = time.time()
     batch_time = t2 - t1
