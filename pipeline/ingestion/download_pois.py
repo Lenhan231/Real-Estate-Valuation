@@ -70,43 +70,6 @@ def extract_pois(data):
     return pd.DataFrame(pois)
 
 
-def download_poi(poi_type, key, value, output_file, bbox=HCM_BBOX, max_retries=10):
-    """Download single POI type with retry until success"""
-    print(f"Downloading {poi_type}...")
-
-    query = f"""
-    [out:json][timeout:60];
-    (
-      node["{key}"="{value}"]({bbox});
-      way["{key}"="{value}"]({bbox});
-      relation["{key}"="{value}"]({bbox});
-    );
-    out center;
-    """
-
-    # Retry loop
-    for attempt in range(1, max_retries + 1):
-        data = query_overpass(query)
-        if data is not None:
-            df = extract_pois(data)
-            if len(df) > 0:
-                df.to_parquet(output_file, index=False)
-                print(f"  ✓ Saved {len(df)} {poi_type}s to {output_file.name}")
-                time.sleep(2)
-                return
-            else:
-                print(f"  Attempt {attempt}/{max_retries}: Got empty results, retrying...")
-        else:
-            print(f"  Attempt {attempt}/{max_retries}: API failed, retrying...")
-
-        if attempt < max_retries:
-            wait = 5 * (2 ** (attempt - 1))  # Exponential backoff: 5s, 10s, 20s, etc.
-            print(f"  Waiting {wait}s before retry...")
-            time.sleep(wait)
-
-    print(f"  ✗ Failed to download {poi_type} after {max_retries} attempts")
-
-
 def download_all_pois(bbox_list=HCM_AREAS):
     """Download all POI types from multiple area chunks and combine"""
     pois_config = [
