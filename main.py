@@ -40,7 +40,7 @@ from pipeline.transformation.feature_pipeline import (
 )
 
 OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
-BATCH_SIZE = 50  # Process 50 records at a time
+BATCH_SIZE = 2  # Process 2 records at a time (shows checkpoint clearly)
 
 FEATURE_COLS = [
     'nearest_school_km', 'school_count_3km',
@@ -114,7 +114,6 @@ def main():
     total_rows_dropped = 0
     n_batches = (len(df) + BATCH_SIZE - 1) // BATCH_SIZE
 
-    # Track all processed row indices (for checkpoint removal from input)
     all_processed_indices = []
 
     for i in range(n_batches):
@@ -132,7 +131,7 @@ def main():
         total_rows_kept += kept
         total_rows_dropped += dropped
 
-        # Track all input rows as processed (even if dropped later)
+        # Track processed indices
         all_processed_indices.extend(batch_indices)
 
         if len(batch) > 0:
@@ -145,24 +144,16 @@ def main():
                 df_combined = pd.concat(processed_batches, ignore_index=True)
             df_combined.to_csv(OUTPUT_FILE, index=False)
 
-        # Progress
-        elapsed_batch = time.time() - t1
-        batch_pct = (end_idx / len(df)) * 100
-        print(f"      [{i+1}/{n_batches}] {batch_pct:.1f}% | Kept: {kept}, Dropped: {dropped} | {elapsed_batch:.1f}s")
-
-    # Remove ALL processed rows from input file (checkpoint) - even those dropped
-    if all_processed_indices:
-        print(f"\n  Checkpoint: Removing {len(all_processed_indices)} rows from input file...")
-        print(f"    Original input rows: {len(df)}")
-        # Use boolean mask to drop by position (not by label)
+        # Checkpoint: Write remaining rows to input file after each batch
         mask = ~df.index.isin(all_processed_indices)
         df_remaining = df[mask].reset_index(drop=True)
-        print(f"    Remaining rows: {len(df_remaining)}")
         df_remaining.to_csv(INPUT_FILE, index=False)
-        print(f"    ✓ Saved {INPUT_FILE}")
-        print(f"  ✓ Checkpoint complete: {len(all_processed_indices)} rows removed")
-    else:
-        print(f"\n  Checkpoint: No rows to remove (all_processed_indices is empty)")
+        print(f"      [CHECKPOINT] Batch {i+1}: Removed {len(all_processed_indices)} rows, {len(df_remaining)} remain in input")
+
+        # Progress
+        elapsed_batch = time.time() - t1
+        batch_pct = ((i + 1) / n_batches) * 100
+        print(f"      [{i+1}/{n_batches}] {batch_pct:.1f}% | Kept: {kept}, Dropped: {dropped} | {elapsed_batch:.1f}s")
 
     t2 = time.time()
     batch_time = t2 - t1
