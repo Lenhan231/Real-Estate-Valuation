@@ -80,7 +80,7 @@ def compute_poi_features(lat, lon):
 
 
 def get_additional_features(df) -> pd.DataFrame:
-    """Get POI features from cache or compute using local parquet files"""
+    """Get POI features from cache (by lat/lon) or compute using local parquet files"""
 
     # Initialize feature columns
     feature_columns = {
@@ -103,47 +103,48 @@ def get_additional_features(df) -> pd.DataFrame:
     for col in feature_columns:
         df[col] = feature_columns[col]
 
-    # Get unique addresses to avoid duplicate computations
-    unique_addresses = {}
+    # Get unique coordinates to avoid duplicate computations
+    unique_coords = {}
     for idx, row in df.iterrows():
-        old_address = str(row.get("old_address", "")).lower().strip() if "old_address" in df.columns else ""
-        if old_address and old_address not in unique_addresses:
-            unique_addresses[old_address] = idx
+        lat, lon = row.get("lat"), row.get("lon")
+        if pd.notna(lat) and pd.notna(lon):
+            # Round to 4 decimals for cache matching (~11m precision)
+            key = (round(lat, 4), round(lon, 4))
+            if key not in unique_coords:
+                unique_coords[key] = idx
 
-    # Fetch features for each unique address
+    # Fetch features for each unique coordinate
     cache_hits = 0
     computed = 0
 
-    for old_address, first_idx in unique_addresses.items():
-        # Try cache first
-        cached = get_cached_features(('old_address', old_address))
+    for (lat_key, lon_key), first_idx in unique_coords.items():
+        # Try cache first (match by rounded lat/lon)
+        cached = get_cached_features((lat_key, lon_key))
 
         if cached:
             # Use cached features
             cache_hits += 1
             for idx, row in df.iterrows():
-                if str(row.get("old_address", "")).lower().strip() == old_address:
-                    for col, val in cached.items():
-                        if col in df.columns:
-                            df.loc[idx, col] = val
+                if pd.notna(row.get("lat")) and pd.notna(row.get("lon")):
+                    if (round(row.get("lat"), 4), round(row.get("lon"), 4)) == (lat_key, lon_key):
+                        for col, val in cached.items():
+                            if col in df.columns:
+                                df.loc[idx, col] = val
         else:
             # Compute features from parquet files
             computed += 1
-            row = df.iloc[first_idx]
-            lat, lon = row.get("lat"), row.get("lon")
+            features = compute_poi_features(lat_key, lon_key)
 
-            if pd.notna(lat) and pd.notna(lon):
-                features = compute_poi_features(lat, lon)
-
-                if features:
-                    # Apply computed features to all rows with this address
-                    for idx, row_data in df.iterrows():
-                        if str(row_data.get("old_address", "")).lower().strip() == old_address:
+            if features:
+                # Apply computed features to all rows with same rounded lat/lon
+                for idx, row in df.iterrows():
+                    if pd.notna(row.get("lat")) and pd.notna(row.get("lon")):
+                        if (round(row.get("lat"), 4), round(row.get("lon"), 4)) == (lat_key, lon_key):
                             for col, val in features.items():
                                 if col in df.columns:
                                     df.loc[idx, col] = val
 
     if cache_hits > 0 or computed > 0:
-        print(f"      POI Features: {cache_hits} cached, {computed} computed from parquet")
+        print(f"      POI Features: {cache_hits} cached by lat/lon, {computed} computed from parquet")
 
     return df

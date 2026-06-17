@@ -54,83 +54,30 @@ FEATURE_COLS = [
 ]
 
 
-def get_features_for_row(row):
-    """Get cached or API features, returns dict or None if failed"""
-    old_address = str(row.get("old_address", "")).lower().strip() if "old_address" in row else ""
-    street = str(row.get("street", "")).lower().strip() if "street" in row else ""
-    locality = str(row.get("locality", "")).lower().strip()
-    region = str(row.get("region", "")).lower().strip()
-
-    # Try exact address match first (highest priority)
-    if old_address:
-        cached = get_cached_features(('old_address', old_address))
-        if cached:
-            return cached
-
-    # Try street-level match
-    if street:
-        cached = get_cached_features((street, locality, region))
-        if cached:
-            return cached
-
-    # Try locality-level match
-    cached = get_cached_features((locality, region))
-    if cached:
-        return cached
-
-    # No cache hit - would call API here
-    # For now, return None to drop the row
-    return None
-
-
 def process_batch(batch_df):
     """
-    Process batch: add features from cache or API, drop incomplete rows, save to CSV
+    Process batch: add POI features (cache first, compute from parquet if needed),
+    drop incomplete rows, save to CSV, and cache new features
     """
     batch_df = batch_df.copy()
 
-    # Initialize feature columns
-    for col in FEATURE_COLS:
-        batch_df[col] = None
+    # Add POI features (checks cache by lat/lon, computes from parquet if needed)
+    batch_df = get_additional_features(batch_df)
 
-    # Get features for each row (from cache or API)
-    rows_to_keep = []
-    features_from_cache = 0
-    features_from_api = 0
-    rows_dropped = 0
+    # Drop rows with missing features
+    batch_df_before = len(batch_df)
+    batch_df = batch_df.dropna(subset=FEATURE_COLS, how='any')
+    rows_dropped = batch_df_before - len(batch_df)
 
-    for idx, row in batch_df.iterrows():
-        features = get_features_for_row(row)
-
-        if features:
-            # Apply cached features
-            for col, val in features.items():
-                if col in batch_df.columns:
-                    batch_df.loc[idx, col] = val
-            rows_to_keep.append(idx)
-            features_from_cache += 1
-        else:
-            # No features available - drop this row
-            rows_dropped += 1
-
-    # Keep only rows with features
-    batch_df = batch_df.loc[rows_to_keep]
-
-    # Cache features for future use
-    for idx in rows_to_keep:
-        row = batch_df.loc[idx]
-        street = str(row.get("street", "")).lower().strip() if "street" in batch_df.columns else ""
-        locality = str(row.get("locality", "")).lower().strip()
-        region = str(row.get("region", "")).lower().strip()
-        old_address = str(row.get("old_address", "")).lower().strip() if "old_address" in batch_df.columns else ""
+    # Cache newly computed features for future runs
+    for _, row in batch_df.iterrows():
         lat = row.get("lat")
         lon = row.get("lon")
-
         features = {col: row[col] for col in FEATURE_COLS if col in batch_df.columns and pd.notna(row[col])}
         if features:
-            append_to_localities_csv(street, locality, region, old_address, lat, lon, features=features)
+            append_to_localities_csv(lat, lon, features=features)
 
-    return batch_df, len(rows_to_keep), rows_dropped
+    return batch_df, len(batch_df), rows_dropped
 
 
 def main():
