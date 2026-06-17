@@ -142,13 +142,7 @@ def main():
     if processed_batches:
         df_final = pd.concat(processed_batches, ignore_index=True)
 
-        # Keep only relevant columns for modeling (strict selection)
-        model_cols = FEATURE_COLS + ['price_vnd']
-        available_cols = [col for col in model_cols if col in df_final.columns]
-
-        # Only these columns in this exact order
-        df_final = df_final[available_cols].copy()
-
+        # Keep all columns
         print(f"      Output columns: {list(df_final.columns)}")
         df_final.to_csv(OUTPUT_FILE, index=False)
         final_count = len(df_final)
