@@ -190,23 +190,8 @@ def geocode_with_fallback(row):
             lat, lon = geocode_cache[cache_key]
             return pd.Series([lat, lon, addr_str])
 
-        # Try Nominatim
-        try:
-            geolocator = Nominatim(user_agent="housing_project")
-            time.sleep(0.3)  # Rate limiting
-            location = geolocator.geocode(addr_str, timeout=10)
-            if location:
-                lat = location.latitude
-                lon = location.longitude
-                result = (lat, lon)
-                geocode_cache[cache_key] = result
-                # Append successful geocoding to localities.csv for future use
-                append_to_localities_csv(street, locality, region, old_address, lat, lon)
-                return pd.Series([lat, lon, addr_str])
-        except Exception:
-            pass
-
-    # Fallback to region center if all else fails
+    # Use region center (fast, no API calls)
+    # Nominatim API is too slow (0.3s per call × 4000 rows = 20 minutes)
     if "hồ chí minh" in region.lower() or "ho chi minh" in region.lower():
         return pd.Series([HCM_CENTER[0], HCM_CENTER[1], f"Region: {region}"])
     elif "hà nội" in region.lower() or "ha noi" in region.lower():
