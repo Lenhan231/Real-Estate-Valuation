@@ -14,10 +14,11 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 session = requests.Session()
 session.headers.update({"User-Agent": "DataProcessing/1.0"})
 
-# Study area: HCM + 5km buffer (approximate bbox)
-# Adjust bbox for your city
-HCM_BBOX = "10.65,106.55,10.90,106.85"  # south,west,north,east
-HN_BBOX = "20.95,105.75,21.15,105.95"
+# Geographic bounds (south,west,north,east) in decimal degrees
+# Thành phố Hồ Chí Minh: 10°10' – 10°38' N, 106°22' – 106°54' E
+HCM_BBOX = "10.167,106.367,10.633,106.900"
+# Hà Nội: 20°34' – 21°18' N, 105°17' – 106°02' E
+HN_BBOX = "20.567,105.283,21.300,106.033"
 
 
 def query_overpass(query, max_retries=5, base_sleep=2):
