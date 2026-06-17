@@ -40,7 +40,7 @@ from pipeline.transformation.feature_pipeline import (
 )
 
 OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
-BATCH_SIZE = 2  # Process 50 records at a time (faster, less output writes)
+BATCH_SIZE = 50  # Process 50 records at a time
 
 FEATURE_COLS = [
     'nearest_school_km', 'school_count_3km',
