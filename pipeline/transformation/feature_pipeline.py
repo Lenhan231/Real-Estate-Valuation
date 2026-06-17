@@ -1,9 +1,86 @@
 import pandas as pd
 import numpy as np
+from sklearn.neighbors import BallTree
+from pathlib import Path
 from pipeline.ingestion.load_pois import get_cached_features
 
+# Load POI data once on import
+POI_DATA = {}
+POI_TREES = {}
+
+def _load_poi_trees():
+    """Load all POI parquet files and build spatial indices"""
+    global POI_DATA, POI_TREES
+
+    data_dir = Path(__file__).parent.parent.parent / "data" / "pois"
+    poi_types = ["schools", "hospitals", "marketplaces", "supermarkets", "malls", "bus_stops", "metro_stations"]
+
+    for poi_type in poi_types:
+        parquet_file = data_dir / f"{poi_type}.parquet"
+        if parquet_file.exists():
+            df = pd.read_parquet(parquet_file)
+            POI_DATA[poi_type] = df
+
+            # Build BallTree for spatial queries
+            if len(df) > 0:
+                coords = np.radians(df[["lat", "lon"]].values)
+                POI_TREES[poi_type] = BallTree(coords, metric="haversine")
+            else:
+                POI_TREES[poi_type] = None
+
+# Load POI data on module import
+_load_poi_trees()
+
+
+def compute_poi_features(lat, lon):
+    """Compute POI features for a single coordinate using local parquet files"""
+    if pd.isna(lat) or pd.isna(lon):
+        return None
+
+    features = {}
+
+    # Define radius for each POI type (in meters)
+    poi_config = [
+        ("schools", 3000),
+        ("hospitals", 5000),
+        ("marketplaces", 3000),
+        ("supermarkets", 3000),
+        ("malls", 3000),
+        ("bus_stops", 1000),
+        ("metro_stations", 5000),
+    ]
+
+    query_point = np.radians([[lat, lon]])
+
+    for poi_type, radius_meters in poi_config:
+        tree = POI_TREES.get(poi_type)
+
+        if tree is None or poi_type not in POI_DATA:
+            features[f"nearest_{poi_type.rstrip('s')}_km"] = np.nan
+            features[f"{poi_type.rstrip('s')}_count_{radius_meters//1000}km"] = 0
+            continue
+
+        # Find nearest POI
+        radius_km = radius_meters / 1000.0
+        radius_rad = radius_km / 6371.0
+
+        distances_rad, indices = tree.query(query_point, k=1, return_distance=True)
+        nearest_dist_km = distances_rad[0][0] * 6371.0
+
+        # Count within radius
+        count_indices = tree.query_radius(query_point, r=radius_rad, return_distance=False)[0]
+        count = len(count_indices)
+
+        # Store features
+        feature_name = poi_type.rstrip('s')
+        features[f"nearest_{feature_name}_km"] = nearest_dist_km if nearest_dist_km > 0 else np.nan
+        features[f"{feature_name}_count_{radius_meters//1000}km"] = count
+
+    return features
+
+
 def get_additional_features(df) -> pd.DataFrame:
-    """Get POI features from cache or API call per unique address"""
+    """Get POI features from cache or compute using local parquet files"""
 
     # Initialize feature columns
     feature_columns = {
@@ -26,7 +103,7 @@ def get_additional_features(df) -> pd.DataFrame:
     for col in feature_columns:
         df[col] = feature_columns[col]
 
-    # Get unique addresses to avoid duplicate API calls
+    # Get unique addresses to avoid duplicate computations
     unique_addresses = {}
     for idx, row in df.iterrows():
         old_address = str(row.get("old_address", "")).lower().strip() if "old_address" in df.columns else ""
@@ -34,28 +111,39 @@ def get_additional_features(df) -> pd.DataFrame:
             unique_addresses[old_address] = idx
 
     # Fetch features for each unique address
-    api_call_count = 0
-    cache_hit_count = 0
+    cache_hits = 0
+    computed = 0
 
     for old_address, first_idx in unique_addresses.items():
         # Try cache first
         cached = get_cached_features(('old_address', old_address))
+
         if cached:
-            cache_hit_count += 1
-            # Apply cached features to all rows with this address
+            # Use cached features
+            cache_hits += 1
             for idx, row in df.iterrows():
                 if str(row.get("old_address", "")).lower().strip() == old_address:
                     for col, val in cached.items():
                         if col in df.columns:
                             df.loc[idx, col] = val
         else:
-            # API call to get features (e.g., Google Maps, Overpass API, etc.)
-            # This is where you would call your external API
-            # For now, placeholder for API call
-            api_call_count += 1
-            # Features would be retrieved and cached here
+            # Compute features from parquet files
+            computed += 1
+            row = df.iloc[first_idx]
+            lat, lon = row.get("lat"), row.get("lon")
 
-    if api_call_count > 0 or cache_hit_count > 0:
-        print(f"      Features: {cache_hit_count} from cache, {api_call_count} API calls needed")
+            if pd.notna(lat) and pd.notna(lon):
+                features = compute_poi_features(lat, lon)
+
+                if features:
+                    # Apply computed features to all rows with this address
+                    for idx, row_data in df.iterrows():
+                        if str(row_data.get("old_address", "")).lower().strip() == old_address:
+                            for col, val in features.items():
+                                if col in df.columns:
+                                    df.loc[idx, col] = val
+
+    if cache_hits > 0 or computed > 0:
+        print(f"      POI Features: {cache_hits} cached, {computed} computed from parquet")
 
     return df
