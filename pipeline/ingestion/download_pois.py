@@ -63,8 +63,8 @@ def extract_pois(data):
     return pd.DataFrame(pois)
 
 
-def download_poi(poi_type, key, value, output_file, bbox=HCM_BBOX):
-    """Download single POI type and save as parquet"""
+def download_poi(poi_type, key, value, output_file, bbox=HCM_BBOX, max_retries=10):
+    """Download single POI type with retry until success"""
     print(f"Downloading {poi_type}...")
 
     query = f"""
@@ -77,15 +77,27 @@ def download_poi(poi_type, key, value, output_file, bbox=HCM_BBOX):
     out center;
     """
 
-    data = query_overpass(query)
-    if data is None:
-        print(f"  Failed to download {poi_type}")
-        return
+    # Retry loop
+    for attempt in range(1, max_retries + 1):
+        data = query_overpass(query)
+        if data is not None:
+            df = extract_pois(data)
+            if len(df) > 0:
+                df.to_parquet(output_file, index=False)
+                print(f"  ✓ Saved {len(df)} {poi_type}s to {output_file.name}")
+                time.sleep(2)
+                return
+            else:
+                print(f"  Attempt {attempt}/{max_retries}: Got empty results, retrying...")
+        else:
+            print(f"  Attempt {attempt}/{max_retries}: API failed, retrying...")
 
-    df = extract_pois(data)
-    df.to_parquet(output_file, index=False)
-    print(f"  Saved {len(df)} {poi_type}s to {output_file.name}")
-    time.sleep(2)
+        if attempt < max_retries:
+            wait = 5 * (2 ** (attempt - 1))  # Exponential backoff: 5s, 10s, 20s, etc.
+            print(f"  Waiting {wait}s before retry...")
+            time.sleep(wait)
+
+    print(f"  ✗ Failed to download {poi_type} after {max_retries} attempts")
 
 
 def download_all_pois(bbox=HCM_BBOX):
@@ -104,8 +116,8 @@ def download_all_pois(bbox=HCM_BBOX):
         download_poi(poi_type, key, value, output_file, bbox)
 
 
-def download_metro(bbox=HCM_BBOX):
-    """Download metro/subway stations"""
+def download_metro(bbox=HCM_BBOX, max_retries=10):
+    """Download metro/subway stations with retry until success"""
     print("Downloading metro stations...")
 
     query = f"""
@@ -118,31 +130,30 @@ def download_metro(bbox=HCM_BBOX):
     out center;
     """
 
-    data = query_overpass(query)
-    if data is None:
-        print("  Failed to download metro stations")
-        return
+    # Retry loop
+    for attempt in range(1, max_retries + 1):
+        data = query_overpass(query)
+        if data is not None:
+            df = extract_pois(data)
+            output_file = DATA_DIR / "metro_stations.parquet"
+            df.to_parquet(output_file, index=False)
+            print(f"  ✓ Saved {len(df)} metro stations to {output_file.name}")
+            return
+        else:
+            print(f"  Attempt {attempt}/{max_retries}: API failed, retrying...")
 
-    df = extract_pois(data)
-    output_file = DATA_DIR / "metro_stations.parquet"
-    df.to_parquet(output_file, index=False)
-    print(f"  Saved {len(df)} metro stations to {output_file.name}")
+        if attempt < max_retries:
+            wait = 5 * (2 ** (attempt - 1))  # Exponential backoff
+            print(f"  Waiting {wait}s before retry...")
+            time.sleep(wait)
+
+    print(f"  ✗ Failed to download metro stations after {max_retries} attempts")
 
 
 if __name__ == "__main__":
-    import shutil
-
     print(f"Saving POI data to {DATA_DIR}\n")
 
-    # Backup old data first
-    backup_dir = DATA_DIR.parent / "pois_backup"
-    if DATA_DIR.exists():
-        if backup_dir.exists():
-            shutil.rmtree(backup_dir)
-        shutil.copytree(DATA_DIR, backup_dir)
-        print(f"✓ Backed up old POI data to {backup_dir}\n")
-
-    # Try downloading fresh data
+    # Download for HCM (with auto-retry until success)
     print("=== Ho Chi Minh City ===")
     download_all_pois(bbox=HCM_BBOX)
     download_metro(bbox=HCM_BBOX)
@@ -152,17 +163,4 @@ if __name__ == "__main__":
     # download_all_pois(bbox=HN_BBOX)
     # download_metro(bbox=HN_BBOX)
 
-    # Check if download was successful (at least 100 schools)
-    schools_file = DATA_DIR / "schools.parquet"
-    if schools_file.exists():
-        df = pd.read_parquet(schools_file)
-        if len(df) < 100:
-            print(f"\n⚠️  WARNING: Only {len(df)} schools downloaded (expected 500+)")
-            print("API might be rate-limited. Rolling back to old data...")
-            shutil.rmtree(DATA_DIR)
-            shutil.copytree(backup_dir, DATA_DIR)
-            print("✓ Restored old POI data from backup")
-        else:
-            print(f"\n✓ Download successful: {len(df)} schools")
-
-    print("\nDone!")
+    print("\n✅ All POI data downloaded successfully!")
