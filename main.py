@@ -40,7 +40,7 @@ from pipeline.transformation.feature_pipeline import (
 )
 
 OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
-BATCH_SIZE = 2  # Process 2 records at a time
+BATCH_SIZE = 50  # Process 50 records at a time (faster, less output writes)
 
 FEATURE_COLS = [
     'nearest_school_km', 'school_count_3km',
@@ -102,13 +102,20 @@ def main():
     print(f"[4/5] Extracting geospatial features (batch_size={BATCH_SIZE})...")
     t1 = time.time()
 
+    # Load existing output if it exists (for appending)
+    if OUTPUT_FILE.exists():
+        df_output = pd.read_csv(OUTPUT_FILE)
+        print(f"      Found {len(df_output)} existing records in output")
+    else:
+        df_output = None
+
     processed_batches = []
     total_rows_kept = 0
     total_rows_dropped = 0
     n_batches = (len(df) + BATCH_SIZE - 1) // BATCH_SIZE
 
-    # Track processed row indices for checkpoint
-    processed_indices = []
+    # Track all processed row indices (for checkpoint removal from input)
+    all_processed_indices = []
 
     for i in range(n_batches):
         start_idx = i * BATCH_SIZE
@@ -125,26 +132,29 @@ def main():
         total_rows_kept += kept
         total_rows_dropped += dropped
 
+        # Track all input rows as processed (even if dropped later)
+        all_processed_indices.extend(batch_indices)
+
         if len(batch) > 0:
             processed_batches.append(batch)
 
-            # Save batch immediately
-            df_combined = pd.concat(processed_batches, ignore_index=True)
+            # Append to existing output (don't overwrite)
+            if df_output is not None:
+                df_combined = pd.concat([df_output] + processed_batches, ignore_index=True)
+            else:
+                df_combined = pd.concat(processed_batches, ignore_index=True)
             df_combined.to_csv(OUTPUT_FILE, index=False)
-
-            # Checkpoint: mark these rows as processed
-            processed_indices.extend(batch_indices)
 
         # Progress
         elapsed_batch = time.time() - t1
         batch_pct = (end_idx / len(df)) * 100
         print(f"      [{i+1}/{n_batches}] {batch_pct:.1f}% | Kept: {kept}, Dropped: {dropped} | {elapsed_batch:.1f}s")
 
-    # Remove processed rows from input file (checkpoint)
-    if processed_indices:
-        df_remaining = df.drop(processed_indices, errors='ignore')
+    # Remove ALL processed rows from input file (checkpoint) - even those dropped
+    if all_processed_indices:
+        df_remaining = df.drop(all_processed_indices, errors='ignore')
         df_remaining.to_csv(INPUT_FILE, index=False)
-        print(f"\n  ✓ Checkpoint: Removed {len(processed_indices)} processed rows from input")
+        print(f"\n  ✓ Checkpoint: Removed {len(all_processed_indices)} processed rows from input")
 
     t2 = time.time()
     batch_time = t2 - t1
