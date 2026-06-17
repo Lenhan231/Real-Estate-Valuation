@@ -46,10 +46,6 @@ def load_cache_from_csv():
                     geocode_cache[(old_address,)] = (lat, lon)
                 if street and locality and region:
                     geocode_cache[(street, locality, region)] = (lat, lon)
-                if locality and region:
-                    geocode_cache[(locality, region)] = (lat, lon)
-                if locality:
-                    geocode_cache[(locality,)] = (lat, lon)
 
             print(f"  ✓ Loaded {len(geocode_cache)} geocoding cache keys from {len(df)} records")
         except Exception as e:
@@ -147,8 +143,6 @@ def geocode_with_fallback(row):
         candidates.append(((old_address,), f"{old_address}, Vietnam", f"Address: {old_address}"))
     if street and locality and region:
         candidates.append(((street, locality, region), f"{street}, {locality}, {region}, Vietnam", f"Street: {street}, {locality}, {region}"))
-    if locality and region:
-        candidates.append(((locality, region), f"{locality}, {region}, Vietnam", f"Locality: {locality}, {region}"))
 
     # Debug: show what we're looking for
     for i, (cache_key, api_query, label) in enumerate(candidates):
