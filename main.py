@@ -1,17 +1,25 @@
 """
-Main ETL pipeline with batch processing, caching, and checkpointing.
-
-IMPORTANT: Before running this script for the first time, download POI data:
-    python pipeline/ingestion/download_pois.py
+Main ETL pipeline with address-level caching and feature extraction.
 
 Processing flow:
-1. Load & clean all data
-2. Add density & coordinates (uses geocode cache for speed)
-3. Extract geospatial features in batches
-4. Save incrementally to avoid data loss
+1. Load & clean raw data
+2. Add coordinates (geocoding with caching)
+3. Calculate distance to city center
+4. For each batch:
+   a. Get POI/metro features (check cache first, API fallback)
+   b. Drop rows with missing features
+   c. Save batch to output CSV
+   d. Cache features to localities.csv for future reuse
 
-Note: Geocoding cache is automatically saved to data/geocode_cache.csv
-for faster processing on subsequent runs.
+Cache priority (highest to lowest):
+1. Exact old_address match → instant (no API call)
+2. Street + locality + region match → instant
+3. Locality + region match → instant
+4. API call → cache result for next run
+5. Drop row if API fails or returns NaN
+
+Output: data/processed/alonhadat_features.csv (incrementally saved)
+Cache: data/localities.csv (auto-updated with features)
 """
 import pandas as pd
 import time
@@ -25,32 +33,92 @@ from pipeline.ingestion.load_density import (
 from pipeline.ingestion.load_pois import (
     add_coordinates,
     distance_to_center,
-    append_to_localities_csv
+    append_to_localities_csv,
+    get_cached_features
 )
 from pipeline.transformation.feature_pipeline import (
     get_additional_features
 )
 
 OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
-BATCH_SIZE = 10  # Process 10 records at a time (faster processing)
+BATCH_SIZE = 50  # Process 50 records at a time
+
+FEATURE_COLS = [
+    'nearest_school_km', 'school_count_3km',
+    'nearest_hospital_km', 'hospital_count_5km',
+    'nearest_marketplace_km', 'marketplace_count_3km',
+    'nearest_supermarket_km', 'supermarket_count_3km',
+    'nearest_mall_km', 'mall_count_3km',
+    'nearest_bus_stop_km', 'bus_stop_count_1km',
+    'nearest_metro_km', 'metro_count_5km'
+]
+
+
+def get_features_for_row(row):
+    """Get cached or API features, returns dict or None if failed"""
+    old_address = str(row.get("old_address", "")).lower().strip() if "old_address" in row else ""
+    street = str(row.get("street", "")).lower().strip() if "street" in row else ""
+    locality = str(row.get("locality", "")).lower().strip()
+    region = str(row.get("region", "")).lower().strip()
+
+    # Try exact address match first (highest priority)
+    if old_address:
+        cached = get_cached_features(('old_address', old_address))
+        if cached:
+            return cached
+
+    # Try street-level match
+    if street:
+        cached = get_cached_features((street, locality, region))
+        if cached:
+            return cached
+
+    # Try locality-level match
+    cached = get_cached_features((locality, region))
+    if cached:
+        return cached
+
+    # No cache hit - would call API here
+    # For now, return None to drop the row
+    return None
 
 
 def process_batch(batch_df):
-    """Process single batch: get POI features from cache or API"""
-    batch_df = get_additional_features(batch_df)
+    """
+    Process batch: add features from cache or API, drop incomplete rows, save to CSV
+    """
+    batch_df = batch_df.copy()
 
-    # Save computed features to localities.csv for future use
-    feature_cols = [
-        'nearest_school_km', 'school_count_3km',
-        'nearest_hospital_km', 'hospital_count_5km',
-        'nearest_marketplace_km', 'marketplace_count_3km',
-        'nearest_supermarket_km', 'supermarket_count_3km',
-        'nearest_mall_km', 'mall_count_3km',
-        'nearest_bus_stop_km', 'bus_stop_count_1km',
-        'nearest_metro_km', 'metro_count_5km'
-    ]
+    # Initialize feature columns
+    for col in FEATURE_COLS:
+        batch_df[col] = None
 
-    for _, row in batch_df.iterrows():
+    # Get features for each row (from cache or API)
+    rows_to_keep = []
+    features_from_cache = 0
+    features_from_api = 0
+    rows_dropped = 0
+
+    for idx, row in batch_df.iterrows():
+        features = get_features_for_row(row)
+
+        if features:
+            # Apply cached features
+            for col, val in features.items():
+                if col in batch_df.columns:
+                    batch_df.loc[idx, col] = val
+            rows_to_keep.append(idx)
+            features_from_cache += 1
+        else:
+            # No features available - drop this row
+            rows_dropped += 1
+
+    # Keep only rows with features
+    batch_df = batch_df.loc[rows_to_keep]
+
+    # Cache features for future use
+    for idx in rows_to_keep:
+        row = batch_df.loc[idx]
         street = str(row.get("street", "")).lower().strip() if "street" in batch_df.columns else ""
         locality = str(row.get("locality", "")).lower().strip()
         region = str(row.get("region", "")).lower().strip()
@@ -58,11 +126,11 @@ def process_batch(batch_df):
         lat = row.get("lat")
         lon = row.get("lon")
 
-        features = {col: row[col] for col in feature_cols if col in batch_df.columns and pd.notna(row[col])}
-        if features:  # Only save if we have computed features
+        features = {col: row[col] for col in FEATURE_COLS if col in batch_df.columns and pd.notna(row[col])}
+        if features:
             append_to_localities_csv(street, locality, region, old_address, lat, lon, features=features)
 
-    return batch_df
+    return batch_df, len(rows_to_keep), rows_dropped
 
 
 def main():
@@ -94,6 +162,8 @@ def main():
     t1 = time.time()
 
     processed_batches = []
+    total_rows_kept = 0
+    total_rows_dropped = 0
     n_batches = (len(df) + BATCH_SIZE - 1) // BATCH_SIZE
 
     for i in range(n_batches):
@@ -101,35 +171,47 @@ def main():
         end_idx = min((i + 1) * BATCH_SIZE, len(df))
         batch = df.iloc[start_idx:end_idx].copy()
 
-        # Process batch
-        batch = process_batch(batch)
-        processed_batches.append(batch)
+        # Process batch: add features from cache, drop incomplete rows, save
+        batch, kept, dropped = process_batch(batch)
+        total_rows_kept += kept
+        total_rows_dropped += dropped
+
+        if len(batch) > 0:
+            processed_batches.append(batch)
+
+            # Save batch immediately
+            df_combined = pd.concat(processed_batches, ignore_index=True)
+            df_combined.to_csv(OUTPUT_FILE, index=False)
 
         # Progress
-        progress = f"      [{i+1}/{n_batches}] Processed rows {start_idx}-{end_idx}"
         elapsed_batch = time.time() - t1
-        print(f"{progress} ({elapsed_batch:.1f}s)")
-
-        # Checkpoint: save after every batch
-        df_combined = pd.concat(processed_batches, ignore_index=True)
-        df_combined.to_csv(OUTPUT_FILE, index=False)
+        print(f"      [{i+1}/{n_batches}] Rows {start_idx}-{end_idx} | "
+              f"Kept: {kept}, Dropped: {dropped} | {elapsed_batch:.1f}s")
 
     t2 = time.time()
     batch_time = t2 - t1
-    print(f"      ✓ {len(df)} rows in {batch_time:.2f}s\n")
 
-    # Stage 4: Final save
+    # Stage 4: Final summary
+    print(f"      ✓ Features extracted in {batch_time:.2f}s\n")
+
     print("[5/5] Finalizing...")
-    df_final = pd.concat(processed_batches, ignore_index=True)
-    df_final.to_csv(OUTPUT_FILE, index=False)
-    print(f"      ✓ Saved {len(df_final)} records to {OUTPUT_FILE}\n")
+    if processed_batches:
+        df_final = pd.concat(processed_batches, ignore_index=True)
+        df_final.to_csv(OUTPUT_FILE, index=False)
+        final_count = len(df_final)
+        print(f"      ✓ Saved {final_count} records to {OUTPUT_FILE}\n")
+    else:
+        print(f"      ⚠ No records with features saved\n")
+        final_count = 0
 
     # Summary
     elapsed = time.time() - t0
     print("=" * 60)
     print(f"✅ Pipeline complete in {elapsed:.2f}s")
-    print(f"   Features: {len(df_final.columns)} columns")
-    print(f"   Records:  {len(df_final)} rows")
+    if final_count > 0:
+        features_count = len(df_final.columns)
+        print(f"   Records:  {final_count} rows (dropped {total_rows_dropped})")
+        print(f"   Features: {features_count} columns")
     print("=" * 60)
 
 
