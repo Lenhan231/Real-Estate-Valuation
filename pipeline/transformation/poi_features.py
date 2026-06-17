@@ -21,25 +21,35 @@ def _load_persistent_cache():
 
     try:
         df = pd.read_csv(LOCALITY_FILE)
+        poi_types = [
+            ('amenity', 'school', 'nearest_school_km', 'school_count_3km', 3000),
+            ('amenity', 'hospital', 'nearest_hospital_km', 'hospital_count_5km', 5000),
+            ('amenity', 'marketplace', 'nearest_marketplace_km', 'marketplace_count_3km', 3000),
+            ('shop', 'supermarket', 'nearest_supermarket_km', 'supermarket_count_3km', 3000),
+            ('shop', 'mall', 'nearest_mall_km', 'mall_count_3km', 3000),
+            ('highway', 'bus_stop', 'nearest_bus_stop_km', 'bus_stop_count_1km', 1000),
+        ]
+
         for _, row in df.iterrows():
             lat = row.get('lat')
             lon = row.get('lon')
             if pd.isna(lat) or pd.isna(lon):
                 continue
 
-            # Rebuild cache keys from feature columns
-            if pd.notna(row.get('nearest_school_km')):
-                key = (round(lat, 5), round(lon, 5), 'amenity', 'school')
-                cache[key] = (row.get('nearest_school_km'), 0)  # nearest only
+            # Load cache for all POI types
+            for key_type, key_value, nearest_col, count_col, radius in poi_types:
+                nearest_val = row.get(nearest_col)
+                count_val = row.get(count_col)
 
-            if pd.notna(row.get('nearest_hospital_km')):
-                key = (round(lat, 5), round(lon, 5), 'amenity', 'hospital')
-                cache[key] = (row.get('nearest_hospital_km'), 0)
+                # Cache nearest distance
+                if pd.notna(nearest_val):
+                    cache_key = (round(lat, 5), round(lon, 5), key_type, key_value)
+                    cache[cache_key] = (nearest_val, int(count_val) if pd.notna(count_val) else 0)
 
-            # Add count cache keys too
-            key_school_count = (round(lat, 5), round(lon, 5), 'amenity', 'school', 3000)
-            if key_school_count not in cache:
-                cache[key_school_count] = (row.get('nearest_school_km'), int(row.get('school_count_3km', 0)))
+                # Cache with radius
+                if pd.notna(nearest_val):
+                    cache_key_radius = (round(lat, 5), round(lon, 5), key_type, key_value, radius)
+                    cache[cache_key_radius] = (nearest_val, int(count_val) if pd.notna(count_val) else 0)
 
         print(f"  ✓ Loaded {len(cache)} cached POI queries from localities.csv")
     except Exception as e:

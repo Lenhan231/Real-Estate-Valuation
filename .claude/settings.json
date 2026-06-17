@@ -16,7 +16,9 @@
       "Bash(python)",
       "Bash(tee pipeline.log)",
       "PowerShell(python -c \"import pandas as pd; df = pd.read_parquet\\('c:\\\\Users\\\\nhanl\\\\OneDrive\\\\Desktop\\\\School\\\\DSP391m\\\\HousePricePrediction\\\\data\\\\pois\\\\metro_stations.parquet'\\); print\\(f'Records: {len\\(df\\)}'\\); print\\(df.head\\(\\)\\)\")",
-      "PowerShell(python -c \"import pandas as pd; df = pd.read_parquet\\('c:/Users/nhanl/OneDrive/Desktop/School/DSP391m/HousePricePrediction/data/pois/metro_stations.parquet'\\); print\\(f'Records: {len\\(df\\)}'\\); print\\(df.head\\(\\) if len\\(df\\) > 0 else 'EMPTY'\\)\")"
+      "PowerShell(python -c \"import pandas as pd; df = pd.read_parquet\\('c:/Users/nhanl/OneDrive/Desktop/School/DSP391m/HousePricePrediction/data/pois/metro_stations.parquet'\\); print\\(f'Records: {len\\(df\\)}'\\); print\\(df.head\\(\\) if len\\(df\\) > 0 else 'EMPTY'\\)\")",
+      "Bash(sleep 5 && head -50 \"C:\\\\Users\\\\nhanl\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-nhanl-OneDrive-Desktop\\\\School-DSP391m-HousePricePrediction\\\\be2ad348-3bdc-4b29-ba87-35f63a3a733c\\\\tasks\\\\bqvnn8t8v.output\" 2>&1 || echo \"Still running...\")",
+      "Read(//c/Users/nhanl/AppData/Local/Temp/claude/c--Users-nhanl-OneDrive-Desktop/School-DSP391m-HousePricePrediction/be2ad348-3bdc-4b29-ba87-35f63a3a733c/tasks/**)"
     ]
   }
 }

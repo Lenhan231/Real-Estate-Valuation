@@ -2,11 +2,46 @@ import time
 import requests
 from geopy.distance import geodesic
 import subprocess
+import pandas as pd
+from pathlib import Path
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+LOCALITY_FILE = Path(__file__).parent.parent.parent / "data" / "localities.csv"
 
 session = requests.Session()
 session.headers.update({"User-Agent": "DataProcessing/1.0"})
+
+cache = {}
+
+
+def _load_persistent_cache():
+    """Load cached metro results from localities.csv"""
+    global cache
+    if not LOCALITY_FILE.exists():
+        return
+
+    try:
+        df = pd.read_csv(LOCALITY_FILE)
+        for _, row in df.iterrows():
+            lat = row.get('lat')
+            lon = row.get('lon')
+            if pd.isna(lat) or pd.isna(lon):
+                continue
+
+            nearest_val = row.get('nearest_metro_km')
+            count_val = row.get('metro_count_5km')
+
+            if pd.notna(nearest_val):
+                # Cache nearest metro
+                cache_key = (round(lat, 5), round(lon, 5))
+                cache[cache_key] = (nearest_val, int(count_val) if pd.notna(count_val) else 0)
+
+        print(f"  ✓ Loaded {len(cache)} cached metro queries from localities.csv")
+    except Exception as e:
+        pass  # Silent fail
+
+
+_load_persistent_cache()
 
 
 def run(cmd: list[str]) -> str:
@@ -83,9 +118,17 @@ def count_metro_within_radius(lat, lon, around_meters, max_retries=10, base_slee
 
 
 def get_metro_features(lat, lon, around_meters):
+    # Check cache first
+    cache_key = (round(lat, 5), round(lon, 5))
+    if cache_key in cache:
+        return cache[cache_key]
+
+    # If not in cache, query API
     nearest_dist, _ = get_nearest_metro(lat, lon)
     _, count = count_metro_within_radius(lat, lon, around_meters)
-    return nearest_dist, count
+    result = (nearest_dist, count)
+    cache[cache_key] = result
+    return result
 
 
 if __name__ == "__main__":
