@@ -16,14 +16,26 @@ LOCALITY_FILE = Path(__file__).parent.parent.parent / "data" / "localities.csv"
 
 geocode_cache = {}
 locality_coords = {}
+locality_features = {}  # Cache for POI features by location
 
 
 def load_locality_coords():
-    """Load locality, street, and address coordinates from CSV file"""
-    global locality_coords
+    """Load locality coordinates and POI features from CSV file"""
+    global locality_coords, locality_features
     if LOCALITY_FILE.exists():
         try:
             df = pd.read_csv(LOCALITY_FILE)
+            feature_cols = [
+                'nearest_school_km', 'school_count_3km',
+                'nearest_hospital_km', 'hospital_count_5km',
+                'nearest_marketplace_km', 'marketplace_count_3km',
+                'nearest_supermarket_km', 'supermarket_count_3km',
+                'nearest_mall_km', 'mall_count_3km',
+                'nearest_bus_stop_km', 'bus_stop_count_1km',
+                'nearest_metro_km', 'metro_count_5km'
+            ]
+            has_features = all(col in df.columns for col in feature_cols)
+
             for _, row in df.iterrows():
                 # Check for full address match (highest priority)
                 if 'old_address' in df.columns and pd.notna(row.get('old_address')):
@@ -32,6 +44,11 @@ def load_locality_coords():
                     lat = row['lat']
                     lon = row['lon']
                     locality_coords[key] = (lat, lon)
+                    # Load features if available
+                    if has_features:
+                        features = {col: row[col] for col in feature_cols if pd.notna(row[col])}
+                        if features:
+                            locality_features[key] = features
                 # Street-level mapping: (street, locality, region) -> (lat, lon)
                 elif 'street' in df.columns and pd.notna(row.get('street')):
                     street = str(row['street']).lower().strip()
@@ -41,6 +58,11 @@ def load_locality_coords():
                     lat = row['lat']
                     lon = row['lon']
                     locality_coords[key] = (lat, lon)
+                    # Load features if available
+                    if has_features:
+                        features = {col: row[col] for col in feature_cols if pd.notna(row[col])}
+                        if features:
+                            locality_features[key] = features
                 else:
                     # Locality/region-level mapping: (locality, region) -> (lat, lon)
                     locality = str(row['locality']).lower().strip()
@@ -49,7 +71,15 @@ def load_locality_coords():
                     lat = row['lat']
                     lon = row['lon']
                     locality_coords[key] = (lat, lon)
-            print(f"  ✓ Loaded {len(locality_coords)} coordinates from CSV")
+                    # Load features if available
+                    if has_features:
+                        features = {col: row[col] for col in feature_cols if pd.notna(row[col])}
+                        if features:
+                            locality_features[key] = features
+
+            loaded_coords = len(locality_coords)
+            loaded_features = len(locality_features)
+            print(f"  ✓ Loaded {loaded_coords} coordinates, {loaded_features} with pre-computed features")
         except Exception as e:
             print(f"  Warning: Failed to load localities.csv: {e}")
     else:
@@ -85,21 +115,31 @@ def save_cache_to_csv():
     print(f"  ✓ Saved {len(geocode_cache)} coordinates to cache")
 
 
-def append_to_localities_csv(street, locality, region, old_address, lat, lon):
-    """Append successfully geocoded address to localities.csv"""
+def append_to_localities_csv(street, locality, region, old_address, lat, lon, features=None):
+    """Append successfully geocoded address and optional features to localities.csv"""
     try:
         LOCALITY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        new_row = pd.DataFrame([{
+        new_row_data = {
             'street': street if street else '',
             'locality': locality,
             'region': region,
             'old_address': old_address if old_address else '',
             'lat': lat,
             'lon': lon
-        }])
+        }
+
+        # Add features if provided
+        if features:
+            new_row_data.update(features)
+
+        new_row = pd.DataFrame([new_row_data])
 
         if LOCALITY_FILE.exists():
             df = pd.read_csv(LOCALITY_FILE)
+            # Ensure all columns are present
+            for col in new_row_data.keys():
+                if col not in df.columns:
+                    df[col] = None
             df = pd.concat([df, new_row], ignore_index=True)
         else:
             df = new_row
@@ -107,6 +147,11 @@ def append_to_localities_csv(street, locality, region, old_address, lat, lon):
         df.to_csv(LOCALITY_FILE, index=False)
     except Exception as e:
         pass  # Silent fail - don't break geocoding if CSV update fails
+
+
+def get_cached_features(key):
+    """Get cached POI features for a location key, returns None if not found"""
+    return locality_features.get(key)
 
 
 # Load data on import

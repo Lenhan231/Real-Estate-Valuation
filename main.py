@@ -24,21 +24,22 @@ from pipeline.ingestion.load_density import (
 )
 from pipeline.ingestion.load_pois import (
     add_coordinates,
-    distance_to_center
+    distance_to_center,
+    append_to_localities_csv
 )
 from pipeline.transformation.feature_pipeline import (
     get_additional_features
 )
 
 OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
-BATCH_SIZE = 50  # Process 50 records at a time (faster processing)
+BATCH_SIZE = 10  # Process 10 records at a time (faster processing)
 
 
 def process_batch(batch_df, school_radius=3000, hospital_radius=5000,
                    marketplace_radius=3000, supermarket_radius=3000,
                   mall_radius=3000, bus_stop_radius=1000, metro_radius=5000):
-    """Process single batch through feature pipeline"""
-    return get_additional_features(
+    """Process single batch through feature pipeline and cache features"""
+    batch_df = get_additional_features(
         batch_df,
         school_radius=school_radius,
         hospital_radius=hospital_radius,
@@ -48,6 +49,30 @@ def process_batch(batch_df, school_radius=3000, hospital_radius=5000,
         bus_stop_radius=bus_stop_radius,
         metro_radius=metro_radius
     )
+
+    # Save computed features to localities.csv for future use
+    feature_cols = [
+        'nearest_school_km', 'school_count_3km',
+        'nearest_hospital_km', 'hospital_count_5km',
+        'nearest_marketplace_km', 'marketplace_count_3km',
+        'nearest_supermarket_km', 'supermarket_count_3km',
+        'nearest_mall_km', 'mall_count_3km',
+        'nearest_bus_stop_km', 'bus_stop_count_1km',
+        'nearest_metro_km', 'metro_count_5km'
+    ]
+
+    for _, row in batch_df.iterrows():
+        street = str(row.get("street", "")).lower().strip() if "street" in batch_df.columns else ""
+        locality = str(row.get("locality", "")).lower().strip()
+        region = str(row.get("region", "")).lower().strip()
+        old_address = str(row.get("old_address", "")).lower().strip() if "old_address" in batch_df.columns else ""
+        lat = row.get("lat")
+        lon = row.get("lon")
+
+        features = {col: row[col] for col in feature_cols if col in batch_df.columns}
+        append_to_localities_csv(street, locality, region, old_address, lat, lon, features=features)
+
+    return batch_df
 
 
 def main():
