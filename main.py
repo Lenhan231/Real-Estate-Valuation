@@ -57,14 +57,14 @@ FEATURE_COLS = [
 def process_batch(batch_df):
     """
     Process batch: add POI features (cache first, compute from parquet if needed),
-    drop incomplete rows, save to CSV, and cache new features
+    keep rows with complete features, save to CSV, and cache new features
     """
     batch_df = batch_df.copy()
 
     # Add POI features (checks cache by lat/lon, computes from parquet if needed)
     batch_df = get_additional_features(batch_df)
 
-    # Drop rows with missing features
+    # Keep only rows with ALL features present (not NaN)
     batch_df_before = len(batch_df)
     batch_df = batch_df.dropna(subset=FEATURE_COLS, how='any')
     rows_dropped = batch_df_before - len(batch_df)
@@ -73,9 +73,10 @@ def process_batch(batch_df):
     for _, row in batch_df.iterrows():
         lat = row.get("lat")
         lon = row.get("lon")
-        features = {col: row[col] for col in FEATURE_COLS if col in batch_df.columns and pd.notna(row[col])}
-        if features:
-            append_to_localities_csv(lat, lon, features=features)
+        if pd.notna(lat) and pd.notna(lon):
+            features = {col: row[col] for col in FEATURE_COLS if col in batch_df.columns and pd.notna(row[col])}
+            if len(features) == len(FEATURE_COLS):  # Only cache if ALL 14 features present
+                append_to_localities_csv(lat, lon, features=features)
 
     return batch_df, len(batch_df), rows_dropped
 
@@ -89,7 +90,7 @@ def main():
 
     # Stage 1: Load & Clean
     print("[1/5] Loading raw data...")
-    df = pd.read_csv(r"data\raw\alonhadat_details.csv")
+    df = pd.read_csv(r"data\raw\hold.csv")  # Full dataset: 4,642 records
     print(f"      Loaded {len(df)} records")
 
     print("[2/5] Cleaning data...")
