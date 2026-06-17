@@ -124,62 +124,46 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df.drop(columns=["Số Điện Thoại", "được đánh giá", "Tên liên hệ"], errors="ignore")
     df = df.drop_duplicates(subset=["link"]).copy()
 
-    df["Mã tin"] = pd.to_numeric(df["Mã tin"], errors="coerce").astype("Int64")
+    # Data is already in English format with processed columns
+    df["listing_id"] = pd.to_numeric(df.get("listing_id"), errors="coerce").astype("Int64")
 
-    for col in BINARY_COLS_VI:
-        if col in df.columns:
-            df[col] = (df[col]
-                      .replace(["---", "_"], "0")
-                      .fillna("1")
-                      .astype("Int64"))
-
-    cols_to_clean = [col for col in df.columns if col not in BINARY_COLS_VI]
+    # Replace missing markers
+    cols_to_clean = [col for col in df.columns if col not in ["dining_room_bin", "kitchen_bin", "terrace_bin", "car_parking_bin", "owner_listing_bin"]]
     df[cols_to_clean] = df[cols_to_clean].replace(MISSING_MARKERS, np.nan)
 
-    for col in ["Đường trước nhà", "Chiều ngang", "Chiều dài", "area"]:
+    for col in ["road_width_m", "width_m", "length_m", "area_m2"]:
         if col in df.columns:
             df[col] = df[col].apply(to_float_m)
-    
-    df["Giá"] = df.apply(
-        lambda row: parse_price_to_vnd(row.get("Giá"), row.get("area")),
-        axis=1
-    )
 
-    for col in ["Số lầu", "Số phòng ngủ"]:
+    if "price_vnd" in df.columns:
+        df["price_vnd"] = df.apply(
+            lambda row: parse_price_to_vnd(row.get("price_vnd"), row.get("area_m2")),
+            axis=1
+        )
+
+    for col in ["num_floors", "num_bedrooms"]:
         if col in df.columns:
             df[col] = df[col].apply(to_int).astype("Int64")
 
-    categorical_cols = ["street", "locality", "region", "Hướng", "Loại tin", "Loại BDS", "Pháp lý"]
+    categorical_cols = ["street", "locality", "region", "direction", "listing_type", "property_type", "legal_status"]
     for col in categorical_cols:
         if col not in df.columns:
             continue
         df[col] = df[col].apply(normalize_text)
-        if col == "Hướng":
-            df[col] = df[col].replace(DIRECTION_MAP)
-        elif col == "Pháp lý":
-            df[col] = df[col].replace(LEGAL_MAP)
-        elif col in ["Loại tin", "Loại BDS"]:
-            df[col] = df[col].replace(TYPE_MAP)
         df[col] = df[col].fillna("unknown").str.lower().str.strip()
 
-    for col in ["Số lầu", "Số phòng ngủ"]:
+    for col in ["num_floors", "num_bedrooms"]:
         if col in df.columns:
             df = df[(df[col].isna()) | (df[col] >= 0)]
 
-    for col in ["Chiều ngang", "Chiều dài", "Đường trước nhà"]:
+    for col in ["road_width_m", "width_m", "length_m"]:
         if col in df.columns:
             df = df[(df[col].isna()) | (df[col] > 0)]
 
-    if "Giá" in df.columns:
-        df = df[(df["Giá"].isna()) | (df["Giá"] > 0)]
+    if "price_vnd" in df.columns:
+        df = df[(df["price_vnd"].isna()) | (df["price_vnd"] > 0)]
 
-    df = df.rename(columns={**VI_TO_EN_COLS})
-
-    for col in BINARY_COLS_EN:
-        if col in df.columns:
-            df[col + "_bin"] = df[col]
-
-    cols_to_keep = KEEP_COLS + [col + "_bin" for col in BINARY_COLS_EN]
+    cols_to_keep = KEEP_COLS + ["dining_room_bin", "kitchen_bin", "terrace_bin", "car_parking_bin", "owner_listing_bin"]
     cols_to_keep = [c for c in cols_to_keep if c in df.columns]
 
     return df[cols_to_keep].copy()

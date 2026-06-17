@@ -25,7 +25,10 @@
       "Bash(pkill -f \"python main.py\")",
       "PowerShell(\"✓ Killed python processes\")",
       "Bash(tee pipeline_full.log)",
-      "PowerShell(Get-Process python | Where-Object {$_.CommandLine -match \"main.py\"} | Stop-Process -Force 2>$null; \"✓ Pipeline stopped\")"
+      "PowerShell(Get-Process python | Where-Object {$_.CommandLine -match \"main.py\"} | Stop-Process -Force 2>$null; \"✓ Pipeline stopped\")",
+      "Bash(python -c \"import pandas as pd; df = pd.read_csv\\('data/raw/alonhadat_details.csv'\\); print\\('Columns:', df.columns.tolist\\(\\)\\); print\\('Shape:', df.shape\\); print\\('\\\\\\\\nFirst few rows:'\\); print\\(df.head\\(\\)\\)\")",
+      "Bash(python -c \"import pandas as pd; df = pd.read_csv\\('data/raw/alonhadat_details.csv'\\); print\\('Columns:', df.columns.tolist\\(\\)\\); print\\('\\\\\\\\nFirst row:'\\); print\\(df.iloc[0]\\)\")",
+      "Bash(python -c \"import pandas as pd; df = pd.read_csv\\('data/processed/alonhadat_features.csv'\\); print\\(f'Rows: {len\\(df\\)}'\\); print\\(f'Columns: {df.columns.tolist\\(\\)}'\\)\")"
     ]
   }
 }
