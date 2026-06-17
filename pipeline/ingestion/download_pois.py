@@ -14,11 +14,18 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 session = requests.Session()
 session.headers.update({"User-Agent": "DataProcessing/1.0"})
 
-# Geographic bounds (south,west,north,east) in decimal degrees
-# Thành phố Hồ Chí Minh: 10°10' – 10°38' N, 106°22' – 106°54' E
-HCM_BBOX = "10.167,106.367,10.633,106.900"
-# Hà Nội: 20°34' – 21°18' N, 105°17' – 106°02' E
-HN_BBOX = "20.567,105.283,21.300,106.033"
+# Geographic bounds - split into smaller areas for better API results
+# Overpass API limits results per query, so we download in halves then combine
+# Thành phố Hồ Chí Minh: split North/South
+HCM_AREAS = [
+    "10.40,106.367,10.633,106.900",   # North half
+    "10.167,106.367,10.40,106.900",   # South half
+]
+# Hà Nội: split North/South
+HN_AREAS = [
+    "20.93,105.283,21.300,106.033",   # North half
+    "20.567,105.283,20.93,106.033",   # South half
+]
 
 
 def query_overpass(query, max_retries=5, base_sleep=2):
@@ -100,8 +107,8 @@ def download_poi(poi_type, key, value, output_file, bbox=HCM_BBOX, max_retries=1
     print(f"  ✗ Failed to download {poi_type} after {max_retries} attempts")
 
 
-def download_all_pois(bbox=HCM_BBOX):
-    """Download all POI types"""
+def download_all_pois(bbox_list=HCM_AREAS):
+    """Download all POI types from multiple area chunks and combine"""
     pois_config = [
         ("schools", "amenity", "school"),
         ("hospitals", "amenity", "hospital"),
@@ -112,55 +119,73 @@ def download_all_pois(bbox=HCM_BBOX):
     ]
 
     for poi_type, key, value in pois_config:
-        output_file = DATA_DIR / f"{poi_type}.parquet"
-        download_poi(poi_type, key, value, output_file, bbox)
+        all_data = []
+        for area_idx, bbox in enumerate(bbox_list, 1):
+            print(f"  Area {area_idx}/{len(bbox_list)}: ", end="")
+            query = f"""
+            [out:json][timeout:60];
+            (
+              node["{key}"="{value}"]({bbox});
+              way["{key}"="{value}"]({bbox});
+              relation["{key}"="{value}"]({bbox});
+            );
+            out center;
+            """
+            data = query_overpass(query)
+            if data:
+                df = extract_pois(data)
+                all_data.append(df)
+                print(f"  {len(df)} {poi_type}s")
+
+        if all_data:
+            combined_df = pd.concat(all_data, ignore_index=True)
+            combined_df = combined_df.drop_duplicates(subset=['lat', 'lon'])
+            output_file = DATA_DIR / f"{poi_type}.parquet"
+            combined_df.to_parquet(output_file, index=False)
+            print(f"✓ Saved {len(combined_df)} total {poi_type}s to {output_file.name}\n")
 
 
-def download_metro(bbox=HCM_BBOX, max_retries=10):
-    """Download metro/subway stations with retry until success"""
+def download_metro(bbox_list=HCM_AREAS):
+    """Download metro/subway stations from multiple areas and combine"""
     print("Downloading metro stations...")
 
-    query = f"""
-    [out:json][timeout:60];
-    (
-      node["railway"="station"]["station"="subway"]({bbox});
-      way["railway"="station"]["station"="subway"]({bbox});
-      relation["railway"="station"]["station"="subway"]({bbox});
-    );
-    out center;
-    """
-
-    # Retry loop
-    for attempt in range(1, max_retries + 1):
+    all_data = []
+    for area_idx, bbox in enumerate(bbox_list, 1):
+        print(f"  Area {area_idx}/{len(bbox_list)}: ", end="")
+        query = f"""
+        [out:json][timeout:60];
+        (
+          node["railway"="station"]["station"="subway"]({bbox});
+          way["railway"="station"]["station"="subway"]({bbox});
+          relation["railway"="station"]["station"="subway"]({bbox});
+        );
+        out center;
+        """
         data = query_overpass(query)
-        if data is not None:
+        if data:
             df = extract_pois(data)
-            output_file = DATA_DIR / "metro_stations.parquet"
-            df.to_parquet(output_file, index=False)
-            print(f"  ✓ Saved {len(df)} metro stations to {output_file.name}")
-            return
-        else:
-            print(f"  Attempt {attempt}/{max_retries}: API failed, retrying...")
+            all_data.append(df)
+            print(f"  {len(df)} stations")
 
-        if attempt < max_retries:
-            wait = 5 * (2 ** (attempt - 1))  # Exponential backoff
-            print(f"  Waiting {wait}s before retry...")
-            time.sleep(wait)
-
-    print(f"  ✗ Failed to download metro stations after {max_retries} attempts")
+    if all_data:
+        combined_df = pd.concat(all_data, ignore_index=True)
+        combined_df = combined_df.drop_duplicates(subset=['lat', 'lon'])
+        output_file = DATA_DIR / "metro_stations.parquet"
+        combined_df.to_parquet(output_file, index=False)
+        print(f"✓ Saved {len(combined_df)} total metro stations to {output_file.name}\n")
 
 
 if __name__ == "__main__":
     print(f"Saving POI data to {DATA_DIR}\n")
 
-    # Download for HCM (with auto-retry until success)
+    # Download for HCM (split into 2 areas for better API results)
     print("=== Ho Chi Minh City ===")
-    download_all_pois(bbox=HCM_BBOX)
-    download_metro(bbox=HCM_BBOX)
+    download_all_pois(bbox_list=HCM_AREAS)
+    download_metro(bbox_list=HCM_AREAS)
 
     # Optionally download for HN
     # print("\n=== Ha Noi ===")
-    # download_all_pois(bbox=HN_BBOX)
-    # download_metro(bbox=HN_BBOX)
+    # download_all_pois(bbox_list=HN_AREAS)
+    # download_metro(bbox_list=HN_AREAS)
 
-    print("\n✅ All POI data downloaded successfully!")
+    print("✅ All POI data downloaded successfully!")
