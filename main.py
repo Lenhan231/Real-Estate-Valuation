@@ -97,7 +97,7 @@ def main():
 
     # Stage 1: Load & Clean
     print("[1/5] Loading raw data...")
-    df = pd.read_csv(r"data\raw\alonhadat_details.csv")
+    df = pd.read_csv(r"data\raw\hold.csv")  # Full dataset: 4,642 records
     print(f"      Loaded {len(df)} records")
 
     print("[2/5] Cleaning data...")
