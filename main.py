@@ -83,8 +83,9 @@ def main():
     print("=" * 60 + "\n")
 
     # Stage 1: Load & Clean
+    INPUT_FILE = Path(r"data\raw\alonhadat_details.csv")
     print("[1/5] Loading raw data...")
-    df = pd.read_csv(r"data\raw\alonhadat_details.csv")  # Full dataset: 4,642 records
+    df = pd.read_csv(INPUT_FILE)
     print(f"      Loaded {len(df)} records")
 
     print("[2/5] Cleaning data...")
@@ -106,11 +107,15 @@ def main():
     total_rows_dropped = 0
     n_batches = (len(df) + BATCH_SIZE - 1) // BATCH_SIZE
 
+    # Track processed row indices for checkpoint
+    processed_indices = []
+
     for i in range(n_batches):
         start_idx = i * BATCH_SIZE
         end_idx = min((i + 1) * BATCH_SIZE, len(df))
 
         batch = df.iloc[start_idx:end_idx].copy()
+        batch_indices = list(range(start_idx, end_idx))
 
         batch = add_coordinates(batch)
         batch = distance_to_center(batch)
@@ -127,10 +132,19 @@ def main():
             df_combined = pd.concat(processed_batches, ignore_index=True)
             df_combined.to_csv(OUTPUT_FILE, index=False)
 
+            # Checkpoint: mark these rows as processed
+            processed_indices.extend(batch_indices)
+
         # Progress
         elapsed_batch = time.time() - t1
         batch_pct = (end_idx / len(df)) * 100
         print(f"      [{i+1}/{n_batches}] {batch_pct:.1f}% | Kept: {kept}, Dropped: {dropped} | {elapsed_batch:.1f}s")
+
+    # Remove processed rows from input file (checkpoint)
+    if processed_indices:
+        df_remaining = df.drop(processed_indices, errors='ignore')
+        df_remaining.to_csv(INPUT_FILE, index=False)
+        print(f"\n  ✓ Checkpoint: Removed {len(processed_indices)} processed rows from input")
 
     t2 = time.time()
     batch_time = t2 - t1
