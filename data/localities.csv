@@ -1,5 +1,5 @@
-street,locality,region,lat,lon
-,phường 1,ho chi minh,10.7769,106.7009
+street,locality,region,old_address,lat,lon
+,phường 1,ho chi minh,,10.7769,106.7009
 ,phường 2,ho chi minh,10.7769,106.7109
 ,phường 3,ho chi minh,10.7669,106.7009
 ,phường 4,ho chi minh,10.7669,106.7109

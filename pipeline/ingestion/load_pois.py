@@ -19,28 +19,36 @@ locality_coords = {}
 
 
 def load_locality_coords():
-    """Load locality and street coordinates from CSV file"""
+    """Load locality, street, and address coordinates from CSV file"""
     global locality_coords
     if LOCALITY_FILE.exists():
         try:
             df = pd.read_csv(LOCALITY_FILE)
             for _, row in df.iterrows():
-                # Support both with/without street columns
-                if 'street' in df.columns and pd.notna(row.get('street')):
-                    # Street-level mapping: (street, locality, region) -> (lat, lon)
+                # Check for full address match (highest priority)
+                if 'old_address' in df.columns and pd.notna(row.get('old_address')):
+                    old_address = str(row['old_address']).lower().strip()
+                    key = ('old_address', old_address)
+                    lat = row['lat']
+                    lon = row['lon']
+                    locality_coords[key] = (lat, lon)
+                # Street-level mapping: (street, locality, region) -> (lat, lon)
+                elif 'street' in df.columns and pd.notna(row.get('street')):
                     street = str(row['street']).lower().strip()
                     locality = str(row['locality']).lower().strip()
                     region = str(row.get('region', '')).lower().strip()
                     key = (street, locality, region)
+                    lat = row['lat']
+                    lon = row['lon']
+                    locality_coords[key] = (lat, lon)
                 else:
                     # Locality/region-level mapping: (locality, region) -> (lat, lon)
                     locality = str(row['locality']).lower().strip()
                     region = str(row.get('region', '')).lower().strip()
                     key = (locality, region)
-
-                lat = row['lat']
-                lon = row['lon']
-                locality_coords[key] = (lat, lon)
+                    lat = row['lat']
+                    lon = row['lon']
+                    locality_coords[key] = (lat, lon)
             print(f"  ✓ Loaded {len(locality_coords)} coordinates from CSV")
         except Exception as e:
             print(f"  Warning: Failed to load localities.csv: {e}")
@@ -77,6 +85,30 @@ def save_cache_to_csv():
     print(f"  ✓ Saved {len(geocode_cache)} coordinates to cache")
 
 
+def append_to_localities_csv(street, locality, region, old_address, lat, lon):
+    """Append successfully geocoded address to localities.csv"""
+    try:
+        LOCALITY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        new_row = pd.DataFrame([{
+            'street': street if street else '',
+            'locality': locality,
+            'region': region,
+            'old_address': old_address if old_address else '',
+            'lat': lat,
+            'lon': lon
+        }])
+
+        if LOCALITY_FILE.exists():
+            df = pd.read_csv(LOCALITY_FILE)
+            df = pd.concat([df, new_row], ignore_index=True)
+        else:
+            df = new_row
+
+        df.to_csv(LOCALITY_FILE, index=False)
+    except Exception as e:
+        pass  # Silent fail - don't break geocoding if CSV update fails
+
+
 # Load data on import
 load_locality_coords()
 load_cache_from_csv()
@@ -91,8 +123,8 @@ def get_locality_key(row):
 
 def geocode_with_fallback(row):
     """
-    Geocode using locality CSV, then cache, then Nominatim API.
-    Priority: street CSV > locality CSV > geocode_cache > Nominatim API > region center
+    Geocode with priority: exact address > street > locality > cache > Nominatim > region center.
+    Automatically saves successful Nominatim results to localities.csv.
     """
     old_address = str(row.get("old_address", "")).lower().strip()
     street = str(row.get("street", "")).lower().strip()
@@ -103,7 +135,14 @@ def geocode_with_fallback(row):
     old_address = re.sub(r"\s*\(cũ\)", "", old_address)
     old_address = re.sub(r"\s+", " ", old_address).strip()
 
-    # Try street-level CSV first (highest priority)
+    # Try exact old_address match from localities.csv (highest priority)
+    if old_address:
+        addr_key = ('old_address', old_address)
+        if addr_key in locality_coords:
+            lat, lon = locality_coords[addr_key]
+            return pd.Series([lat, lon, f"Address: {old_address}"])
+
+    # Try street-level CSV
     if street:
         street_key = (street, locality, region)
         if street_key in locality_coords:
@@ -135,9 +174,13 @@ def geocode_with_fallback(row):
             time.sleep(0.3)  # Rate limiting
             location = geolocator.geocode(addr_str, timeout=10)
             if location:
-                result = (location.latitude, location.longitude)
+                lat = location.latitude
+                lon = location.longitude
+                result = (lat, lon)
                 geocode_cache[cache_key] = result
-                return pd.Series([location.latitude, location.longitude, addr_str])
+                # Append successful geocoding to localities.csv for future use
+                append_to_localities_csv(street, locality, region, old_address, lat, lon)
+                return pd.Series([lat, lon, addr_str])
         except Exception:
             pass
 
