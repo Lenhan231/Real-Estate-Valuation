@@ -40,7 +40,7 @@ from pipeline.transformation.feature_pipeline import (
 )
 
 OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
-BATCH_SIZE = 50  # Process 50 records at a time (faster, less output writes)
+BATCH_SIZE = 2  # Process 50 records at a time (faster, less output writes)
 
 FEATURE_COLS = [
     'nearest_school_km', 'school_count_3km',
@@ -154,11 +154,15 @@ def main():
     if all_processed_indices:
         print(f"\n  Checkpoint: Removing {len(all_processed_indices)} rows from input file...")
         print(f"    Original input rows: {len(df)}")
-        df_remaining = df.drop(all_processed_indices, errors='ignore')
+        # Use boolean mask to drop by position (not by label)
+        mask = ~df.index.isin(all_processed_indices)
+        df_remaining = df[mask].reset_index(drop=True)
         print(f"    Remaining rows: {len(df_remaining)}")
         df_remaining.to_csv(INPUT_FILE, index=False)
-        print(f"    ✓ Saved to {INPUT_FILE}")
+        print(f"    ✓ Saved {INPUT_FILE}")
         print(f"  ✓ Checkpoint complete: {len(all_processed_indices)} rows removed")
+    else:
+        print(f"\n  Checkpoint: No rows to remove (all_processed_indices is empty)")
 
     t2 = time.time()
     batch_time = t2 - t1
