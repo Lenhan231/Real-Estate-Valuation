@@ -59,6 +59,14 @@ def process_batch(batch_df):
     """
     batch_df = batch_df.copy()
 
+    # Drop rows with missing coordinates BEFORE computing features
+    batch_df_before = len(batch_df)
+    batch_df = batch_df.dropna(subset=['lat', 'lon'], how='any')
+    rows_dropped = batch_df_before - len(batch_df)
+
+    if len(batch_df) == 0:
+        return batch_df, 0, rows_dropped
+
     # Add POI features from parquet files using BallTree
     batch_df = get_additional_features(batch_df)
 
@@ -66,11 +74,6 @@ def process_batch(batch_df):
     for col in FEATURE_COLS:
         if 'count' in col:
             batch_df[col] = batch_df[col].fillna(0)
-
-    # Keep rows that have at least some valid coordinates
-    batch_df_before = len(batch_df)
-    batch_df = batch_df.dropna(subset=['lat', 'lon'], how='any')
-    rows_dropped = batch_df_before - len(batch_df)
 
     return batch_df, len(batch_df), rows_dropped
 
