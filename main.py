@@ -165,27 +165,6 @@ def main():
     print(f"      ✓ Features extracted in {batch_time:.2f}s\n")
 
     print("[5/5] Finalizing...")
-    if processed_batches:
-        df_final = pd.concat(processed_batches, ignore_index=True)
-
-        # Keep all columns
-        print(f"      Output columns: {list(df_final.columns)}")
-        df_final.to_csv(OUTPUT_FILE, index=False)
-        final_count = len(df_final)
-        print(f"      ✓ Saved {final_count} records to {OUTPUT_FILE}\n")
-    else:
-        print(f"      ⚠ No records with features saved\n")
-        final_count = 0
-
-    # Summary
-    elapsed = time.time() - t0
-    print("=" * 60)
-    print(f"✅ Pipeline complete in {elapsed:.2f}s")
-    if final_count > 0:
-        features_count = len(df_final.columns)
-        print(f"   Records:  {final_count} rows (dropped {total_rows_dropped})")
-        print(f"   Features: {features_count} columns")
-    print("=" * 60)
 
 
 if __name__ == "__main__":
