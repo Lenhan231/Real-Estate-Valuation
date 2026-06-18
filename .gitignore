@@ -15,3 +15,8 @@ __pycache__/
 .claude/
 .claude/
 
+# Modeling experiment outputs
+wandb/
+models/
+data/processed/model_results.csv
+data/processed/real_estate_cleaned.csv
