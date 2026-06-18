@@ -158,15 +158,33 @@ def main():
     parser = argparse.ArgumentParser(description="Train XGBoost model for house price prediction")
     parser.add_argument(
         "--dataset",
-        choices=["optA", "optB"],
-        default="optB",
-        help="Which cleaned dataset to use (default: optB)",
+        default="cleaned",
+        help="Which cleaned dataset to use. Used for naming output files.",
+    )
+    parser.add_argument(
+        "--csv_path",
+        type=str,
+        default=None,
+        help="Direct path to the csv file. If provided, overrides the default data dir path based on --dataset.",
     )
     args = parser.parse_args()
 
     # Resolve file paths
     dataset_label = args.dataset
-    csv_path = DATA_DIR / f"alonhadat_features_cleaned_{dataset_label}.csv"
+    if args.csv_path:
+        csv_path = Path(args.csv_path)
+    elif Path(dataset_label).is_file():
+        csv_path = Path(dataset_label)
+        dataset_label = csv_path.stem
+    else:
+        if dataset_label == "cleaned":
+            csv_path = DATA_DIR / "alonhadat_features_cleaned.csv"
+        else:
+            csv_path = DATA_DIR / f"alonhadat_features_cleaned_{dataset_label}.csv"
+        
+        if not csv_path.exists():
+            raise FileNotFoundError(f"Cleaned dataset not found at {csv_path}. Please run clean_features.py first.")
+        
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     model_path = MODEL_DIR / f"xgboost_{dataset_label}.json"
 
