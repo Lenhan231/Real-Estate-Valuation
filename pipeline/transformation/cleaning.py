@@ -203,11 +203,4 @@ def final_clean(df: pd.DataFrame) -> pd.DataFrame:
     pass
 
 if __name__ == "__main__":
-    # Load raw data
-    df = pd.read_csv("data/raw/alonhadat_details.csv")
-   
-    # Clean data
-    df_cleaned = clean_data(df)
-
-    # Save cleaned data
-    df_cleaned.to_csv("data/processed/alonhadat_cleaned.csv", index=False)
+    pass
