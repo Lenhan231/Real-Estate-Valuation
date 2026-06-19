@@ -38,9 +38,15 @@ from pipeline.ingestion.load_pois import (
 from pipeline.transformation.feature_pipeline import (
     get_additional_features
 )
-
+from scaper.Alonhadat.scheduling import crawl_list_pages
+from scaper.Alonhadat.link_to_details import link_to_detail
 OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
+DETAILS_FILE = Path(r"data\raw\alonhadat_details.csv")
+LISTINGS_FILE = Path(r"data\raw\alonhadat_listings.csv")
+CLEAN_FILE = Path(r"data\processed\alonhadat_cleaned.csv")
+
 BATCH_SIZE = 2  # Process 2 records at a time (shows checkpoint clearly)
+
 
 FEATURE_COLS = [
     'nearest_school_km', 'school_count_3km',
@@ -86,9 +92,11 @@ def main():
     print("=" * 60 + "\n")
 
     # Stage 1: Load & Clean
-    INPUT_FILE = Path(r"data\raw\alonhadat_details.csv")
+    
     print("[1/5] Loading raw data...")
-    df = pd.read_csv(INPUT_FILE)
+    crawl_list_pages()
+    link_to_detail()
+    df = pd.read_csv(DETAILS_FILE)
     print(f"      Loaded {len(df)} records")
 
     print("[2/5] Cleaning data...")
@@ -150,7 +158,7 @@ def main():
         # Checkpoint: Write remaining rows to input file after each batch
         mask = ~df.index.isin(all_processed_indices)
         df_remaining = df[mask].reset_index(drop=True)
-        df_remaining.to_csv(INPUT_FILE, index=False)
+        df_remaining.to_csv(CLEAN_FILE, index=False)
         print(f"      [CHECKPOINT] Batch {i+1}: Removed {len(all_processed_indices)} rows, {len(df_remaining)} remain in input")
 
         # Progress
