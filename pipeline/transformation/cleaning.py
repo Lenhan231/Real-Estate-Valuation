@@ -1,6 +1,7 @@
 import re
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 BINARY_COLS_VI = [
     "Phòng ăn",
@@ -189,7 +190,14 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     cols_to_keep = KEEP_COLS + [col + "_bin" for col in BINARY_COLS_EN]
     cols_to_keep = [c for c in cols_to_keep if c in df.columns]
 
-    return df[cols_to_keep].copy()
+    output_file = "data/processed/alonhadat_cleaned.csv"
+
+    df[cols_to_keep].copy().to_csv(
+        output_file,
+        mode="a",
+        index=False,
+        header=not Path(output_file).exists()
+    )
 
 def final_clean(df: pd.DataFrame) -> pd.DataFrame:
     pass
