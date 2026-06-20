@@ -94,8 +94,8 @@ def main():
     # Stage 1: Load & Clean
     
     print("[1/5] Loading raw data...")
-    # crawl_list_pages()
-    # link_to_detail()
+    crawl_list_pages()
+    link_to_detail()
     df = pd.read_csv(DETAILS_FILE)
     print(f"      Loaded {len(df)} records")
 
