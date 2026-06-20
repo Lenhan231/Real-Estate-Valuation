@@ -194,13 +194,6 @@ def main():
 
     print("[5/5] Finalizing...")
 
-    t_total = time.time() - t0
-    print(f"\n✅ Pipeline completed in {t_total:.2f}s")
-
-    if OUTPUT_FILE.exists():
-        rows = len(pd.read_csv(OUTPUT_FILE))
-        print(f"📊 Output: {rows} records in {OUTPUT_FILE}")
-
 
 if __name__ == "__main__":
     try:
