@@ -22,7 +22,7 @@ TYPES = [
 ]
 
 START_PAGE = 1
-END_PAGE = START_PAGE 
+END_PAGE = START_PAGE + 50
 
 
 def build_list_page(region_slug: str, type_slug: str) -> str:
