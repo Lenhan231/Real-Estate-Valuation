@@ -24,6 +24,7 @@ Cache: data/localities.csv (auto-updated with features)
 import pandas as pd
 import time
 from pathlib import Path
+import os
 
 
 from pipeline.transformation.cleaning import clean_data, final_clean
@@ -86,16 +87,25 @@ def process_batch(batch_df):
 
 def main():
     t0 = time.time()
+    is_ci = os.getenv("GITHUB_ACTIONS") == "true"
 
     print("=" * 60)
     print("HOUSE PRICE PREDICTION - ETL PIPELINE")
+    if is_ci:
+        print("(Running in GitHub Actions)")
     print("=" * 60 + "\n")
 
     # Stage 1: Load & Clean
-    
+
     print("[1/5] Loading raw data...")
-    crawl_list_pages()
-    link_to_detail()
+    if is_ci:
+        print("      ⚠ Skipping web scraping in CI (using existing data)")
+    else:
+        try:
+            crawl_list_pages()
+            link_to_detail()
+        except Exception as e:
+            print(f"      ⚠ Web scraping failed (using existing data): {e}")
     df = pd.read_csv(DETAILS_FILE)
     print(f"      Loaded {len(df)} records")
 
@@ -184,6 +194,19 @@ def main():
 
     print("[5/5] Finalizing...")
 
+    t_total = time.time() - t0
+    print(f"\n✅ Pipeline completed in {t_total:.2f}s")
+
+    if OUTPUT_FILE.exists():
+        rows = len(pd.read_csv(OUTPUT_FILE))
+        print(f"📊 Output: {rows} records in {OUTPUT_FILE}")
+
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"\n❌ Pipeline failed: {e}")
+        import traceback
+        traceback.print_exc()
+        exit(1)
