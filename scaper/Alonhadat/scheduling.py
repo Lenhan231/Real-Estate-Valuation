@@ -21,7 +21,7 @@ TYPES = [
     "can-ban-nha-trong-hem",
 ]
 
-START_PAGE = 55
+START_PAGE = 14
 END_PAGE = START_PAGE + 25
 
 

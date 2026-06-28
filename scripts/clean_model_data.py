@@ -14,7 +14,13 @@ if str(SCRIPTS_DIR) not in sys.path:
 from model_cleaning import clean_for_modeling
 
 DEFAULT_INPUT = ROOT / "data" / "processed" / "alonhadat_features.csv"
-DEFAULT_OUTPUT = ROOT / "data" / "processed" / "real_estate_cleaned.csv"
+DEFAULT_OUTPUT = ROOT / "data" / "processed" / "real_estate_cleaned_2.csv"
+
+
+def configure_console_encoding() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,6 +31,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    configure_console_encoding()
+
     args = parse_args()
     input_path = args.input if args.input.is_absolute() else ROOT / args.input
     output_path = args.output if args.output.is_absolute() else ROOT / args.output

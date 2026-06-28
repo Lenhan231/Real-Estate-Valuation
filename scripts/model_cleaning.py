@@ -2,17 +2,12 @@ from __future__ import annotations
 
 import pandas as pd
 
-MODEL_DROP_COLS = ["link", "listing_id", "matched_address", "old_address"]
+MODEL_DROP_COLS = ["region", "locality", "street", "title","link", "listing_id", "matched_address", "old_address", "direction", "owner_listing_bin", "legal_status", "listing_type", "post_day"]
 
 MODEL_TEXT_COLS = [
-    "title",
-    "street",
-    "locality",
-    "region",
-    "direction",
-    "listing_type",
+    #"listing_type",
     "property_type",
-    "legal_status",
+    #"legal_status",
 ]
 
 MODEL_NUMERIC_COLS = [
@@ -27,7 +22,7 @@ MODEL_NUMERIC_COLS = [
     "kitchen_bin",
     "terrace_bin",
     "car_parking_bin",
-    "owner_listing_bin",
+    #"owner_listing_bin",
     "locality_square",
     "locality_population_density",
     "lat",
@@ -57,14 +52,14 @@ REGION_REPLACEMENTS = {
     "tphcm": "hồ chí minh",
 }
 
-DISTANCE_FILL_VALUES = {
-    "nearest_metro_km": 5,
-    "nearest_mall_km": 3,
-    "nearest_supermarket_km": 3,
-    "nearest_marketplace_km": 3,
-    "nearest_hospital_km": 5,
-    "nearest_bus_stop_km": 1,
-}
+#DISTANCE_FILL_VALUES = {
+#    "nearest_metro_km": 5,
+#    "nearest_mall_km": 3,
+#    "nearest_supermarket_km": 3,
+#    "nearest_marketplace_km": 3,
+#    "nearest_hospital_km": 5,
+#    "nearest_bus_stop_km": 1,
+#}
 
 MEDIAN_IMPUTE_COLS = [
     "length_m",
@@ -72,7 +67,18 @@ MEDIAN_IMPUTE_COLS = [
     "num_bedrooms",
     "num_floors",
     "road_width_m",
+    "nearest_metro_km",
+    "nearest_mall_km",
+    "nearest_supermarket_km",
+    "nearest_marketplace_km",
+    "nearest_hospital_km",
+    "nearest_bus_stop_km",
 ]
+
+PROPERTY_TYPE_ENCODING = {
+    "nha_trong_hem": 0,
+    "nha_mat_tien": 1,
+}
 
 
 def clean_for_modeling(df: pd.DataFrame) -> pd.DataFrame:
@@ -100,6 +106,12 @@ def clean_for_modeling(df: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             df[col] = df[col].replace(REGION_REPLACEMENTS)
 
+    if "property_type" in df.columns:
+        unknown_property_types = sorted(set(df["property_type"].dropna()) - set(PROPERTY_TYPE_ENCODING))
+        if unknown_property_types:
+            raise ValueError(f"Unknown property_type value(s): {unknown_property_types}")
+        df["property_type"] = df["property_type"].map(PROPERTY_TYPE_ENCODING).astype("Int64")
+
     for col in MODEL_NUMERIC_COLS:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -123,9 +135,9 @@ def clean_for_modeling(df: pd.DataFrame) -> pd.DataFrame:
     if dedupe_cols:
         df = df.drop_duplicates(subset=dedupe_cols, keep="first")
 
-    fill_values = {col: value for col, value in DISTANCE_FILL_VALUES.items() if col in df.columns}
-    if fill_values:
-        df = df.fillna(fill_values)
+    #fill_values = {col: value for col, value in DISTANCE_FILL_VALUES.items() if col in df.columns}
+    #if fill_values:
+    #    df = df.fillna(fill_values)
 
     for col in MEDIAN_IMPUTE_COLS:
         if col in df.columns:

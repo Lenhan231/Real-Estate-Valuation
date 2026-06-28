@@ -3,4 +3,5 @@ numpy
 scikit-learn
 xgboost
 joblib
+matplotlib
 wandb
