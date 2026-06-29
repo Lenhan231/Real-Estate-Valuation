@@ -15,7 +15,7 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer, TransformedTargetRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error, r2_score
-from sklearn.model_selection import KFold, train_test_split
+from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -116,6 +116,11 @@ def parse_args(default_models: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=1,
         help="Number of K-fold validation folds. Use 1 to skip cross-validation.",
+    )
+    parser.add_argument(
+        "--separate-property-models",
+        action="store_true",
+        help="Also train/evaluate separate models for each property_type value.",
     )
     parser.add_argument(
         "--no-save-models",
@@ -266,6 +271,21 @@ def score_predictions(y_true: pd.Series, predictions: np.ndarray) -> dict[str, f
     }
 
 
+def get_property_type_strata(x: pd.DataFrame) -> pd.Series | None:
+    if "property_type" not in x.columns:
+        return None
+
+    strata = x["property_type"]
+    if strata.isna().any() or strata.nunique(dropna=True) < 2:
+        return None
+
+    counts = strata.value_counts(dropna=False)
+    if counts.min() < 2:
+        return None
+
+    return strata
+
+
 def get_preprocessed_feature_sources(preprocessor: ColumnTransformer) -> list[str]:
     feature_sources: list[str] = []
 
@@ -296,6 +316,7 @@ def extract_feature_importance(
     fitted_model: TransformedTargetRegressor,
     target: str,
     model_name: str,
+    training_scope: str,
 ) -> list[dict[str, float | int | str]]:
     pipeline = fitted_model.regressor_
     preprocessor = pipeline.named_steps["preprocess"]
@@ -342,9 +363,11 @@ def extract_feature_importance(
     )
     grouped["target"] = target
     grouped["model"] = model_name
+    grouped["training_scope"] = training_scope
     grouped["importance_type"] = importance_type
 
     columns = [
+        "training_scope",
         "target",
         "model",
         "rank",
@@ -386,7 +409,16 @@ def plot_feature_importance(
         "xgboost": "#54A24B",
     }
 
-    for (target, model_name), group in feature_importance_df.groupby(["target", "model"], sort=True):
+    group_cols = ["target", "model"]
+    if "training_scope" in feature_importance_df.columns:
+        group_cols = ["training_scope", *group_cols]
+
+    for group_key, group in feature_importance_df.groupby(group_cols, sort=True):
+        if len(group_cols) == 3:
+            training_scope, target, model_name = group_key
+        else:
+            target, model_name = group_key
+            training_scope = "global"
         top_features = group.nsmallest(top_n, "rank").sort_values("importance_normalized", ascending=True)
         if top_features.empty:
             continue
@@ -400,7 +432,8 @@ def plot_feature_importance(
         ax.barh(labels, values, color=color, alpha=0.88)
         ax.set_xlabel("Normalized importance (%)")
         ax.set_ylabel("")
-        ax.set_title(f"Top {len(top_features)} features for {target} - {model_name}")
+        title_scope = f"{training_scope} - " if training_scope != "global" else ""
+        ax.set_title(f"Top {len(top_features)} features for {title_scope}{target} - {model_name}")
         ax.grid(axis="x", linestyle="--", alpha=0.28)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
@@ -418,7 +451,10 @@ def plot_feature_importance(
         ax.set_xlim(0, max_value * 1.16 if max_value > 0 else 1)
         fig.tight_layout()
 
-        filename = f"{slugify(str(target))}_{slugify(str(model_name))}_top_{len(top_features)}_feature_importance.png"
+        filename = (
+            f"{slugify(str(training_scope))}_{slugify(str(target))}_{slugify(str(model_name))}"
+            f"_top_{len(top_features)}_feature_importance.png"
+        )
         plot_path = plot_dir / filename
         fig.savefig(plot_path, dpi=160, bbox_inches="tight")
         plt.close(fig)
@@ -430,6 +466,7 @@ def plot_feature_importance(
 def train_one_target(
     df: pd.DataFrame,
     target: str,
+    training_scope: str,
     model_names: list[str] | None,
     model_dir: Path,
     save_models: bool,
@@ -438,11 +475,13 @@ def train_one_target(
     cv_folds: int,
 ) -> tuple[list[dict[str, float | int | str]], list[dict[str, float | int | str]]]:
     x, y = make_feature_target(df, target)
+    strata = get_property_type_strata(x)
     x_train, x_test, y_train, y_test = train_test_split(
         x,
         y,
         test_size=test_size,
         random_state=random_state,
+        stratify=strata,
     )
 
     results: list[dict[str, float | int | str]] = []
@@ -452,9 +491,10 @@ def train_one_target(
         model = build_training_model(x_train, estimator)
         model.fit(x_train, y_train)
         holdout_scores = score_predictions(y_test, model.predict(x_test))
-        cv_scores = cross_validate_model(x, y, model_name, random_state, cv_folds)
+        cv_scores = cross_validate_model(x, y, model_name, random_state, cv_folds, strata)
 
         result = {
+            "training_scope": training_scope,
             "target": target,
             "model": model_name,
             "mape_percent": holdout_scores["mape_percent"],
@@ -468,10 +508,11 @@ def train_one_target(
         results.append(result)
 
         if save_models:
-            model_path = model_dir / f"{target}_{model_name}.joblib"
+            model_prefix = "" if training_scope == "global" else f"{training_scope}_"
+            model_path = model_dir / f"{model_prefix}{target}_{model_name}.joblib"
             joblib.dump(model, model_path)
 
-        feature_importances.extend(extract_feature_importance(model, target, model_name))
+        feature_importances.extend(extract_feature_importance(model, target, model_name, training_scope))
 
     return results, feature_importances
 
@@ -482,6 +523,7 @@ def cross_validate_model(
     model_name: str,
     random_state: int,
     cv_folds: int,
+    strata: pd.Series | None,
 ) -> dict[str, float | int | str]:
     if cv_folds <= 1:
         return {"cv_folds": 1}
@@ -489,9 +531,16 @@ def cross_validate_model(
         raise ValueError(f"--cv-folds must be <= row count ({len(x)}). Got {cv_folds}.")
 
     fold_scores: list[dict[str, float]] = []
-    splitter = KFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+    if strata is not None and strata.value_counts(dropna=False).min() >= cv_folds:
+        splitter = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+        split_iterator = splitter.split(x, strata)
+        split_strategy = "property_type_stratified"
+    else:
+        splitter = KFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+        split_iterator = splitter.split(x)
+        split_strategy = "kfold"
 
-    for train_index, test_index in splitter.split(x):
+    for train_index, test_index in split_iterator:
         x_train = x.iloc[train_index]
         x_test = x.iloc[test_index]
         y_train = y.iloc[train_index]
@@ -503,6 +552,7 @@ def cross_validate_model(
 
     return {
         "cv_folds": cv_folds,
+        "cv_split_strategy": split_strategy,
         "cv_mape_percent_mean": float(np.mean([score["mape_percent"] for score in fold_scores])),
         "cv_mape_percent_std": float(np.std([score["mape_percent"] for score in fold_scores], ddof=1)),
         "cv_mae_mean": float(np.mean([score["mae"] for score in fold_scores])),
@@ -510,6 +560,29 @@ def cross_validate_model(
         "cv_r2_mean": float(np.mean([score["r2"] for score in fold_scores])),
         "cv_r2_std": float(np.std([score["r2"] for score in fold_scores], ddof=1)),
     }
+
+
+def build_training_scopes(
+    df: pd.DataFrame,
+    separate_property_models: bool,
+) -> list[tuple[str, pd.DataFrame]]:
+    scopes = [("global", df)]
+    if not separate_property_models:
+        return scopes
+
+    if "property_type" not in df.columns:
+        raise ValueError("--separate-property-models requires a property_type column.")
+
+    property_types = sorted(df["property_type"].dropna().unique().tolist())
+    if not property_types:
+        raise ValueError("--separate-property-models found no property_type values.")
+
+    for property_type in property_types:
+        scope = f"property_type_{property_type:g}"
+        subset = df[df["property_type"] == property_type].reset_index(drop=True)
+        scopes.append((scope, subset))
+
+    return scopes
 
 
 def log_to_wandb(
@@ -543,6 +616,7 @@ def log_to_wandb(
             "test_size": args.test_size,
             "random_state": args.random_state,
             "cv_folds": args.cv_folds,
+            "separate_property_models": args.separate_property_models,
             "targets": TARGETS,
             "models": list(build_models(args.random_state, args.models).keys()),
             "row_count": row_count,
@@ -558,7 +632,7 @@ def log_to_wandb(
         wandb.log({f"feature_importance_plots/{plot_path.stem}": wandb.Image(str(plot_path))})
 
     for _, row in results_df.iterrows():
-        prefix = f"{row['target']}/{row['model']}"
+        prefix = f"{row.get('training_scope', 'global')}/{row['target']}/{row['model']}"
         wandb.log(
             {
                 f"{prefix}/mape_percent": row["mape_percent"],
@@ -581,6 +655,7 @@ def log_to_wandb(
     best_by_target = results_df.loc[results_df.groupby("target")["mape_percent"].idxmin()]
     for _, row in best_by_target.iterrows():
         wandb.summary[f"best_{row['target']}_model"] = row["model"]
+        wandb.summary[f"best_{row['target']}_training_scope"] = row.get("training_scope", "global")
         wandb.summary[f"best_{row['target']}_mape_percent"] = row["mape_percent"]
 
     results_artifact = wandb.Artifact("model-results", type="results")
@@ -617,27 +692,30 @@ def main(default_models: list[str] | None = None) -> None:
 
     all_results: list[dict[str, float | int | str]] = []
     all_feature_importances: list[dict[str, float | int | str]] = []
-    for target in TARGETS:
-        target_results, target_feature_importances = train_one_target(
-            df=df,
-            target=target,
-            model_names=args.models,
-            model_dir=model_dir,
-            save_models=not args.no_save_models,
-            test_size=args.test_size,
-            random_state=args.random_state,
-            cv_folds=args.cv_folds,
-        )
-        all_results.extend(target_results)
-        all_feature_importances.extend(target_feature_importances)
+    training_scopes = build_training_scopes(df, args.separate_property_models)
+    for training_scope, scope_df in training_scopes:
+        for target in TARGETS:
+            target_results, target_feature_importances = train_one_target(
+                df=scope_df,
+                target=target,
+                training_scope=training_scope,
+                model_names=args.models,
+                model_dir=model_dir,
+                save_models=not args.no_save_models,
+                test_size=args.test_size,
+                random_state=args.random_state,
+                cv_folds=args.cv_folds,
+            )
+            all_results.extend(target_results)
+            all_feature_importances.extend(target_feature_importances)
 
-    results_df = pd.DataFrame(all_results).sort_values(["target", "mape_percent"])
+    results_df = pd.DataFrame(all_results).sort_values(["target", "training_scope", "mape_percent"])
     results_path.parent.mkdir(parents=True, exist_ok=True)
     results_df.to_csv(results_path, index=False)
 
     feature_importance_df = pd.DataFrame(all_feature_importances)
     if not feature_importance_df.empty:
-        feature_importance_df = feature_importance_df.sort_values(["target", "model", "rank"])
+        feature_importance_df = feature_importance_df.sort_values(["training_scope", "target", "model", "rank"])
     importance_path.parent.mkdir(parents=True, exist_ok=True)
     feature_importance_df.to_csv(importance_path, index=False)
     importance_plot_paths: list[Path] = []
@@ -662,6 +740,10 @@ def main(default_models: list[str] | None = None) -> None:
 
     print(f"Input: {input_path}")
     print(f"Rows used: {len(df)}")
+    if args.separate_property_models:
+        print("Training scopes:")
+        for training_scope, scope_df in training_scopes:
+            print(f"  {training_scope}: {len(scope_df)} rows")
     print(f"Results: {results_path}")
     print(f"Feature importance: {importance_path}")
     if importance_plot_paths:
@@ -690,7 +772,7 @@ def main(default_models: list[str] | None = None) -> None:
     print()
     print("Best model by target:")
     print(
-        best_by_target[["target", "model", "mape_percent"]].to_string(
+        best_by_target[["target", "training_scope", "model", "mape_percent"]].to_string(
             index=False,
             formatters={"mape_percent": "{:.2f}".format},
         )
@@ -704,6 +786,7 @@ def main(default_models: list[str] | None = None) -> None:
             top_features[
                 [
                     "target",
+                    "training_scope",
                     "model",
                     "rank",
                     "source_feature",

@@ -13,9 +13,12 @@ def build_model(random_state: int | None = None) -> object:
         ) from exc
 
     return CatBoostRegressor(
-        iterations=700,
-        learning_rate=0.03,
+        iterations=1000,
+        learning_rate=0.025,
         depth=6,
+        l2_leaf_reg=5,
+        bagging_temperature=0.5,
+        random_strength=1,
         loss_function="RMSE",
         random_seed=random_state,
         verbose=False,

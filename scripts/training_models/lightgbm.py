@@ -13,12 +13,14 @@ def build_model(random_state: int | None = None) -> object:
         ) from exc
 
     return LGBMRegressor(
-        n_estimators=700,
-        learning_rate=0.03,
+        n_estimators=1000,
+        learning_rate=0.02,
         num_leaves=31,
-        min_child_samples=20,
-        subsample=0.9,
-        colsample_bytree=0.9,
+        min_child_samples=30,
+        subsample=0.85,
+        colsample_bytree=0.85,
+        reg_alpha=0.1,
+        reg_lambda=3.0,
         random_state=random_state,
         n_jobs=-1,
         verbose=-1,

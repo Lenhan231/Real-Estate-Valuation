@@ -7,11 +7,14 @@ MODEL_NAME = "xgboost"
 
 def build_model(random_state: int | None = None) -> XGBRegressor:
     return XGBRegressor(
-        n_estimators=500,
-        learning_rate=0.05,
+        n_estimators=800,
+        learning_rate=0.03,
         max_depth=4,
-        subsample=0.9,
-        colsample_bytree=0.9,
+        min_child_weight=5,
+        subsample=0.85,
+        colsample_bytree=0.85,
+        reg_alpha=0.1,
+        reg_lambda=5.0,
         objective="reg:squarederror",
         random_state=random_state,
         n_jobs=-1,

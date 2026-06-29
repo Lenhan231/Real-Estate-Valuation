@@ -61,6 +61,13 @@ MODEL_NUMERIC_COLS = [
     "post_weekday",
     "post_is_weekend",
     "post_age_days",
+    "property_type_area_m2",
+    "property_type_road_width_m",
+    "property_type_width_m",
+    "property_type_length_m",
+    "property_type_num_floors",
+    "property_type_distance_to_center_km",
+    "property_type_locality_population_density",
 ]
 
 REGION_REPLACEMENTS = {
@@ -99,9 +106,75 @@ PROPERTY_TYPE_ENCODING = {
     "nha_trong_hem": 0,
     "nha_mat_tien": 1,
 }
+PROPERTY_TYPE_LABELS = {
+    0: "nha_trong_hem",
+    1: "nha_mat_tien",
+}
+IQR_OUTLIER_COL = "price_per_m2"
+IQR_MULTIPLIER = 1.5
+
+PROPERTY_TYPE_INTERACTION_COLS = [
+    "area_m2",
+    "road_width_m",
+    "width_m",
+    "length_m",
+    "num_floors",
+    "distance_to_center_km",
+    "locality_population_density",
+]
 
 
-def clean_for_modeling(df: pd.DataFrame) -> pd.DataFrame:
+def build_iqr_filter_report(df: pd.DataFrame) -> tuple[pd.Series, list[dict[str, float | int | str]]]:
+    keep_mask = pd.Series(True, index=df.index)
+    report: list[dict[str, float | int | str]] = []
+
+    if "property_type" not in df.columns or IQR_OUTLIER_COL not in df.columns:
+        return keep_mask, report
+
+    for property_type, group in df.groupby("property_type", dropna=False):
+        values = group[IQR_OUTLIER_COL].dropna()
+        rows_before = len(group)
+        if values.empty:
+            report.append(
+                {
+                    "property_type": property_type,
+                    "property_type_label": PROPERTY_TYPE_LABELS.get(property_type, str(property_type)),
+                    "rows_before": rows_before,
+                    "rows_removed": 0,
+                    "rows_after": rows_before,
+                    "lower_bound": float("nan"),
+                    "upper_bound": float("nan"),
+                }
+            )
+            continue
+
+        q1 = values.quantile(0.25)
+        q3 = values.quantile(0.75)
+        iqr = q3 - q1
+        lower_bound = q1 - IQR_MULTIPLIER * iqr
+        upper_bound = q3 + IQR_MULTIPLIER * iqr
+        group_keep_mask = group[IQR_OUTLIER_COL].between(lower_bound, upper_bound)
+        keep_mask.loc[group.index] = group_keep_mask
+        rows_removed = int((~group_keep_mask).sum())
+
+        report.append(
+            {
+                "property_type": property_type,
+                "property_type_label": PROPERTY_TYPE_LABELS.get(property_type, str(property_type)),
+                "rows_before": rows_before,
+                "rows_removed": rows_removed,
+                "rows_after": rows_before - rows_removed,
+                "lower_bound": float(lower_bound),
+                "upper_bound": float(upper_bound),
+            }
+        )
+
+    return keep_mask, report
+
+
+def clean_for_modeling_with_report(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, list[dict[str, float | int | str]]]:
     """Clean the engineered feature dataset for modeling.
 
     This is intentionally separate from pipeline/transformation/cleaning.py,
@@ -160,6 +233,11 @@ def clean_for_modeling(df: pd.DataFrame) -> pd.DataFrame:
         upper = df["price_per_m2"].quantile(0.99)
         df = df[df["price_per_m2"].between(lower, upper)]
 
+    iqr_report: list[dict[str, float | int | str]] = []
+    if {"property_type", IQR_OUTLIER_COL}.issubset(df.columns):
+        iqr_keep_mask, iqr_report = build_iqr_filter_report(df)
+        df = df[iqr_keep_mask]
+
     dedupe_cols = ["title", "street", "locality", "price_vnd", "area_m2"]
     dedupe_cols = [col for col in dedupe_cols if col in df.columns]
     if dedupe_cols:
@@ -173,6 +251,16 @@ def clean_for_modeling(df: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             df[col] = df[col].fillna(df[col].median())
 
+    if "property_type" in df.columns:
+        for col in PROPERTY_TYPE_INTERACTION_COLS:
+            if col in df.columns:
+                df[f"property_type_{col}"] = df["property_type"].astype(float) * df[col]
+
     df = df.dropna(axis=1, how="all")
 
-    return df.reset_index(drop=True)
+    return df.reset_index(drop=True), iqr_report
+
+
+def clean_for_modeling(df: pd.DataFrame) -> pd.DataFrame:
+    cleaned, _ = clean_for_modeling_with_report(df)
+    return cleaned

@@ -10,6 +10,8 @@ This note summarizes the modeling/training refactor and current context so anoth
   - Builds preprocessing.
   - Applies `log1p` target transform with `TransformedTargetRegressor`.
   - Trains selected registered models.
+  - Uses property-type stratified train/test and CV splits when `property_type` is available.
+  - Supports `--separate-property-models` to append specialist evaluations for each property type.
   - Writes metrics, feature importance, plots, saved models, and optional W&B logs.
 - Individual model definitions live in `scripts/training_models/`.
 - Shortcut launchers exist for single-model training:
@@ -35,7 +37,7 @@ Registered in `scripts/training_models/registry.py`:
 - `catboost`
 - `ensemble`
 
-The current `ensemble` is a `VotingRegressor` over CatBoost and XGBoost.
+The current `ensemble` is a `VotingRegressor` over LightGBM, CatBoost, and XGBoost.
 
 To add a model:
 
@@ -60,13 +62,27 @@ Do not edit `train_regression_models.py` for normal model additions. Edit it onl
   - `post_age_days`
 - Does not add `post_year` because the user considered same-year signal less useful.
 - Adds `nearest_school_km` to median imputation.
+- Drops price-per-m2 outliers with a per-property-type IQR filter.
+- Adds property-type interaction features because `nha_mat_tien` and `nha_trong_hem` have very different price distributions:
+  - `property_type_area_m2`
+  - `property_type_road_width_m`
+  - `property_type_width_m`
+  - `property_type_length_m`
+  - `property_type_num_floors`
+  - `property_type_distance_to_center_km`
+  - `property_type_locality_population_density`
 
 After latest cleaning, the modeling file had:
 
 - Raw rows: `3780`
-- Cleaned rows: `3402`
-- Cleaned columns: `37`
+- Cleaned rows: `3295`
+- Cleaned columns: `44`
 - Missing values: `0`
+
+Latest IQR filtering report:
+
+- `property_type=0` (`nha_trong_hem`): `1792 -> 1751`, removed `41`.
+- `property_type=1` (`nha_mat_tien`): `1912 -> 1836`, removed `76`.
 
 Default cleaned input:
 
@@ -118,10 +134,16 @@ Train and log W&B:
 .venv/bin/python scripts/train_regression_models.py --cv-folds 5 --wandb
 ```
 
+Compare global models against property-type specialist models:
+
+```bash
+.venv/bin/python scripts/train_regression_models.py --models lightgbm catboost ensemble --cv-folds 5 --separate-property-models --wandb
+```
+
 Using the runner with W&B:
 
 ```bash
-.venv/bin/python scripts/run_training.py --models catboost lightgbm ensemble -- --cv-folds 5 --wandb
+.venv/bin/python scripts/run_training.py --models catboost lightgbm ensemble -- --cv-folds 5 --separate-property-models --wandb
 ```
 
 ## Dependency Notes
@@ -145,7 +167,7 @@ Then rerun training from `.venv/bin/python`.
 
 ## Current Results Snapshot
 
-From `data/processed/model_results.csv` with 5-fold validation:
+The current `data/processed/model_results.csv` may be from the latest smoke test. The last full 5-fold global run showed:
 
 ### `price_per_m2`
 
@@ -171,6 +193,17 @@ Current practical ranking:
 6. `linear_regression`
 
 `linear_regression` is only a baseline. It is unstable for `price_vnd`, including negative R2 and explosive CV metrics.
+
+## Latest Tuning Changes
+
+- Tuned LightGBM defaults toward lower learning rate, more trees, subsampling, and regularization.
+- Tuned CatBoost defaults toward more iterations, lower learning rate, stronger L2 regularization, and bagging.
+- Tuned XGBoost defaults toward more trees, lower learning rate, stronger regularization, and conservative child weight.
+- Updated `ensemble` to combine LightGBM, CatBoost, and XGBoost with weights `[2, 2, 1]`.
+- Added property-type stratification for holdout and K-fold validation.
+- Added property-type interaction features. In a CatBoost smoke test, `property_type_area_m2` and `property_type_road_width_m` appeared among the strongest features, supporting the user's hypothesis.
+- Added `--separate-property-models` comparison mode. It appends `global`, `property_type_0`, and `property_type_1` rows to `model_results.csv`; feature importance gets the same `training_scope` column.
+- A CatBoost 2-fold smoke test completed successfully after IQR filtering. Specialist models used normal K-fold, while global used property-type stratified CV.
 
 ## Modeling Interpretation
 
