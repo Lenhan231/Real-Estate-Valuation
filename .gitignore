@@ -20,3 +20,6 @@ wandb/
 models/
 data/processed/model_results.csv
 data/processed/real_estate_cleaned.csv
+
+# Old Scripts
+scripts/old/

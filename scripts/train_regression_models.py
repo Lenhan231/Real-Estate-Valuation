@@ -13,14 +13,11 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer, TransformedTargetRegressor
-from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error, r2_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from xgboost import XGBRegressor
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -28,6 +25,7 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from model_cleaning import clean_for_modeling
+from training_models import available_models, build_models
 
 DEFAULT_INPUT = ROOT / "data" / "processed" / "real_estate_cleaned_2.csv"
 DEFAULT_RAW_INPUT = ROOT / "data" / "processed" / "alonhadat_features.csv"
@@ -58,7 +56,7 @@ def can_encode_for_console(value: Path) -> bool:
     return True
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(default_models: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Train baseline/comparison/final regressors for property price targets."
     )
@@ -66,7 +64,7 @@ def parse_args() -> argparse.Namespace:
         "--input",
         type=Path,
         default=DEFAULT_INPUT,
-        help="Input cleaned modeling CSV. Defaults to data/processed/real_estate_cleaned.csv.",
+        help="Input cleaned modeling CSV. Defaults to data/processed/real_estate_cleaned_2.csv.",
     )
     parser.add_argument(
         "--clean-input",
@@ -101,8 +99,24 @@ def parse_args() -> argparse.Namespace:
         help="Skip writing feature importance PNG charts.",
     )
     parser.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL_DIR, help="Directory for fitted model files.")
+    parser.add_argument(
+        "--models",
+        nargs="+",
+        default=default_models,
+        choices=available_models(),
+        help=(
+            "One or more models to train. Defaults to all registered models, or the model "
+            "selected by a per-model script."
+        ),
+    )
     parser.add_argument("--test-size", type=float, default=TEST_SIZE, help="Test split fraction.")
     parser.add_argument("--random-state", type=int, default=RANDOM_STATE, help="Random seed.")
+    parser.add_argument(
+        "--cv-folds",
+        type=int,
+        default=1,
+        help="Number of K-fold validation folds. Use 1 to skip cross-validation.",
+    )
     parser.add_argument(
         "--no-save-models",
         action="store_true",
@@ -200,28 +214,6 @@ def build_preprocessor(x: pd.DataFrame) -> ColumnTransformer:
     )
 
 
-def build_models(random_state: int) -> dict[str, object]:
-    return {
-        "linear_regression": LinearRegression(),
-        "random_forest": RandomForestRegressor(
-            n_estimators=300,
-            min_samples_leaf=2,
-            random_state=random_state,
-            n_jobs=-1,
-        ),
-        "xgboost": XGBRegressor(
-            n_estimators=500,
-            learning_rate=0.05,
-            max_depth=4,
-            subsample=0.9,
-            colsample_bytree=0.9,
-            objective="reg:squarederror",
-            random_state=random_state,
-            n_jobs=-1,
-        ),
-    }
-
-
 def load_modeling_data(input_path: Path, clean_input: bool) -> pd.DataFrame:
     df = pd.read_csv(input_path)
     if clean_input:
@@ -249,6 +241,29 @@ def make_feature_target(df: pd.DataFrame, target: str) -> tuple[pd.DataFrame, pd
 
 def positive_predictions(predictions: np.ndarray) -> np.ndarray:
     return np.clip(predictions, 1, None)
+
+
+def build_training_model(x: pd.DataFrame, estimator: object) -> TransformedTargetRegressor:
+    pipeline = Pipeline(
+        steps=[
+            ("preprocess", build_preprocessor(x)),
+            ("model", estimator),
+        ]
+    )
+    return TransformedTargetRegressor(
+        regressor=pipeline,
+        func=np.log1p,
+        inverse_func=np.expm1,
+    )
+
+
+def score_predictions(y_true: pd.Series, predictions: np.ndarray) -> dict[str, float]:
+    predictions = positive_predictions(predictions)
+    return {
+        "mape_percent": mean_absolute_percentage_error(y_true, predictions) * 100,
+        "mae": mean_absolute_error(y_true, predictions),
+        "r2": r2_score(y_true, predictions),
+    }
 
 
 def get_preprocessed_feature_sources(preprocessor: ColumnTransformer) -> list[str]:
@@ -363,6 +378,9 @@ def plot_feature_importance(
     plot_dir.mkdir(parents=True, exist_ok=True)
     plot_paths: list[Path] = []
     model_colors = {
+        "catboost": "#8B5CF6",
+        "ensemble": "#6B7280",
+        "lightgbm": "#06B6D4",
         "linear_regression": "#4C78A8",
         "random_forest": "#F58518",
         "xgboost": "#54A24B",
@@ -412,10 +430,12 @@ def plot_feature_importance(
 def train_one_target(
     df: pd.DataFrame,
     target: str,
+    model_names: list[str] | None,
     model_dir: Path,
     save_models: bool,
     test_size: float,
     random_state: int,
+    cv_folds: int,
 ) -> tuple[list[dict[str, float | int | str]], list[dict[str, float | int | str]]]:
     x, y = make_feature_target(df, target)
     x_train, x_test, y_train, y_test = train_test_split(
@@ -427,40 +447,25 @@ def train_one_target(
 
     results: list[dict[str, float | int | str]] = []
     feature_importances: list[dict[str, float | int | str]] = []
-    preprocessor = build_preprocessor(x_train)
 
-    for model_name, estimator in build_models(random_state).items():
-        pipeline = Pipeline(
-            steps=[
-                ("preprocess", preprocessor),
-                ("model", estimator),
-            ]
-        )
-        model = TransformedTargetRegressor(
-            regressor=pipeline,
-            func=np.log1p,
-            inverse_func=np.expm1,
-        )
-
+    for model_name, estimator in build_models(random_state, model_names).items():
+        model = build_training_model(x_train, estimator)
         model.fit(x_train, y_train)
-        predictions = positive_predictions(model.predict(x_test))
+        holdout_scores = score_predictions(y_test, model.predict(x_test))
+        cv_scores = cross_validate_model(x, y, model_name, random_state, cv_folds)
 
-        mape = mean_absolute_percentage_error(y_test, predictions) * 100
-        mae = mean_absolute_error(y_test, predictions)
-        r2 = r2_score(y_test, predictions)
-
-        results.append(
-            {
-                "target": target,
-                "model": model_name,
-                "mape_percent": mape,
-                "mae": mae,
-                "r2": r2,
-                "train_rows": len(x_train),
-                "test_rows": len(x_test),
-                "feature_count_before_encoding": x_train.shape[1],
-            }
-        )
+        result = {
+            "target": target,
+            "model": model_name,
+            "mape_percent": holdout_scores["mape_percent"],
+            "mae": holdout_scores["mae"],
+            "r2": holdout_scores["r2"],
+            "train_rows": len(x_train),
+            "test_rows": len(x_test),
+            "feature_count_before_encoding": x_train.shape[1],
+        }
+        result.update(cv_scores)
+        results.append(result)
 
         if save_models:
             model_path = model_dir / f"{target}_{model_name}.joblib"
@@ -469,6 +474,42 @@ def train_one_target(
         feature_importances.extend(extract_feature_importance(model, target, model_name))
 
     return results, feature_importances
+
+
+def cross_validate_model(
+    x: pd.DataFrame,
+    y: pd.Series,
+    model_name: str,
+    random_state: int,
+    cv_folds: int,
+) -> dict[str, float | int | str]:
+    if cv_folds <= 1:
+        return {"cv_folds": 1}
+    if cv_folds > len(x):
+        raise ValueError(f"--cv-folds must be <= row count ({len(x)}). Got {cv_folds}.")
+
+    fold_scores: list[dict[str, float]] = []
+    splitter = KFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+
+    for train_index, test_index in splitter.split(x):
+        x_train = x.iloc[train_index]
+        x_test = x.iloc[test_index]
+        y_train = y.iloc[train_index]
+        y_test = y.iloc[test_index]
+        estimator = build_models(random_state, [model_name])[model_name]
+        model = build_training_model(x_train, estimator)
+        model.fit(x_train, y_train)
+        fold_scores.append(score_predictions(y_test, model.predict(x_test)))
+
+    return {
+        "cv_folds": cv_folds,
+        "cv_mape_percent_mean": float(np.mean([score["mape_percent"] for score in fold_scores])),
+        "cv_mape_percent_std": float(np.std([score["mape_percent"] for score in fold_scores], ddof=1)),
+        "cv_mae_mean": float(np.mean([score["mae"] for score in fold_scores])),
+        "cv_mae_std": float(np.std([score["mae"] for score in fold_scores], ddof=1)),
+        "cv_r2_mean": float(np.mean([score["r2"] for score in fold_scores])),
+        "cv_r2_std": float(np.std([score["r2"] for score in fold_scores], ddof=1)),
+    }
 
 
 def log_to_wandb(
@@ -501,8 +542,9 @@ def log_to_wandb(
             "clean_input": args.clean_input,
             "test_size": args.test_size,
             "random_state": args.random_state,
+            "cv_folds": args.cv_folds,
             "targets": TARGETS,
-            "models": list(build_models(args.random_state).keys()),
+            "models": list(build_models(args.random_state, args.models).keys()),
             "row_count": row_count,
             "leakage_columns_dropped_from_features": LEAKAGE_COLS,
             "top_features": args.top_features,
@@ -524,6 +566,17 @@ def log_to_wandb(
                 f"{prefix}/r2": row["r2"],
             }
         )
+        if row.get("cv_folds", 1) and row.get("cv_folds", 1) > 1:
+            wandb.log(
+                {
+                    f"{prefix}/cv_mape_percent_mean": row["cv_mape_percent_mean"],
+                    f"{prefix}/cv_mape_percent_std": row["cv_mape_percent_std"],
+                    f"{prefix}/cv_mae_mean": row["cv_mae_mean"],
+                    f"{prefix}/cv_mae_std": row["cv_mae_std"],
+                    f"{prefix}/cv_r2_mean": row["cv_r2_mean"],
+                    f"{prefix}/cv_r2_std": row["cv_r2_std"],
+                }
+            )
 
     best_by_target = results_df.loc[results_df.groupby("target")["mape_percent"].idxmin()]
     for _, row in best_by_target.iterrows():
@@ -547,10 +600,10 @@ def log_to_wandb(
     run.finish()
 
 
-def main() -> None:
+def main(default_models: list[str] | None = None) -> None:
     configure_console_encoding()
 
-    args = parse_args()
+    args = parse_args(default_models)
     input_path = resolve_path(args.input)
     results_path = resolve_path(args.results)
     importance_path = resolve_path(args.importance_results)
@@ -568,10 +621,12 @@ def main() -> None:
         target_results, target_feature_importances = train_one_target(
             df=df,
             target=target,
+            model_names=args.models,
             model_dir=model_dir,
             save_models=not args.no_save_models,
             test_size=args.test_size,
             random_state=args.random_state,
+            cv_folds=args.cv_folds,
         )
         all_results.extend(target_results)
         all_feature_importances.extend(target_feature_importances)
@@ -621,6 +676,12 @@ def main() -> None:
                 "mape_percent": "{:.2f}".format,
                 "mae": "{:.2f}".format,
                 "r2": "{:.3f}".format,
+                "cv_mape_percent_mean": "{:.2f}".format,
+                "cv_mape_percent_std": "{:.2f}".format,
+                "cv_mae_mean": "{:.2f}".format,
+                "cv_mae_std": "{:.2f}".format,
+                "cv_r2_mean": "{:.3f}".format,
+                "cv_r2_std": "{:.3f}".format,
             },
         )
     )

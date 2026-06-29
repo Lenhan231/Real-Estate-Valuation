@@ -2,11 +2,25 @@ from __future__ import annotations
 
 import pandas as pd
 
-MODEL_DROP_COLS = ["region", "locality", "street", "title","link", "listing_id", "matched_address", "old_address", "direction", "owner_listing_bin", "legal_status", "listing_type", "post_day"]
+MODEL_DROP_COLS = [
+    "region",
+    "street",
+    "title",
+    "link",
+    "listing_id",
+    "matched_address",
+    "old_address",
+    "direction",
+    "owner_listing_bin",
+    "legal_status",
+    "listing_type",
+    "post_day",
+]
 
 MODEL_TEXT_COLS = [
     #"listing_type",
     "property_type",
+    "locality",
     #"legal_status",
 ]
 
@@ -42,6 +56,11 @@ MODEL_NUMERIC_COLS = [
     "bus_stop_count_1km",
     "nearest_metro_km",
     "metro_count_5km",
+    "post_month",
+    "post_day_of_month",
+    "post_weekday",
+    "post_is_weekend",
+    "post_age_days",
 ]
 
 REGION_REPLACEMENTS = {
@@ -67,6 +86,7 @@ MEDIAN_IMPUTE_COLS = [
     "num_bedrooms",
     "num_floors",
     "road_width_m",
+    "nearest_school_km",
     "nearest_metro_km",
     "nearest_mall_km",
     "nearest_supermarket_km",
@@ -89,6 +109,16 @@ def clean_for_modeling(df: pd.DataFrame) -> pd.DataFrame:
     """
 
     df = df.copy()
+
+    if "post_day" in df.columns:
+        post_day = pd.to_datetime(df["post_day"], errors="coerce")
+        latest_post_day = post_day.max()
+        df["post_month"] = post_day.dt.month
+        df["post_day_of_month"] = post_day.dt.day
+        df["post_weekday"] = post_day.dt.weekday
+        df["post_is_weekend"] = post_day.dt.weekday.isin([5, 6]).astype("Int64")
+        df["post_age_days"] = (latest_post_day - post_day).dt.days if pd.notna(latest_post_day) else pd.NA
+
     df = df.drop(columns=MODEL_DROP_COLS, errors="ignore")
 
     for col in MODEL_TEXT_COLS:
