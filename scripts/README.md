@@ -13,12 +13,12 @@ This note summarizes the modeling/training refactor and current context so anoth
   - Writes metrics, feature importance, plots, saved models, and optional W&B logs.
 - Individual model definitions live in `scripts/training_models/`.
 - Shortcut launchers exist for single-model training:
-  - `scripts/train_linear_regression.py`
-  - `scripts/train_random_forest.py`
-  - `scripts/train_xgboost.py`
-  - `scripts/train_lightgbm.py`
-  - `scripts/train_catboost.py`
-  - `scripts/train_ensemble.py`
+  - `scripts/trainers/train_linear_regression.py`
+  - `scripts/trainers/train_random_forest.py`
+  - `scripts/trainers/train_xgboost.py`
+  - `scripts/trainers/train_lightgbm.py`
+  - `scripts/trainers/train_catboost.py`
+  - `scripts/trainers/train_ensemble.py`
 - `scripts/run_training.py` is the workflow runner.
   - `--refresh-data` fetches `origin/main`, restores only `data/`, cleans data, then trains.
   - `--clean-data` cleans current local modeling data before training.
