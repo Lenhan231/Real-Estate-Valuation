@@ -17,6 +17,12 @@ def main():
     df = df.drop_duplicates(subset=duplicate_subset)
     print(f"Dropped {initial_len - len(df)} semantic duplicates.")
 
+    # 1.5 Filter out unrealistically low prices (e.g., < 100 million VND)
+    valid_price_mask = df['price_vnd'] >= 100_000_000
+    invalid_price_count = (~valid_price_mask).sum()
+    df = df[valid_price_mask]
+    print(f"Dropped {invalid_price_count} properties with unrealistically low prices (< 100M VND).")
+
     # 2. Impute width_m and length_m using area_m2
     # This recovers lost information safely instead of leaving it missing
     print("Imputing width_m and length_m using area_m2...")
