@@ -21,6 +21,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.preprocessing import LabelEncoder
 import xgboost as xgb
+import wandb
 
 
 # ---------------------------------------------------------------------------
@@ -29,6 +30,8 @@ import xgboost as xgb
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
 MODEL_DIR = PROJECT_ROOT / "models"
+
+WANDB_PROJECT = "real-estate-valuation"
 
 
 # Columns to drop before training (non-predictive metadata)
@@ -90,7 +93,6 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
     # Drop non-feature columns
     cols_to_drop = [c for c in DROP_COLS if c in df.columns]
     df = df.drop(columns=cols_to_drop)
-    df.to_csv("trai_xgboost.csv")
     # Label-encode categoricals
     label_encoders = {}
     for col in LABEL_ENCODE_COLS:
@@ -171,20 +173,50 @@ def main():
     dataset_label = args.dataset
     if args.csv_path:
         csv_path = Path(args.csv_path)
-    elif Path(dataset_label).is_file():
-        csv_path = Path(dataset_label)
-        dataset_label = csv_path.stem
-    elif (DATA_DIR / dataset_label).is_file():
-        csv_path = DATA_DIR / dataset_label
-        dataset_label = csv_path.stem
     else:
-        if dataset_label == "cleaned":
-            csv_path = DATA_DIR / "alonhadat_features_cleaned.csv"
-        else:
-            csv_path = DATA_DIR / f"alonhadat_features_cleaned_{dataset_label}.csv"
+        # Define candidate paths to search
+        candidates = [
+            Path(dataset_label),
+            DATA_DIR / dataset_label,
+            PROJECT_ROOT / "data" / "raw" / dataset_label,
+        ]
         
-        if not csv_path.exists():
-            raise FileNotFoundError(f"Cleaned dataset not found at {csv_path}. Please run clean_features.py first.")
+        # If dataset_label ends with .csv, also try without the extension to find cleaned versions
+        if dataset_label.endswith(".csv"):
+            stem = Path(dataset_label).stem
+            candidates.extend([
+                DATA_DIR / f"alonhadat_features_cleaned_{stem}.csv",
+                DATA_DIR / f"{stem}.csv",
+                PROJECT_ROOT / "data" / "raw" / f"{stem}.csv",
+            ])
+        else:
+            candidates.extend([
+                DATA_DIR / f"alonhadat_features_cleaned_{dataset_label}.csv",
+                DATA_DIR / f"{dataset_label}.csv",
+                PROJECT_ROOT / "data" / "raw" / f"{dataset_label}.csv",
+            ])
+            
+        csv_path = None
+        for path in candidates:
+            if path.is_file():
+                csv_path = path
+                dataset_label = path.stem
+                break
+                
+        if csv_path is None:
+            # Fallback to default expected path if none of the candidates exist
+            stem = Path(dataset_label).stem if dataset_label.endswith(".csv") else dataset_label
+            if stem == "cleaned":
+                csv_path = DATA_DIR / "alonhadat_features_cleaned.csv"
+            else:
+                csv_path = DATA_DIR / f"alonhadat_features_cleaned_{stem}.csv"
+                
+            if not csv_path.exists():
+                raise FileNotFoundError(
+                    f"Dataset not found. Tried checking the following paths:\n"
+                    + "\n".join(f"  - {p}" for p in candidates)
+                    + f"\nFallback path also failed: {csv_path}"
+                )
         
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     model_path = MODEL_DIR / f"xgboost_{dataset_label}.json"
@@ -293,12 +325,43 @@ def main():
     print(f"  Plots saved to {plot_dir}")
 
     # ------------------------------------------------------------------
-    # 7. Save model
+    # 7. Log to W&B
+    # ------------------------------------------------------------------
+    print("  Logging to W&B...")
+    run = wandb.init(
+        project=WANDB_PROJECT,
+        name=f"xgboost-{dataset_label}",
+        config={
+            "dataset": dataset_label,
+            "n_samples_train": X_train.shape[0],
+            "n_samples_test": X_test.shape[0],
+            "n_features": meta["n_features"],
+            "features": meta["features"],
+            "target_transform": "log1p",
+            "label_encoders": meta["label_encoders"],
+            **xgb_params,
+        },
+    )
+
+    wandb.log(metrics)
+    wandb.log({
+        "feature_importance": wandb.Image(str(fi_path)),
+        "pred_vs_actual": wandb.Image(str(pva_path)),
+    })
+
+    # ------------------------------------------------------------------
+    # 8. Save model
     # ------------------------------------------------------------------
     model.save_model(str(model_path))
     print(f"  Model saved to {model_path}")
 
-    print("\n  Done!")
+    # Also log model artifact to W&B
+    artifact = wandb.Artifact(f"xgboost-{dataset_label}", type="model")
+    artifact.add_file(str(model_path))
+    run.log_artifact(artifact)
+
+    wandb.finish()
+    print("\n  Done! Check your W&B dashboard for results.")
 
 
 if __name__ == "__main__":

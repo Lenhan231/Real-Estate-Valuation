@@ -5,6 +5,7 @@
 - **[README](README.md)** — Project overview and setup instructions
 - **[Implementation Summary](IMPLEMENTATION_SUMMARY.md)** — Technical implementation details and architecture
 - **[Refactoring Guide](REFACTORING_GUIDE.md)** — Code refactoring guidelines and improvements
+- **[Model Splitting Guide](MODEL_SPLITTING_GUIDE.md)** — Property type splitting, IQR outlier filtering, and model leaderboards
 - **[Requirements](requirements.txt)** — Python dependencies and versions
 
 ## Quick Start

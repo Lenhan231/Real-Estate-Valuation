@@ -16,3 +16,17 @@ __pycache__/
 .claude/
 
 .env
+
+# Weights & Biases
+wandb/
+
+# Local model artifacts & plots
+models/
+Models/
+*.json
+*.png
+
+# Temporary and split datasets
+data/processed/split_*.csv
+data/processed/alonhadat_features_cleaned2.csv
+trai_xgboost.csv

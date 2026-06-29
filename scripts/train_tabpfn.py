@@ -17,8 +17,6 @@ Get your token at: https://ux.priorlabs.ai/account
 """
 
 import argparse
-import json
-import logging
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -37,11 +35,10 @@ import wandb
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
 MODEL_DIR = PROJECT_ROOT / "models"
-REPORTS_DIR = PROJECT_ROOT / "reports"
-REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 WANDB_PROJECT = "real-estate-valuation"
+
 TARGET = "price_vnd"
 RANDOM_STATE = 42
 TEST_SIZE = 0.2
@@ -53,24 +50,6 @@ DROP_COLS = [
     "lat", "lon",
 ]
 LABEL_ENCODE_COLS = ["direction", "legal_status"]
-
-
-# ---------------------------------------------------------------------------
-# Logging setup (file + console)
-# ---------------------------------------------------------------------------
-def setup_logger(dataset_label: str) -> logging.Logger:
-    log_file = REPORTS_DIR / f"train_tabpfn_{dataset_label}.log"
-    logger = logging.getLogger(f"tabpfn_{dataset_label}")
-    logger.setLevel(logging.INFO)
-    logger.handlers.clear()
-    fh = logging.FileHandler(log_file, encoding="utf-8")
-    fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-    ch = logging.StreamHandler()
-    ch.setFormatter(logging.Formatter("%(message)s"))
-    logger.addHandler(fh)
-    logger.addHandler(ch)
-    logger.info(f"Log file: {log_file}")
-    return logger, log_file
 
 
 # ---------------------------------------------------------------------------
@@ -121,79 +100,6 @@ def preprocess(df: pd.DataFrame) -> tuple:
         "label_encoders": label_encoders,
     }
     return df, y, meta
-
-
-# # ---------------------------------------------------------------------------
-# # Plots
-# # ---------------------------------------------------------------------------
-# def plot_pred_vs_actual(y_true, y_pred, save_path: Path, title: str):
-#     fig, ax = plt.subplots(figsize=(8, 8))
-#     y_true_b = y_true / 1e9
-#     y_pred_b = y_pred / 1e9
-#     ax.scatter(y_true_b, y_pred_b, alpha=0.5, s=20, color="#10b981")
-#     max_val = max(y_true_b.max(), y_pred_b.max())
-#     ax.plot([0, max_val], [0, max_val], "r--", lw=1.5, label="Perfect prediction")
-#     ax.set_xlabel("Actual Price (Billion VND)")
-#     ax.set_ylabel("Predicted Price (Billion VND)")
-#     ax.set_title(title)
-#     ax.legend()
-#     plt.tight_layout()
-#     fig.savefig(save_path, dpi=150, bbox_inches="tight")
-#     plt.close(fig)
-#     return save_path
-
-
-# def plot_feature_importance(model, X_test, y_test, feature_names, save_path: Path, title: str):
-#     """Create and save a feature importance bar chart using permutation importance."""
-#     from sklearn.inspection import permutation_importance
-#     result = permutation_importance(model, X_test, y_test, n_repeats=3, random_state=42, n_jobs=-1)
-#     importance = result.importances_mean
-#     sorted_idx = np.argsort(importance)
-
-#     fig, ax = plt.subplots(figsize=(10, max(6, len(feature_names) * 0.3)))
-#     ax.barh(range(len(sorted_idx)), importance[sorted_idx], color="#10b981")
-#     ax.set_yticks(range(len(sorted_idx)))
-#     ax.set_yticklabels([feature_names[i] for i in sorted_idx])
-#     ax.set_xlabel("Permutation Feature Importance")
-#     ax.set_title(title)
-#     plt.tight_layout()
-#     fig.savefig(save_path, dpi=150, bbox_inches="tight")
-#     plt.close(fig)
-#     return save_path
-
-
-# def plot_model_comparison(xgb_metrics: dict, tabpfn_metrics: dict, save_path: Path):
-#     """Side-by-side bar chart comparing XGBoost vs TabPFN metrics."""
-#     labels = ["R²", "MAPE (%)", "MAE (10B VND)"]
-#     xgb_vals = [
-#         xgb_metrics.get("r2", 0),
-#         xgb_metrics.get("mape", 0),
-#         xgb_metrics.get("mae", 0) / 1e10,
-#     ]
-#     tab_vals = [
-#         tabpfn_metrics.get("r2", 0),
-#         tabpfn_metrics.get("mape", 0),
-#         tabpfn_metrics.get("mae", 0) / 1e10,
-#     ]
-
-#     x = np.arange(len(labels))
-#     width = 0.35
-
-#     fig, ax = plt.subplots(figsize=(10, 6))
-#     bars1 = ax.bar(x - width / 2, xgb_vals, width, label="XGBoost", color="#6366f1", alpha=0.85)
-#     bars2 = ax.bar(x + width / 2, tab_vals, width, label="TabPFN", color="#10b981", alpha=0.85)
-
-#     ax.set_title("Model Comparison: XGBoost vs TabPFN")
-#     ax.set_xticks(x)
-#     ax.set_xticklabels(labels)
-#     ax.legend()
-#     ax.bar_label(bars1, fmt="%.3f", padding=3)
-#     ax.bar_label(bars2, fmt="%.3f", padding=3)
-#     plt.tight_layout()
-#     fig.savefig(save_path, dpi=150, bbox_inches="tight")
-#     plt.close(fig)
-#     return save_path
-
 
 # ---------------------------------------------------------------------------
 # Load XGBoost baseline metrics for comparison
@@ -247,56 +153,90 @@ def main():
     dataset_label = args.dataset
     if args.csv_path:
         csv_path = Path(args.csv_path)
-    elif Path(dataset_label).is_file():
-        csv_path = Path(dataset_label)
-        dataset_label = csv_path.stem
     else:
-        if dataset_label == "cleaned":
-            csv_path = DATA_DIR / "alonhadat_features_cleaned.csv"
-        else:
-            csv_path = DATA_DIR / f"alonhadat_features_cleaned_{dataset_label}.csv"
+        # Define candidate paths to search
+        candidates = [
+            Path(dataset_label),
+            DATA_DIR / dataset_label,
+            PROJECT_ROOT / "data" / "raw" / dataset_label,
+        ]
         
-        if not csv_path.exists():
-            raise FileNotFoundError(f"Cleaned dataset not found at {csv_path}. Please run clean_features.py first.")
+        # If dataset_label ends with .csv, also try without the extension to find cleaned versions
+        if dataset_label.endswith(".csv"):
+            stem = Path(dataset_label).stem
+            candidates.extend([
+                DATA_DIR / f"alonhadat_features_cleaned_{stem}.csv",
+                DATA_DIR / f"{stem}.csv",
+                PROJECT_ROOT / "data" / "raw" / f"{stem}.csv",
+            ])
+        else:
+            candidates.extend([
+                DATA_DIR / f"alonhadat_features_cleaned_{dataset_label}.csv",
+                DATA_DIR / f"{dataset_label}.csv",
+                PROJECT_ROOT / "data" / "raw" / f"{dataset_label}.csv",
+            ])
+            
+        csv_path = None
+        for path in candidates:
+            if path.is_file():
+                csv_path = path
+                dataset_label = path.stem
+                break
+                
+        if csv_path is None:
+            # Fallback to default expected path if none of the candidates exist
+            stem = Path(dataset_label).stem if dataset_label.endswith(".csv") else dataset_label
+            if stem == "cleaned":
+                csv_path = DATA_DIR / "alonhadat_features_cleaned.csv"
+            else:
+                csv_path = DATA_DIR / f"alonhadat_features_cleaned_{stem}.csv"
+                
+            if not csv_path.exists():
+                raise FileNotFoundError(
+                    f"Dataset not found. Tried checking the following paths:\n"
+                    + "\n".join(f"  - {p}" for p in candidates)
+                    + f"\nFallback path also failed: {csv_path}"
+                )
 
-    logger, log_file = setup_logger(dataset_label)
+    
     timestamp = datetime.now().isoformat()
 
-    logger.info("=" * 60)
-    logger.info(f"  TabPFN Training — Dataset: {dataset_label}")
-    logger.info(f"  Started: {timestamp}")
-    logger.info("=" * 60)
+    print("=" * 60)
+    print(f"  TabPFN Training — Dataset: {dataset_label}")
+    print(f"  Started: {timestamp}")
+    print("=" * 60)
 
     # ------------------------------------------------------------------
     # 1. Import TabPFN (deferred so import error is informative)
     # ------------------------------------------------------------------
-    logger.info("\n[1/6] Importing TabPFN...")
+    print("\n[1/6] Importing TabPFN...")
     try:
+        # pyrefly: ignore [missing-import]
         from tabpfn import TabPFNRegressor
-        logger.info("  tabpfn imported successfully.")
+        print("  tabpfn imported successfully.")
     except ImportError:
-        logger.error("  tabpfn not installed. Run: pip install tabpfn")
+        print("  tabpfn not installed. Run: pip install tabpfn")
         raise
 
     # ------------------------------------------------------------------
     # 2. Load data
     # ------------------------------------------------------------------
-    logger.info(f"\n[2/6] Loading data from {csv_path}...")
+    print(f"\n[2/6] Loading data from {csv_path}...")
     df = pd.read_csv(csv_path)
-    logger.info(f"  Shape: {df.shape}")
+    print(f"  Shape: {df.shape}")
 
     # Log direction distribution if enriched
     if "direction" in df.columns:
         dist = df["direction"].value_counts().to_dict()
-        logger.info(f"  Direction distribution: {dist}")
+        print(f"  Direction distribution: {dist}")
 
     # ------------------------------------------------------------------
     # 3. Preprocess
     # ------------------------------------------------------------------
-    logger.info("\n[3/6] Preprocessing...")
+    print("\n[3/6] Preprocessing...")
     X, y, meta = preprocess(df)
     feature_names = meta["features"]
-    logger.info(f"  Features ({meta['n_features']}): {feature_names}")
+    print(f"  Features ({meta['n_features']}): {feature_names}")
 
     # Log1p transform on target
     y_log = np.log1p(y)
@@ -304,29 +244,29 @@ def main():
     # ------------------------------------------------------------------
     # 4. Train / Test split (same seed as XGBoost for fair comparison)
     # ------------------------------------------------------------------
-    logger.info("\n[4/6] Splitting data (80/20)...")
+    print("\n[4/6] Splitting data (80/20)...")
     price_bins = pd.qcut(y, q=5, labels=False, duplicates="drop")
     X_train, X_test, y_train, y_test, y_log_train, y_log_test = train_test_split(
         X, y, y_log, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=price_bins
     )
-    logger.info(f"  Train: {X_train.shape[0]} | Test: {X_test.shape[0]}")
+    print(f"  Train: {X_train.shape[0]} | Test: {X_test.shape[0]}")
 
     # ------------------------------------------------------------------
     # 5. Train TabPFN
     # ------------------------------------------------------------------
-    logger.info("\n[5/6] Training TabPFN...")
+    print("\n[5/6] Training TabPFN...")
     model = TabPFNRegressor(random_state=RANDOM_STATE, ignore_pretraining_limits=True)
 
     import time
     t0 = time.time()
     model.fit(X_train, y_log_train)
     train_time = time.time() - t0
-    logger.info(f"  Training complete in {train_time:.2f}s")
+    print(f"  Training complete in {train_time:.2f}s")
 
     # ------------------------------------------------------------------
     # 6. Evaluate
     # ------------------------------------------------------------------
-    logger.info("\n[6/6] Evaluating...")
+    print("\n[6/6] Evaluating...")
     y_log_pred = model.predict(X_test)
     y_pred = np.expm1(y_log_pred)
     y_pred = np.clip(y_pred, 0, None)
@@ -346,58 +286,20 @@ def main():
         "train_time_seconds": train_time,
     }
 
-    logger.info("\n" + "=" * 60)
-    logger.info(f"  Results — TabPFN on {dataset_label}")
-    logger.info("=" * 60)
-    logger.info(f"  RMSE:      {rmse / 1e9:.2f} Billion VND")
-    logger.info(f"  MAE:       {mae / 1e9:.2f} Billion VND")
-    logger.info(f"  R²:        {r2:.4f}")
-    logger.info(f"  MAPE:      {mape:.2f}%")
-    logger.info(f"  RMSE(log): {rmse_log:.4f}")
-    logger.info(f"  Train time:{train_time:.2f}s")
-    logger.info("=" * 60)
-
-    # # ------------------------------------------------------------------
-    # # 7. Plots
-    # # ------------------------------------------------------------------
-    # plot_dir = MODEL_DIR / "plots"
-    # plot_dir.mkdir(parents=True, exist_ok=True)
-
-    # pva_path = plot_pred_vs_actual(
-    #     y_test, y_pred,
-    #     plot_dir / f"tabpfn_pred_vs_actual_{dataset_label}.png",
-    #     title=f"TabPFN — Predicted vs Actual ({dataset_label})"
-    # )
-
-    # logger.info("  Calculating TabPFN feature importance (permutation)...")
-    # fi_path = plot_feature_importance(
-    #     model, X_test, y_log_test, feature_names,
-    #     plot_dir / f"tabpfn_feature_importance_{dataset_label}.png",
-    #     title=f"TabPFN Feature Importance ({dataset_label})"
-    # )
-
-    # # Comparison plot (if baseline XGBoost exists)
-    # xgb_baseline = load_xgb_baseline(dataset_label)
-    # comparison_path = None
-    # if xgb_baseline:
-    #     comparison_path = plot_model_comparison(
-    #         xgb_baseline, metrics,
-    #         plot_dir / f"comparison_xgb_vs_tabpfn_{dataset_label}.png"
-    #     )
-    #     logger.info("\n  XGBoost vs TabPFN Comparison:")
-    #     logger.info(f"  {'Metric':<15} {'XGBoost':>12} {'TabPFN':>12} {'Delta':>12}")
-    #     logger.info(f"  {'-'*51}")
-    #     for k, label in [("r2", "R²"), ("mape", "MAPE (%)"), ("rmse_log", "RMSE(log)")]:
-    #         xgb_val = xgb_baseline.get(k, 0)
-    #         tab_val = metrics.get(k, 0)
-    #         delta = tab_val - xgb_val
-    #         sign = "+" if delta > 0 else ""
-    #         logger.info(f"  {label:<15} {xgb_val:>12.4f} {tab_val:>12.4f} {sign}{delta:>11.4f}")
-
+    print("\n" + "=" * 60)
+    print(f"  Results — TabPFN on {dataset_label}")
+    print("=" * 60)
+    print(f"  RMSE:      {rmse / 1e9:.2f} Billion VND")
+    print(f"  MAE:       {mae / 1e9:.2f} Billion VND")
+    print(f"  R²:        {r2:.4f}")
+    print(f"  MAPE:      {mape:.2f}%")
+    print(f"  RMSE(log): {rmse_log:.4f}")
+    print(f"  Train time:{train_time:.2f}s")
+    print("=" * 60)
     # ------------------------------------------------------------------
-    # 8. Log to W&B
+    # 7. Log to W&B
     # ------------------------------------------------------------------
-    logger.info("\n  Logging to W&B...")
+    print("\n  Logging to W&B...")
     run = wandb.init(
         project=WANDB_PROJECT,
         name=f"tabpfn-{dataset_label}",
@@ -415,45 +317,9 @@ def main():
     )
 
     wandb.log(metrics)
-    # wandb.log({
-    #     "pred_vs_actual": wandb.Image(str(pva_path)),
-    #     "feature_importance": wandb.Image(str(fi_path)),
-    # })
-    # if comparison_path:
-    #     wandb.log({"model_comparison": wandb.Image(str(comparison_path))})
+    run.finish()
 
-    # wandb.finish()
-
-    # ------------------------------------------------------------------
-    # 9. Save JSON report
-    # ------------------------------------------------------------------
-    report = {
-        "timestamp": timestamp,
-        "dataset": dataset_label,
-        "model": "TabPFN",
-        "train_samples": X_train.shape[0],
-        "test_samples": X_test.shape[0],
-        "n_features": meta["n_features"],
-        "features": meta["features"],
-        "metrics": metrics,
-        # "xgboost_baseline": xgb_baseline,
-        # "comparison": {
-        #     k: {
-        #         "xgboost": xgb_baseline.get(k) if xgb_baseline else None,
-        #         "tabpfn": metrics.get(k),
-        #         "delta": (metrics.get(k, 0) - xgb_baseline.get(k, 0)) if xgb_baseline else None,
-        #     }
-        #     for k in ["r2", "mape", "rmse_log", "mae", "rmse"]
-        # } if xgb_baseline else {},
-    }
-
-    report_path = REPORTS_DIR / f"tabpfn_{dataset_label}_report.json"
-    with open(report_path, "w", encoding="utf-8") as f:
-        json.dump(report, f, ensure_ascii=False, indent=2)
-
-    logger.info(f"\n  JSON report: {report_path}")
-    logger.info(f"  Log file:    {log_file}")
-    logger.info("\n  Done! Check W&B for plots and comparison.")
+    print("Done!")
 
 
 if __name__ == "__main__":

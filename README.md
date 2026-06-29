@@ -23,6 +23,7 @@ See [docs/](docs/) for detailed documentation:
 - **[Project README](docs/README.md)** — Full project overview
 - **[Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)** — Architecture & technical details
 - **[Refactoring Guide](docs/REFACTORING_GUIDE.md)** — Code improvements & guidelines
+- **[Model Splitting Guide](docs/MODEL_SPLITTING_GUIDE.md)** — Property type splitting, IQR outlier filtering, and model leaderboards
 
 ## Features
 
