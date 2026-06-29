@@ -35,7 +35,7 @@ Registered in `scripts/training_models/registry.py`:
 - `catboost`
 - `ensemble`
 
-The current `ensemble` is a `VotingRegressor` over random forest and XGBoost.
+The current `ensemble` is a `VotingRegressor` over CatBoost and XGBoost.
 
 To add a model:
 
