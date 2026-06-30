@@ -38,6 +38,7 @@ from pipeline.ingestion.load_pois import (
 from pipeline.transformation.feature_pipeline import (
     get_additional_features
 )
+from pipeline.supabase_handler import push_csv_to_supabase
 from scaper.Alonhadat.scheduling import crawl_list_pages
 from scaper.Alonhadat.link_to_details import link_to_detail
 OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
@@ -197,6 +198,11 @@ def main():
     print(f"      ✓ Features extracted in {batch_time:.2f}s\n")
 
     print("[5/5] Finalizing...")
+    print("      Pushing data to Supabase...")
+    push_csv_to_supabase(OUTPUT_FILE)
+
+    t_total = time.time() - t0
+    print(f"\n✅ Pipeline complete in {t_total:.2f}s")
 
 
 if __name__ == "__main__":
