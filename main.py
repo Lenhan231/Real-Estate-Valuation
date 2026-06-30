@@ -24,7 +24,7 @@ Cache: data/localities.csv (auto-updated with features)
 import pandas as pd
 import time
 from pathlib import Path
-
+import argparse
 
 from pipeline.transformation.cleaning import clean_data, final_clean
 from pipeline.ingestion.load_density import (
@@ -58,6 +58,20 @@ FEATURE_COLS = [
     'nearest_metro_km', 'metro_count_5km'
 ]
 
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--start-page",
+    type=int,
+    default=1,
+)
+
+parser.add_argument(
+    "--end-page",
+    type=int,
+    default=50,
+)
+
+args = parser.parse_args()
 
 def process_batch(batch_df):
     """
@@ -94,7 +108,7 @@ def main():
     # Stage 1: Load & Clean
     
     print("[1/5] Loading raw data...")
-    crawl_list_pages()
+    crawl_list_pages(start_page=args.start_page, end_page=args.end_page)
     link_to_detail()
     df = pd.read_csv(DETAILS_FILE)
     print(f"      Loaded {len(df)} records")
