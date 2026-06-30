@@ -43,7 +43,7 @@ DROP_COLS = [
 ]
 
 # Columns to label-encode
-LABEL_ENCODE_COLS = ["direction", "legal_status"]
+LABEL_ENCODE_COLS = []
 
 TARGET = "price_vnd"
 RANDOM_STATE = 42
@@ -77,10 +77,6 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
         df["post_day_year"] = post_day_dt.dt.year
         df["post_day_month"] = post_day_dt.dt.month
         df["post_day_day"] = post_day_dt.dt.day
-
-    # Convert property_type to binary (1 for nha_mat_tien, 0 for nha_trong_hem)
-    if "property_type" in df.columns:
-        df["property_type"] = (df["property_type"] == "nha_mat_tien").astype(int)
 
     # Parse locality_square
     if "locality_square" in df.columns:

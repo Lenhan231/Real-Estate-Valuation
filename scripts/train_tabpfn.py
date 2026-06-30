@@ -46,10 +46,9 @@ TEST_SIZE = 0.2
 DROP_COLS = [
     "link", "title", "post_day", "street", "old_address",
     "locality", "region", "listing_id", "matched_address",
-    "listing_type",
-    "lat", "lon",
+    "listing_type","area_m2"
 ]
-LABEL_ENCODE_COLS = ["direction", "legal_status"]
+LABEL_ENCODE_COLS = []
 
 
 # ---------------------------------------------------------------------------
@@ -73,10 +72,6 @@ def preprocess(df: pd.DataFrame) -> tuple:
         df["post_day_year"] = post_day_dt.dt.year
         df["post_day_month"] = post_day_dt.dt.month
         df["post_day_day"] = post_day_dt.dt.day
-
-    # Convert property_type to binary (1 for nha_mat_tien, 0 for nha_trong_hem)
-    if "property_type" in df.columns:
-        df["property_type"] = (df["property_type"] == "nha_mat_tien").astype(int)
 
     if "locality_square" in df.columns:
         df["locality_square"] = parse_locality_square(df["locality_square"])

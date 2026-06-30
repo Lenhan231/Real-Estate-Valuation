@@ -31,12 +31,12 @@ Here is our current leaderboard:
 
 | Model | Dataset Split | IQR Fence | R2 Score | MAPE | RMSE (log) |
 |---|---|---|---|---|---|
-| **TabPFN** | `nha_trong_hem` (Alley) | IQR x3.0 | **0.8419** | **18.69%** | **0.2456** |
-| **XGBoost** | `nha_trong_hem` (Alley) | IQR x3.0 | 0.8149 | 21.16% | 0.2719 |
-| **XGBoost** | Full (Baseline) | IQR x3.0 | 0.8131 | 24.29% | 0.3185 |
-| **TabPFN** | Full (Baseline) | IQR x3.0 | 0.7926 | 25.18% | 0.3302 |
-| **TabPFN** | `nha_mat_tien` (Frontage) | IQR x1.5 | **0.7058** | **26.63%** | **0.3442** |
-| **XGBoost** | `nha_mat_tien` (Frontage) | IQR x1.5 | 0.6789 | 27.88% | 0.3679 |
+| **TabPFN** | `nha_trong_hem` (Alley) | IQR x3.0 | **0.8440** | **18.54%** | **0.2453** |
+| **XGBoost** | `nha_trong_hem` (Alley) | IQR x3.0 | 0.8172 | 21.21% | 0.2727 |
+| **TabPFN** | Full (Baseline) | IQR x3.0 | 0.8145 | 24.22% | 0.3185 |
+| **XGBoost** | Full (Baseline) | IQR x3.0 | 0.7848 | 25.37% | 0.3327 |
+| **TabPFN** | `nha_mat_tien` (Frontage) | IQR x1.5 | **0.7036** | **26.58%** | **0.3439** |
+| **XGBoost** | `nha_mat_tien` (Frontage) | IQR x1.5 | 0.6768 | 27.91% | 0.3721 |
 
 > [!NOTE]
 > Previously, the frontage split (`nha_mat_tien`) without the IQR x1.5 fence had a **107% MAPE** and was completely unusable. Applying the tighter outlier fence brought it down to **26.63% MAPE** and **0.7058 R2**.

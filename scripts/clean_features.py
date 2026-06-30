@@ -2,6 +2,26 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
+DROP_COLS = [
+    "link", "title", "post_day", "street", "old_address",
+    "locality", "region", "listing_id", "matched_address",
+    "listing_type",
+    "direction",
+    "metro_count_5km",
+    "post_day",
+    "owner_listing_bin",
+    "lat","lon"
+]
+
+
+def binarize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    if "property_type" in df.columns:
+        df["property_type"] = (df["property_type"] == "nha_mat_tien").astype(int)
+    if "legal_status" in df.columns:
+        df["legal_status"] = df["legal_status"].isin(["so_hong_so_do", "giay_to_hop_le"]).astype(int)
+    return df
+
 
 def iqr_filter(df: pd.DataFrame, cols: list[str], multiplier: float = 3.0) -> pd.DataFrame:
     """
@@ -79,6 +99,36 @@ def main():
     print("[3] Imputed missing width_m / length_m from area_m2.")
 
     # ---------------------------------------------------------------------------
+    # 3.4 Pre-process features before dropping raw columns
+    # ---------------------------------------------------------------------------
+    # if "post_day" in df.columns:
+    #     post_day_dt = pd.to_datetime(df["post_day"])
+    #     df["post_day_year"] = post_day_dt.dt.year
+    #     df["post_day_month"] = post_day_dt.dt.month
+    #     df["post_day_day"] = post_day_dt.dt.day
+    if "locality_square" in df.columns:
+        df["locality_square"] = df["locality_square"].astype(str).str.replace(",", ".").astype(float)
+    print("[3.4] Extracted date features and parsed locality_square.")
+
+    # ---------------------------------------------------------------------------
+    # 3.5 Drop unnecessary columns
+    # ---------------------------------------------------------------------------
+    cols_to_drop = [c for c in DROP_COLS if c in df.columns]
+    df = df.drop(columns=cols_to_drop)
+    print(f"[3.5] Dropped {len(cols_to_drop)} unnecessary columns: {cols_to_drop}")
+
+    # ---------------------------------------------------------------------------
+    # 3.6 Impute remaining missing values with max
+    # ---------------------------------------------------------------------------
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    missing_cols = df[numeric_cols].columns[df[numeric_cols].isnull().any()].tolist()
+    if missing_cols:
+        for col in missing_cols:
+            max_val = df[col].max()
+            df[col] = df[col].fillna(max_val)
+        print(f"[3.6] Imputed missing values with max for: {missing_cols}")
+
+    # ---------------------------------------------------------------------------
     # 4. Save the full cleaned dataset (global IQR applied for the baseline model)
     # ---------------------------------------------------------------------------
     before = len(df)
@@ -86,6 +136,7 @@ def main():
     print(f"[4] Global IQR x3 filter: dropped {before - len(df_full)} outliers  ->  {len(df_full)} rows.")
     print(f"    Price: {df_full['price_vnd'].min()/1e9:.1f}B - {df_full['price_vnd'].max()/1e9:.1f}B VND")
     print(f"    Area : {df_full['area_m2'].min():.0f} - {df_full['area_m2'].max():.0f} m2")
+    df_full = binarize_columns(df_full)
     df_full.to_csv(output_full, index=False)
     print(f"    Saved -> {output_full}  ({df_full.shape})")
 
@@ -117,7 +168,9 @@ def main():
 
         slug = pt.replace(" ", "_")
         out_path = output_dir / f"split_{slug}.csv"
-        subset_filtered.to_csv(out_path, index=False)
+        
+        subset_filtered_out = binarize_columns(subset_filtered)
+        subset_filtered_out.to_csv(out_path, index=False)
 
         p_min = subset_filtered['price_vnd'].min() / 1e9
         p_max = subset_filtered['price_vnd'].max() / 1e9
