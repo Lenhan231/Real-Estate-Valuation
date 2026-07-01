@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+from sklearn.cluster import KMeans
 
 MODEL_DROP_COLS = [
     "region",
@@ -21,6 +22,9 @@ MODEL_TEXT_COLS = [
     #"listing_type",
     "property_type",
     "locality",
+    "location_cluster_20",
+    "location_cluster_50",
+    "location_cluster_100",
     #"legal_status",
 ]
 
@@ -68,6 +72,7 @@ MODEL_NUMERIC_COLS = [
     "property_type_num_floors",
     "property_type_distance_to_center_km",
     "property_type_locality_population_density",
+    "locality_listing_count",
 ]
 
 REGION_REPLACEMENTS = {
@@ -122,6 +127,28 @@ PROPERTY_TYPE_INTERACTION_COLS = [
     "distance_to_center_km",
     "locality_population_density",
 ]
+LOCATION_CLUSTER_SIZES = [20, 50, 100]
+
+
+def add_location_clusters(df: pd.DataFrame) -> pd.DataFrame:
+    if not {"lat", "lon"}.issubset(df.columns):
+        return df
+
+    coordinate_mask = df[["lat", "lon"]].notna().all(axis=1)
+    if coordinate_mask.sum() < 2:
+        return df
+
+    coordinates = df.loc[coordinate_mask, ["lat", "lon"]]
+    for cluster_count in LOCATION_CLUSTER_SIZES:
+        column = f"location_cluster_{cluster_count}"
+        if len(coordinates) < cluster_count:
+            continue
+        kmeans = KMeans(n_clusters=cluster_count, n_init=10, random_state=42)
+        labels = kmeans.fit_predict(coordinates)
+        df[column] = "missing"
+        df.loc[coordinate_mask, column] = [f"cluster_{label}" for label in labels]
+
+    return df
 
 
 def build_iqr_filter_report(df: pd.DataFrame) -> tuple[pd.Series, list[dict[str, float | int | str]]]:
@@ -209,6 +236,9 @@ def clean_for_modeling_with_report(
         if col in df.columns:
             df[col] = df[col].replace(REGION_REPLACEMENTS)
 
+    if "locality" in df.columns:
+        df["locality_listing_count"] = df.groupby("locality")["locality"].transform("size")
+
     if "property_type" in df.columns:
         unknown_property_types = sorted(set(df["property_type"].dropna()) - set(PROPERTY_TYPE_ENCODING))
         if unknown_property_types:
@@ -218,6 +248,8 @@ def clean_for_modeling_with_report(
     for col in MODEL_NUMERIC_COLS:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df = add_location_clusters(df)
 
     required_cols = [col for col in ["price_vnd", "area_m2"] if col in df.columns]
     if required_cols:

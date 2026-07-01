@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import tempfile
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer, TransformedTargetRegressor
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error, r2_score
 from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
@@ -31,9 +33,11 @@ DEFAULT_INPUT = ROOT / "data" / "processed" / "real_estate_cleaned_2.csv"
 DEFAULT_RAW_INPUT = ROOT / "data" / "processed" / "alonhadat_features.csv"
 DEFAULT_RESULTS = ROOT / "data" / "processed" / "model_results.csv"
 DEFAULT_IMPORTANCE_RESULTS = ROOT / "data" / "processed" / "feature_importance.csv"
+DEFAULT_PREDICTIONS = ROOT / "data" / "processed" / "model_predictions.csv"
 DEFAULT_IMPORTANCE_PLOT_DIR = ROOT / "data" / "processed" / "feature_importance_plots"
 DEFAULT_WANDB_DIR = Path(tempfile.gettempdir()) / "real_estate_valuation_wandb"
 DEFAULT_MODEL_DIR = ROOT / "models"
+DEFAULT_MATPLOTLIB_CONFIG_DIR = Path(tempfile.gettempdir()) / "real_estate_valuation_matplotlib"
 TARGETS = ["price_vnd", "price_per_m2"]
 LEAKAGE_COLS = ["price_vnd", "price_per_m2"]
 RANDOM_STATE = 42
@@ -45,6 +49,19 @@ def configure_console_encoding() -> None:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
+
+
+def suppress_known_dependency_warnings() -> None:
+    os.environ.setdefault("MPLCONFIGDIR", str(DEFAULT_MATPLOTLIB_CONFIG_DIR))
+    warnings.filterwarnings(
+        "ignore",
+        message="X does not have valid feature names, but LGBMRegressor was fitted with feature names",
+        category=UserWarning,
+    )
+
+
+def print_progress(stage: str, training_scope: str, target: str, model_name: str, detail: str) -> None:
+    print(f"[{stage}] {training_scope} | {target} | {model_name}: {detail}", flush=True)
 
 
 def can_encode_for_console(value: Path) -> bool:
@@ -75,6 +92,12 @@ def parse_args(default_models: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--results", type=Path, default=DEFAULT_RESULTS, help="Output CSV for model metrics.")
+    parser.add_argument(
+        "--predictions-output",
+        type=Path,
+        default=DEFAULT_PREDICTIONS,
+        help="Output CSV for prediction-level errors when --save-predictions is used.",
+    )
     parser.add_argument(
         "--importance-results",
         type=Path,
@@ -121,6 +144,21 @@ def parse_args(default_models: list[str] | None = None) -> argparse.Namespace:
         "--separate-property-models",
         action="store_true",
         help="Also train/evaluate separate models for each property_type value.",
+    )
+    parser.add_argument(
+        "--routed-property-models",
+        action="store_true",
+        help="Evaluate routed specialist predictions by property_type during CV.",
+    )
+    parser.add_argument(
+        "--save-predictions",
+        action="store_true",
+        help="Write holdout/CV prediction-level errors for diagnostics.",
+    )
+    parser.add_argument(
+        "--derive-price-vnd-from-price-per-m2",
+        action="store_true",
+        help="Also score price_vnd derived from predicted price_per_m2 times area_m2.",
     )
     parser.add_argument(
         "--no-save-models",
@@ -219,6 +257,46 @@ def build_preprocessor(x: pd.DataFrame) -> ColumnTransformer:
     )
 
 
+class LocalityTargetEncoder(BaseEstimator, TransformerMixin):
+    def __init__(self, column: str = "locality") -> None:
+        self.column = column
+
+    def fit(self, x: pd.DataFrame, y: pd.Series | np.ndarray | None = None) -> "LocalityTargetEncoder":
+        self.global_median_ = float(np.nanmedian(y)) if y is not None else 0.0
+        self.mapping_: dict[str, float] = {}
+        self.counts_: dict[str, int] = {}
+
+        if y is None or self.column not in x.columns:
+            return self
+
+        frame = pd.DataFrame(
+            {
+                self.column: x[self.column].astype("string"),
+                "target": pd.Series(y, index=x.index),
+            }
+        )
+        grouped = frame.groupby(self.column, dropna=False)["target"]
+        self.mapping_ = grouped.median().astype(float).to_dict()
+        self.counts_ = grouped.size().astype(int).to_dict()
+        return self
+
+    def transform(self, x: pd.DataFrame) -> pd.DataFrame:
+        transformed = x.copy()
+        if self.column not in transformed.columns:
+            transformed[f"{self.column}_cv_target_median"] = self.global_median_
+            transformed[f"{self.column}_cv_target_count"] = 0
+            return transformed
+
+        locality = transformed[self.column].astype("string")
+        transformed[f"{self.column}_cv_target_median"] = (
+            locality.map(self.mapping_).astype(float).fillna(self.global_median_)
+        )
+        transformed[f"{self.column}_cv_target_count"] = (
+            locality.map(self.counts_).astype(float).fillna(0)
+        )
+        return transformed
+
+
 def load_modeling_data(input_path: Path, clean_input: bool) -> pd.DataFrame:
     df = pd.read_csv(input_path)
     if clean_input:
@@ -249,9 +327,13 @@ def positive_predictions(predictions: np.ndarray) -> np.ndarray:
 
 
 def build_training_model(x: pd.DataFrame, estimator: object) -> TransformedTargetRegressor:
+    preprocessor_schema = x.copy()
+    preprocessor_schema["locality_cv_target_median"] = 0.0
+    preprocessor_schema["locality_cv_target_count"] = 0.0
     pipeline = Pipeline(
         steps=[
-            ("preprocess", build_preprocessor(x)),
+            ("locality_target_encode", LocalityTargetEncoder()),
+            ("preprocess", build_preprocessor(preprocessor_schema)),
             ("model", estimator),
         ]
     )
@@ -269,6 +351,49 @@ def score_predictions(y_true: pd.Series, predictions: np.ndarray) -> dict[str, f
         "mae": mean_absolute_error(y_true, predictions),
         "r2": r2_score(y_true, predictions),
     }
+
+
+def make_prediction_records(
+    x: pd.DataFrame,
+    y_true: pd.Series,
+    predictions: np.ndarray,
+    *,
+    training_scope: str,
+    target: str,
+    model_name: str,
+    split: str,
+    fold: int | str,
+    source_df: pd.DataFrame | None = None,
+) -> list[dict[str, float | int | str]]:
+    predictions = positive_predictions(predictions)
+    y_true_array = y_true.to_numpy(dtype=float)
+    denominator = np.where(y_true_array != 0, y_true_array, np.nan)
+    ape = np.abs((y_true_array - predictions) / denominator) * 100
+
+    records: list[dict[str, float | int | str]] = []
+    for row_number, index in enumerate(x.index):
+        source = source_df if source_df is not None else x
+        records.append(
+            {
+                "training_scope": training_scope,
+                "target": target,
+                "model": model_name,
+                "split": split,
+                "fold": str(fold),
+                "row_index": int(index),
+                "property_type": source.at[index, "property_type"] if "property_type" in source.columns else np.nan,
+                "locality": source.at[index, "locality"] if "locality" in source.columns else "",
+                "area_m2": source.at[index, "area_m2"] if "area_m2" in source.columns else np.nan,
+                "road_width_m": source.at[index, "road_width_m"] if "road_width_m" in source.columns else np.nan,
+                "price_vnd": source.at[index, "price_vnd"] if "price_vnd" in source.columns else np.nan,
+                "price_per_m2": source.at[index, "price_per_m2"] if "price_per_m2" in source.columns else np.nan,
+                "actual": float(y_true_array[row_number]),
+                "prediction": float(predictions[row_number]),
+                "absolute_error": float(abs(y_true_array[row_number] - predictions[row_number])),
+                "absolute_percentage_error": float(ape[row_number]),
+            }
+        )
+    return records
 
 
 def get_property_type_strata(x: pd.DataFrame) -> pd.Series | None:
@@ -473,7 +598,13 @@ def train_one_target(
     test_size: float,
     random_state: int,
     cv_folds: int,
-) -> tuple[list[dict[str, float | int | str]], list[dict[str, float | int | str]]]:
+    save_predictions: bool,
+    derive_price_vnd_from_price_per_m2: bool,
+) -> tuple[
+    list[dict[str, float | int | str]],
+    list[dict[str, float | int | str]],
+    list[dict[str, float | int | str]],
+]:
     x, y = make_feature_target(df, target)
     strata = get_property_type_strata(x)
     x_train, x_test, y_train, y_test = train_test_split(
@@ -486,12 +617,27 @@ def train_one_target(
 
     results: list[dict[str, float | int | str]] = []
     feature_importances: list[dict[str, float | int | str]] = []
+    prediction_records: list[dict[str, float | int | str]] = []
 
     for model_name, estimator in build_models(random_state, model_names).items():
+        print_progress("train", training_scope, target, model_name, "fit holdout model")
         model = build_training_model(x_train, estimator)
         model.fit(x_train, y_train)
-        holdout_scores = score_predictions(y_test, model.predict(x_test))
-        cv_scores = cross_validate_model(x, y, model_name, random_state, cv_folds, strata)
+        print_progress("train", training_scope, target, model_name, "score holdout model")
+        holdout_predictions = model.predict(x_test)
+        holdout_scores = score_predictions(y_test, holdout_predictions)
+        cv_scores, cv_prediction_records = cross_validate_model(
+            x=x,
+            y=y,
+            model_name=model_name,
+            random_state=random_state,
+            cv_folds=cv_folds,
+            strata=strata,
+            training_scope=training_scope,
+            target=target,
+            save_predictions=save_predictions,
+            source_df=df,
+        )
 
         result = {
             "training_scope": training_scope,
@@ -506,6 +652,32 @@ def train_one_target(
         }
         result.update(cv_scores)
         results.append(result)
+        prediction_records.extend(cv_prediction_records)
+        print_progress(
+            "done",
+            training_scope,
+            target,
+            model_name,
+            (
+                f"holdout MAPE={holdout_scores['mape_percent']:.2f}% "
+                f"CV MAPE={cv_scores.get('cv_mape_percent_mean', float('nan')):.2f}%"
+            ),
+        )
+
+        if save_predictions:
+            prediction_records.extend(
+                make_prediction_records(
+                    x_test,
+                    y_test,
+                    holdout_predictions,
+                    training_scope=training_scope,
+                    target=target,
+                    model_name=model_name,
+                    split="holdout",
+                    fold="holdout",
+                    source_df=df,
+                )
+            )
 
         if save_models:
             model_prefix = "" if training_scope == "global" else f"{training_scope}_"
@@ -514,7 +686,62 @@ def train_one_target(
 
         feature_importances.extend(extract_feature_importance(model, target, model_name, training_scope))
 
-    return results, feature_importances
+        if derive_price_vnd_from_price_per_m2 and target == "price_per_m2" and "price_vnd" in df.columns:
+            print_progress("derive", training_scope, target, model_name, "score price_vnd from price_per_m2")
+            derived_holdout_predictions = positive_predictions(holdout_predictions) * x_test["area_m2"].to_numpy()
+            derived_y_test = df.loc[x_test.index, "price_vnd"]
+            derived_scores = score_predictions(derived_y_test, derived_holdout_predictions)
+            derived_cv_scores, derived_cv_prediction_records = cross_validate_price_vnd_from_price_per_m2(
+                x=x,
+                y=y,
+                model_name=model_name,
+                random_state=random_state,
+                cv_folds=cv_folds,
+                strata=strata,
+                training_scope=training_scope,
+                save_predictions=save_predictions,
+                source_df=df,
+            )
+            derived_result = {
+                "training_scope": training_scope,
+                "target": "price_vnd_from_price_per_m2",
+                "model": model_name,
+                "mape_percent": derived_scores["mape_percent"],
+                "mae": derived_scores["mae"],
+                "r2": derived_scores["r2"],
+                "train_rows": len(x_train),
+                "test_rows": len(x_test),
+                "feature_count_before_encoding": x_train.shape[1],
+            }
+            derived_result.update(derived_cv_scores)
+            results.append(derived_result)
+            prediction_records.extend(derived_cv_prediction_records)
+            print_progress(
+                "done",
+                training_scope,
+                "price_vnd_from_price_per_m2",
+                model_name,
+                (
+                    f"holdout MAPE={derived_scores['mape_percent']:.2f}% "
+                    f"CV MAPE={derived_cv_scores.get('cv_mape_percent_mean', float('nan')):.2f}%"
+                ),
+            )
+            if save_predictions:
+                prediction_records.extend(
+                    make_prediction_records(
+                        x_test,
+                        derived_y_test,
+                        derived_holdout_predictions,
+                        training_scope=training_scope,
+                        target="price_vnd_from_price_per_m2",
+                        model_name=model_name,
+                        split="holdout",
+                        fold="holdout",
+                        source_df=df,
+                    )
+                )
+
+    return results, feature_importances, prediction_records
 
 
 def cross_validate_model(
@@ -524,13 +751,18 @@ def cross_validate_model(
     random_state: int,
     cv_folds: int,
     strata: pd.Series | None,
-) -> dict[str, float | int | str]:
+    training_scope: str,
+    target: str,
+    save_predictions: bool,
+    source_df: pd.DataFrame,
+) -> tuple[dict[str, float | int | str], list[dict[str, float | int | str]]]:
     if cv_folds <= 1:
-        return {"cv_folds": 1}
+        return {"cv_folds": 1}, []
     if cv_folds > len(x):
         raise ValueError(f"--cv-folds must be <= row count ({len(x)}). Got {cv_folds}.")
 
     fold_scores: list[dict[str, float]] = []
+    prediction_records: list[dict[str, float | int | str]] = []
     if strata is not None and strata.value_counts(dropna=False).min() >= cv_folds:
         splitter = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
         split_iterator = splitter.split(x, strata)
@@ -540,7 +772,14 @@ def cross_validate_model(
         split_iterator = splitter.split(x)
         split_strategy = "kfold"
 
-    for train_index, test_index in split_iterator:
+    for fold_number, (train_index, test_index) in enumerate(split_iterator, start=1):
+        print_progress(
+            "cv",
+            training_scope,
+            target,
+            model_name,
+            f"fold {fold_number}/{cv_folds} using {split_strategy}",
+        )
         x_train = x.iloc[train_index]
         x_test = x.iloc[test_index]
         y_train = y.iloc[train_index]
@@ -548,7 +787,22 @@ def cross_validate_model(
         estimator = build_models(random_state, [model_name])[model_name]
         model = build_training_model(x_train, estimator)
         model.fit(x_train, y_train)
-        fold_scores.append(score_predictions(y_test, model.predict(x_test)))
+        predictions = model.predict(x_test)
+        fold_scores.append(score_predictions(y_test, predictions))
+        if save_predictions:
+            prediction_records.extend(
+                make_prediction_records(
+                    x_test,
+                    y_test,
+                    predictions,
+                    training_scope=training_scope,
+                    target=target,
+                    model_name=model_name,
+                    split="cv",
+                    fold=fold_number,
+                    source_df=source_df,
+                )
+            )
 
     return {
         "cv_folds": cv_folds,
@@ -559,7 +813,78 @@ def cross_validate_model(
         "cv_mae_std": float(np.std([score["mae"] for score in fold_scores], ddof=1)),
         "cv_r2_mean": float(np.mean([score["r2"] for score in fold_scores])),
         "cv_r2_std": float(np.std([score["r2"] for score in fold_scores], ddof=1)),
-    }
+    }, prediction_records
+
+
+def cross_validate_price_vnd_from_price_per_m2(
+    x: pd.DataFrame,
+    y: pd.Series,
+    model_name: str,
+    random_state: int,
+    cv_folds: int,
+    strata: pd.Series | None,
+    training_scope: str,
+    save_predictions: bool,
+    source_df: pd.DataFrame,
+) -> tuple[dict[str, float | int | str], list[dict[str, float | int | str]]]:
+    if cv_folds <= 1:
+        return {"cv_folds": 1}, []
+    if cv_folds > len(x):
+        raise ValueError(f"--cv-folds must be <= row count ({len(x)}). Got {cv_folds}.")
+
+    fold_scores: list[dict[str, float]] = []
+    prediction_records: list[dict[str, float | int | str]] = []
+    if strata is not None and strata.value_counts(dropna=False).min() >= cv_folds:
+        splitter = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+        split_iterator = splitter.split(x, strata)
+        split_strategy = "property_type_stratified"
+    else:
+        splitter = KFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+        split_iterator = splitter.split(x)
+        split_strategy = "kfold"
+
+    for fold_number, (train_index, test_index) in enumerate(split_iterator, start=1):
+        print_progress(
+            "cv",
+            training_scope,
+            "price_vnd_from_price_per_m2",
+            model_name,
+            f"fold {fold_number}/{cv_folds} using {split_strategy}",
+        )
+        x_train = x.iloc[train_index]
+        x_test = x.iloc[test_index]
+        y_train = y.iloc[train_index]
+        estimator = build_models(random_state, [model_name])[model_name]
+        model = build_training_model(x_train, estimator)
+        model.fit(x_train, y_train)
+        derived_predictions = positive_predictions(model.predict(x_test)) * x_test["area_m2"].to_numpy()
+        derived_y_test = source_df.loc[x_test.index, "price_vnd"]
+        fold_scores.append(score_predictions(derived_y_test, derived_predictions))
+        if save_predictions:
+            prediction_records.extend(
+                make_prediction_records(
+                    x_test,
+                    derived_y_test,
+                    derived_predictions,
+                    training_scope=training_scope,
+                    target="price_vnd_from_price_per_m2",
+                    model_name=model_name,
+                    split="cv",
+                    fold=fold_number,
+                    source_df=source_df,
+                )
+            )
+
+    return {
+        "cv_folds": cv_folds,
+        "cv_split_strategy": split_strategy,
+        "cv_mape_percent_mean": float(np.mean([score["mape_percent"] for score in fold_scores])),
+        "cv_mape_percent_std": float(np.std([score["mape_percent"] for score in fold_scores], ddof=1)),
+        "cv_mae_mean": float(np.mean([score["mae"] for score in fold_scores])),
+        "cv_mae_std": float(np.std([score["mae"] for score in fold_scores], ddof=1)),
+        "cv_r2_mean": float(np.mean([score["r2"] for score in fold_scores])),
+        "cv_r2_std": float(np.std([score["r2"] for score in fold_scores], ddof=1)),
+    }, prediction_records
 
 
 def build_training_scopes(
@@ -585,13 +910,194 @@ def build_training_scopes(
     return scopes
 
 
+def train_routed_property_models(
+    df: pd.DataFrame,
+    target: str,
+    model_names: list[str] | None,
+    test_size: float,
+    random_state: int,
+    cv_folds: int,
+    save_predictions: bool,
+) -> tuple[list[dict[str, float | int | str]], list[dict[str, float | int | str]]]:
+    if "property_type" not in df.columns:
+        raise ValueError("--routed-property-models requires a property_type column.")
+
+    x, y = make_feature_target(df, target)
+    strata = get_property_type_strata(x)
+    x_train, x_test, y_train, y_test = train_test_split(
+        x,
+        y,
+        test_size=test_size,
+        random_state=random_state,
+        stratify=strata,
+    )
+
+    results: list[dict[str, float | int | str]] = []
+    prediction_records: list[dict[str, float | int | str]] = []
+    for model_name in build_models(random_state, model_names):
+        print_progress("train", "routed_property", target, model_name, "fit routed holdout models")
+        holdout_predictions = predict_with_property_router(x_train, y_train, x_test, model_name, random_state)
+        holdout_scores = score_predictions(y_test, holdout_predictions)
+        cv_scores, cv_prediction_records = cross_validate_routed_property_model(
+            x=x,
+            y=y,
+            model_name=model_name,
+            random_state=random_state,
+            cv_folds=cv_folds,
+            strata=strata,
+            target=target,
+            save_predictions=save_predictions,
+            source_df=df,
+        )
+        result = {
+            "training_scope": "routed_property",
+            "target": target,
+            "model": model_name,
+            "mape_percent": holdout_scores["mape_percent"],
+            "mae": holdout_scores["mae"],
+            "r2": holdout_scores["r2"],
+            "train_rows": len(x_train),
+            "test_rows": len(x_test),
+            "feature_count_before_encoding": x_train.shape[1],
+        }
+        result.update(cv_scores)
+        results.append(result)
+        prediction_records.extend(cv_prediction_records)
+        print_progress(
+            "done",
+            "routed_property",
+            target,
+            model_name,
+            (
+                f"holdout MAPE={holdout_scores['mape_percent']:.2f}% "
+                f"CV MAPE={cv_scores.get('cv_mape_percent_mean', float('nan')):.2f}%"
+            ),
+        )
+        if save_predictions:
+            prediction_records.extend(
+                make_prediction_records(
+                    x_test,
+                    y_test,
+                    holdout_predictions,
+                    training_scope="routed_property",
+                    target=target,
+                    model_name=model_name,
+                    split="holdout",
+                    fold="holdout",
+                    source_df=df,
+                )
+            )
+
+    return results, prediction_records
+
+
+def predict_with_property_router(
+    x_train: pd.DataFrame,
+    y_train: pd.Series,
+    x_test: pd.DataFrame,
+    model_name: str,
+    random_state: int,
+) -> np.ndarray:
+    predictions = pd.Series(np.nan, index=x_test.index, dtype=float)
+
+    for property_type in sorted(x_train["property_type"].dropna().unique().tolist()):
+        train_mask = x_train["property_type"] == property_type
+        test_mask = x_test["property_type"] == property_type
+        if not test_mask.any():
+            continue
+
+        estimator = build_models(random_state, [model_name])[model_name]
+        model = build_training_model(x_train.loc[train_mask], estimator)
+        model.fit(x_train.loc[train_mask], y_train.loc[train_mask])
+        predictions.loc[test_mask] = model.predict(x_test.loc[test_mask])
+
+    if predictions.isna().any():
+        estimator = build_models(random_state, [model_name])[model_name]
+        fallback_model = build_training_model(x_train, estimator)
+        fallback_model.fit(x_train, y_train)
+        missing_index = predictions[predictions.isna()].index
+        predictions.loc[missing_index] = fallback_model.predict(x_test.loc[missing_index])
+
+    return predictions.to_numpy()
+
+
+def cross_validate_routed_property_model(
+    x: pd.DataFrame,
+    y: pd.Series,
+    model_name: str,
+    random_state: int,
+    cv_folds: int,
+    strata: pd.Series | None,
+    target: str,
+    save_predictions: bool,
+    source_df: pd.DataFrame,
+) -> tuple[dict[str, float | int | str], list[dict[str, float | int | str]]]:
+    if cv_folds <= 1:
+        return {"cv_folds": 1}, []
+    if cv_folds > len(x):
+        raise ValueError(f"--cv-folds must be <= row count ({len(x)}). Got {cv_folds}.")
+
+    fold_scores: list[dict[str, float]] = []
+    prediction_records: list[dict[str, float | int | str]] = []
+    if strata is not None and strata.value_counts(dropna=False).min() >= cv_folds:
+        splitter = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+        split_iterator = splitter.split(x, strata)
+        split_strategy = "property_type_stratified_router"
+    else:
+        splitter = KFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+        split_iterator = splitter.split(x)
+        split_strategy = "kfold_router"
+
+    for fold_number, (train_index, test_index) in enumerate(split_iterator, start=1):
+        print_progress(
+            "cv",
+            "routed_property",
+            target,
+            model_name,
+            f"fold {fold_number}/{cv_folds} using {split_strategy}",
+        )
+        x_train = x.iloc[train_index]
+        x_test = x.iloc[test_index]
+        y_train = y.iloc[train_index]
+        y_test = y.iloc[test_index]
+        predictions = predict_with_property_router(x_train, y_train, x_test, model_name, random_state)
+        fold_scores.append(score_predictions(y_test, predictions))
+        if save_predictions:
+            prediction_records.extend(
+                make_prediction_records(
+                    x_test,
+                    y_test,
+                    predictions,
+                    training_scope="routed_property",
+                    target=target,
+                    model_name=model_name,
+                    split="cv",
+                    fold=fold_number,
+                    source_df=source_df,
+                )
+            )
+
+    return {
+        "cv_folds": cv_folds,
+        "cv_split_strategy": split_strategy,
+        "cv_mape_percent_mean": float(np.mean([score["mape_percent"] for score in fold_scores])),
+        "cv_mape_percent_std": float(np.std([score["mape_percent"] for score in fold_scores], ddof=1)),
+        "cv_mae_mean": float(np.mean([score["mae"] for score in fold_scores])),
+        "cv_mae_std": float(np.std([score["mae"] for score in fold_scores], ddof=1)),
+        "cv_r2_mean": float(np.mean([score["r2"] for score in fold_scores])),
+        "cv_r2_std": float(np.std([score["r2"] for score in fold_scores], ddof=1)),
+    }, prediction_records
+
+
 def log_to_wandb(
     args: argparse.Namespace,
     results_df: pd.DataFrame,
     feature_importance_df: pd.DataFrame,
+    predictions_df: pd.DataFrame,
     input_path: Path,
     results_path: Path,
     importance_path: Path,
+    predictions_path: Path,
     importance_plot_paths: list[Path],
     model_dir: Path,
     row_count: int,
@@ -617,6 +1123,9 @@ def log_to_wandb(
             "random_state": args.random_state,
             "cv_folds": args.cv_folds,
             "separate_property_models": args.separate_property_models,
+            "routed_property_models": args.routed_property_models,
+            "save_predictions": args.save_predictions,
+            "derive_price_vnd_from_price_per_m2": args.derive_price_vnd_from_price_per_m2,
             "targets": TARGETS,
             "models": list(build_models(args.random_state, args.models).keys()),
             "row_count": row_count,
@@ -628,6 +1137,8 @@ def log_to_wandb(
     wandb.log({"results": wandb.Table(dataframe=results_df)})
     if not feature_importance_df.empty:
         wandb.log({"feature_importance": wandb.Table(dataframe=feature_importance_df)})
+    if not predictions_df.empty:
+        wandb.log({"predictions": wandb.Table(dataframe=predictions_df)})
     for plot_path in importance_plot_paths:
         wandb.log({f"feature_importance_plots/{plot_path.stem}": wandb.Image(str(plot_path))})
 
@@ -662,6 +1173,8 @@ def log_to_wandb(
     results_artifact.add_file(str(results_path))
     if importance_path.exists():
         results_artifact.add_file(str(importance_path))
+    if predictions_path.exists():
+        results_artifact.add_file(str(predictions_path))
     for plot_path in importance_plot_paths:
         results_artifact.add_file(str(plot_path))
     run.log_artifact(results_artifact)
@@ -677,11 +1190,13 @@ def log_to_wandb(
 
 def main(default_models: list[str] | None = None) -> None:
     configure_console_encoding()
+    suppress_known_dependency_warnings()
 
     args = parse_args(default_models)
     input_path = resolve_path(args.input)
     results_path = resolve_path(args.results)
     importance_path = resolve_path(args.importance_results)
+    predictions_path = resolve_path(args.predictions_output)
     importance_plot_dir = resolve_path(args.importance_plot_dir)
     model_dir = resolve_path(args.model_dir)
 
@@ -692,10 +1207,11 @@ def main(default_models: list[str] | None = None) -> None:
 
     all_results: list[dict[str, float | int | str]] = []
     all_feature_importances: list[dict[str, float | int | str]] = []
+    all_predictions: list[dict[str, float | int | str]] = []
     training_scopes = build_training_scopes(df, args.separate_property_models)
     for training_scope, scope_df in training_scopes:
         for target in TARGETS:
-            target_results, target_feature_importances = train_one_target(
+            target_results, target_feature_importances, target_predictions = train_one_target(
                 df=scope_df,
                 target=target,
                 training_scope=training_scope,
@@ -705,9 +1221,26 @@ def main(default_models: list[str] | None = None) -> None:
                 test_size=args.test_size,
                 random_state=args.random_state,
                 cv_folds=args.cv_folds,
+                save_predictions=args.save_predictions,
+                derive_price_vnd_from_price_per_m2=args.derive_price_vnd_from_price_per_m2,
             )
             all_results.extend(target_results)
             all_feature_importances.extend(target_feature_importances)
+            all_predictions.extend(target_predictions)
+
+    if args.routed_property_models:
+        for target in TARGETS:
+            routed_results, routed_predictions = train_routed_property_models(
+                df=df,
+                target=target,
+                model_names=args.models,
+                test_size=args.test_size,
+                random_state=args.random_state,
+                cv_folds=args.cv_folds,
+                save_predictions=args.save_predictions,
+            )
+            all_results.extend(routed_results)
+            all_predictions.extend(routed_predictions)
 
     results_df = pd.DataFrame(all_results).sort_values(["target", "training_scope", "mape_percent"])
     results_path.parent.mkdir(parents=True, exist_ok=True)
@@ -718,6 +1251,10 @@ def main(default_models: list[str] | None = None) -> None:
         feature_importance_df = feature_importance_df.sort_values(["training_scope", "target", "model", "rank"])
     importance_path.parent.mkdir(parents=True, exist_ok=True)
     feature_importance_df.to_csv(importance_path, index=False)
+    predictions_df = pd.DataFrame(all_predictions)
+    if args.save_predictions:
+        predictions_path.parent.mkdir(parents=True, exist_ok=True)
+        predictions_df.to_csv(predictions_path, index=False)
     importance_plot_paths: list[Path] = []
     if not args.no_importance_plots:
         importance_plot_paths = plot_feature_importance(
@@ -730,9 +1267,11 @@ def main(default_models: list[str] | None = None) -> None:
         args,
         results_df,
         feature_importance_df,
+        predictions_df,
         input_path,
         results_path,
         importance_path,
+        predictions_path,
         importance_plot_paths,
         model_dir,
         len(df),
@@ -746,6 +1285,8 @@ def main(default_models: list[str] | None = None) -> None:
             print(f"  {training_scope}: {len(scope_df)} rows")
     print(f"Results: {results_path}")
     print(f"Feature importance: {importance_path}")
+    if args.save_predictions:
+        print(f"Predictions: {predictions_path}")
     if importance_plot_paths:
         print(f"Feature importance plots: {importance_plot_dir}")
     if not args.no_save_models:

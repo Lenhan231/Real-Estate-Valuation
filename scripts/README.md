@@ -12,6 +12,9 @@ This note summarizes the modeling/training refactor and current context so anoth
   - Trains selected registered models.
   - Uses property-type stratified train/test and CV splits when `property_type` is available.
   - Supports `--separate-property-models` to append specialist evaluations for each property type.
+  - Supports `--routed-property-models` to evaluate a property-type router over specialist models.
+  - Supports `--save-predictions` for row-level error diagnostics.
+  - Supports `--derive-price-vnd-from-price-per-m2` to test deriving total price from predicted unit price.
   - Writes metrics, feature importance, plots, saved models, and optional W&B logs.
 - Individual model definitions live in `scripts/training_models/`.
 - Shortcut launchers exist for single-model training:
@@ -63,6 +66,8 @@ Do not edit `train_regression_models.py` for normal model additions. Edit it onl
 - Does not add `post_year` because the user considered same-year signal less useful.
 - Adds `nearest_school_km` to median imputation.
 - Drops price-per-m2 outliers with a per-property-type IQR filter.
+- Adds unsupervised lat/lon KMeans cluster features: `location_cluster_20`, `location_cluster_50`, `location_cluster_100`.
+- Adds `locality_listing_count`.
 - Adds property-type interaction features because `nha_mat_tien` and `nha_trong_hem` have very different price distributions:
   - `property_type_area_m2`
   - `property_type_road_width_m`
@@ -76,7 +81,7 @@ After latest cleaning, the modeling file had:
 
 - Raw rows: `3780`
 - Cleaned rows: `3295`
-- Cleaned columns: `44`
+- Cleaned columns: `48`
 - Missing values: `0`
 
 Latest IQR filtering report:
@@ -140,6 +145,24 @@ Compare global models against property-type specialist models:
 .venv/bin/python scripts/train_regression_models.py --models lightgbm catboost ensemble --cv-folds 5 --separate-property-models --wandb
 ```
 
+Save prediction-level diagnostics, evaluate routed specialists, and test derived total price:
+
+```bash
+.venv/bin/python scripts/train_regression_models.py --models lightgbm catboost ensemble --cv-folds 5 --separate-property-models --routed-property-models --derive-price-vnd-from-price-per-m2 --save-predictions --wandb
+```
+
+Analyze saved prediction errors:
+
+```bash
+.venv/bin/python scripts/analyze_model_errors.py --predictions data/processed/model_predictions.csv
+```
+
+Run a small random-search tuning job:
+
+```bash
+.venv/bin/python scripts/tune_models.py --models lightgbm catboost xgboost --target price_vnd --trials 50 --cv-folds 5
+```
+
 Using the runner with W&B:
 
 ```bash
@@ -167,27 +190,62 @@ Then rerun training from `.venv/bin/python`.
 
 ## Current Results Snapshot
 
-The current `data/processed/model_results.csv` may be from the latest smoke test. The last full 5-fold global run showed:
+Latest full benchmark was written on `2026-07-01 21:17` to:
+
+- `data/processed/model_results.csv`
+- `data/processed/model_predictions.csv`
+
+Run shape:
+
+- `33` result rows.
+- `3295` modeling rows.
+- `5` CV folds.
+- Models: `lightgbm`, `catboost`, `ensemble`.
+- Scopes: `global`, `property_type_0`, `property_type_1`, `routed_property`.
+- Targets: `price_vnd`, `price_per_m2`, and derived `price_vnd_from_price_per_m2`.
+
+Use `cv_mape_percent_mean` and `cv_r2_mean` as the official comparison metrics.
 
 ### `price_per_m2`
 
-- Best holdout MAPE: `ensemble`, about `25.77%`.
-- Best CV MAPE: `lightgbm`, about `25.45%`.
-- Best holdout R2: `catboost`, about `0.675`.
-- Best CV R2: `ensemble`, about `0.693`.
+- Best global CV MAPE: `ensemble`, `24.16%`.
+- Best global CV R2: `ensemble`, `0.730`.
+- Best specialist CV MAPE: `property_type_0 / ensemble`, `19.48%`.
+- Hardest specialist: `property_type_1 / ensemble`, `29.18%` CV MAPE.
 
 ### `price_vnd`
 
-- Best holdout MAPE: `catboost`, about `26.90%`.
-- Best CV MAPE: `lightgbm`, about `25.79%`.
-- Best holdout R2: `ensemble`, about `0.723`.
-- Best CV R2: `lightgbm`, about `0.725`.
+- Best global CV MAPE: `ensemble`, `24.09%`.
+- Best global CV R2: `ensemble`, `0.782`.
+- Best global holdout MAPE: `catboost`, `24.64%`.
+- Best global holdout R2: `catboost`, `0.792`.
+- Best specialist CV MAPE: `property_type_0 / ensemble`, `19.91%`.
+- Best `property_type_1` specialist: `catboost`, `28.57%` CV MAPE and `0.735` CV R2.
+
+### Derived `price_vnd_from_price_per_m2`
+
+- Best global CV MAPE: `ensemble`, `24.16%`.
+- Best global holdout R2: `catboost`, `0.809`.
+- Best specialist CV MAPE: `property_type_0 / ensemble`, `19.48%`.
+- Best specialist CV R2: `property_type_0 / catboost`, `0.819`.
+- Derived total price did not beat direct `price_vnd` globally by CV MAPE, but it is useful to keep for comparison because it gives strong holdout R2.
+
+### Routed Specialist Models
+
+`routed_property` trains specialist models by `property_type` and routes each prediction to the matching specialist.
+
+Latest results:
+
+- `routed_property / price_vnd / ensemble`: `24.46%` CV MAPE, `0.776` CV R2.
+- `global / price_vnd / ensemble`: `24.09%` CV MAPE, `0.782` CV R2.
+
+The routed approach is not the winner yet. Keep it as an experiment, not the default production choice.
 
 Current practical ranking:
 
-1. `lightgbm`
+1. `ensemble`
 2. `catboost`
-3. `ensemble`
+3. `lightgbm`
 4. `xgboost`
 5. `random_forest`
 6. `linear_regression`
@@ -204,10 +262,32 @@ Current practical ranking:
 - Added property-type interaction features. In a CatBoost smoke test, `property_type_area_m2` and `property_type_road_width_m` appeared among the strongest features, supporting the user's hypothesis.
 - Added `--separate-property-models` comparison mode. It appends `global`, `property_type_0`, and `property_type_1` rows to `model_results.csv`; feature importance gets the same `training_scope` column.
 - A CatBoost 2-fold smoke test completed successfully after IQR filtering. Specialist models used normal K-fold, while global used property-type stratified CV.
+- Added CV-safe locality target encoding inside the sklearn pipeline. It is fit only on each train fold and appears as `locality_cv_target_median` / `locality_cv_target_count`.
+- Added `--save-predictions`, `--routed-property-models`, and `--derive-price-vnd-from-price-per-m2`.
+- Added `scripts/analyze_model_errors.py` for grouped error diagnostics.
+- Added `scripts/tune_models.py`; it writes best random-search params to `scripts/training_models/tuned_params.json`, and model builders load that file when present.
+
+Latest full-run diagnostics show the hardest segment is still `property_type=1` (`nha_mat_tien`), especially:
+
+- Low `price_per_m2` street-front homes.
+- Large-area homes, especially `area_m2 > 150`.
+- Sparse or noisy localities such as `phường tăng nhơn phú`.
+- Some road-width buckets, especially small road width inside `property_type=1`.
+
+The best `property_type_0` (`nha_trong_hem`) specialist is already around the `<20%` CV MAPE milestone. The global score is mostly being held back by `property_type_1`.
+
+Training output now suppresses the harmless LightGBM feature-name warning and prints progress lines such as:
+
+```text
+[train] global | price_vnd | lightgbm: fit holdout model
+[cv] global | price_vnd | lightgbm: fold 1/5 using property_type_stratified
+[done] global | price_vnd | lightgbm: holdout MAPE=26.16% CV MAPE=24.85%
+```
 
 ## Modeling Interpretation
 
 - The target is right-skewed. The trainer already uses `log1p` on targets and converts predictions back with `expm1`.
-- Good models are clustered around 25-27% MAPE and about 0.69-0.72 R2.
-- CV and holdout metrics are close for LightGBM/CatBoost/XGBoost/ensemble, which suggests the results are not just one lucky split.
-- Next useful work is probably tuning LightGBM/CatBoost and improving location features, not adding many more model families.
+- Current best global model is clustered around `24%` CV MAPE and `0.78` CV R2.
+- `property_type_0` can reach about `19.5-20%` CV MAPE depending on target strategy.
+- `property_type_1` remains around `28.5-30%` CV MAPE and is the main performance bottleneck.
+- Next useful work is focused `property_type_1` cleanup/feature work: better street/locality normalization, manual review of low-unit-price street-front rows, better large-area handling, and possibly more precise location features. Adding many more model families is less likely to move the score than fixing this segment.
