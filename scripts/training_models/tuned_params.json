@@ -1,0 +1,30 @@
+{
+  "catboost": {
+    "bagging_temperature": 2,
+    "depth": 8,
+    "iterations": 1600,
+    "l2_leaf_reg": 3,
+    "learning_rate": 0.05,
+    "random_strength": 2
+  },
+  "lightgbm": {
+    "colsample_bytree": 0.85,
+    "learning_rate": 0.01,
+    "min_child_samples": 10,
+    "n_estimators": 900,
+    "num_leaves": 31,
+    "reg_alpha": 0,
+    "reg_lambda": 0.5,
+    "subsample": 0.85
+  },
+  "xgboost": {
+    "colsample_bytree": 0.75,
+    "learning_rate": 0.03,
+    "max_depth": 6,
+    "min_child_weight": 5,
+    "n_estimators": 1600,
+    "reg_alpha": 0.1,
+    "reg_lambda": 3,
+    "subsample": 0.75
+  }
+}

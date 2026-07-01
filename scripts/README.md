@@ -190,7 +190,7 @@ Then rerun training from `.venv/bin/python`.
 
 ## Current Results Snapshot
 
-Latest full benchmark was written on `2026-07-01 21:17` to:
+Latest tuned full benchmark was written on `2026-07-01 23:51 +0700` to:
 
 - `data/processed/model_results.csv`
 - `data/processed/model_predictions.csv`
@@ -203,32 +203,34 @@ Run shape:
 - Models: `lightgbm`, `catboost`, `ensemble`.
 - Scopes: `global`, `property_type_0`, `property_type_1`, `routed_property`.
 - Targets: `price_vnd`, `price_per_m2`, and derived `price_vnd_from_price_per_m2`.
+- Tuned params loaded from `scripts/training_models/tuned_params.json`.
 
 Use `cv_mape_percent_mean` and `cv_r2_mean` as the official comparison metrics.
 
 ### `price_per_m2`
 
-- Best global CV MAPE: `ensemble`, `24.16%`.
-- Best global CV R2: `ensemble`, `0.730`.
-- Best specialist CV MAPE: `property_type_0 / ensemble`, `19.48%`.
-- Hardest specialist: `property_type_1 / ensemble`, `29.18%` CV MAPE.
+- Best global CV MAPE: `ensemble`, `24.00%`.
+- Best global CV R2: `lightgbm`, `0.728`.
+- Best specialist CV MAPE: `property_type_0 / ensemble`, `19.57%`.
+- Hardest specialist: `property_type_1 / ensemble`, `29.42%` CV MAPE.
 
 ### `price_vnd`
 
-- Best global CV MAPE: `ensemble`, `24.09%`.
-- Best global CV R2: `ensemble`, `0.782`.
-- Best global holdout MAPE: `catboost`, `24.64%`.
-- Best global holdout R2: `catboost`, `0.792`.
-- Best specialist CV MAPE: `property_type_0 / ensemble`, `19.91%`.
-- Best `property_type_1` specialist: `catboost`, `28.57%` CV MAPE and `0.735` CV R2.
+- Best global CV MAPE: `ensemble`, `23.72%`.
+- Best global CV R2: `ensemble`, `0.777`.
+- Best global holdout MAPE: `catboost`, `24.92%`.
+- Best global holdout R2: `lightgbm`, `0.754`.
+- Best specialist CV MAPE: `property_type_0 / ensemble`, `19.66%`.
+- Best `property_type_1` specialist by CV MAPE: `catboost`, `28.73%` CV MAPE and `0.718` CV R2.
+- Best `property_type_1` specialist by CV R2: `ensemble`, `28.92%` CV MAPE and `0.726` CV R2.
 
 ### Derived `price_vnd_from_price_per_m2`
 
-- Best global CV MAPE: `ensemble`, `24.16%`.
-- Best global holdout R2: `catboost`, `0.809`.
-- Best specialist CV MAPE: `property_type_0 / ensemble`, `19.48%`.
-- Best specialist CV R2: `property_type_0 / catboost`, `0.819`.
-- Derived total price did not beat direct `price_vnd` globally by CV MAPE, but it is useful to keep for comparison because it gives strong holdout R2.
+- Best global CV MAPE: `ensemble`, `24.00%`.
+- Best global holdout R2: `catboost`, `0.820`.
+- Best specialist CV MAPE: `property_type_0 / ensemble`, `19.57%`.
+- Best specialist CV R2: `property_type_0 / catboost`, `0.791`.
+- Derived total price still does not beat direct `price_vnd` globally by CV MAPE, but it remains useful as a comparison target.
 
 ### Routed Specialist Models
 
@@ -236,8 +238,8 @@ Use `cv_mape_percent_mean` and `cv_r2_mean` as the official comparison metrics.
 
 Latest results:
 
-- `routed_property / price_vnd / ensemble`: `24.46%` CV MAPE, `0.776` CV R2.
-- `global / price_vnd / ensemble`: `24.09%` CV MAPE, `0.782` CV R2.
+- `routed_property / price_vnd / ensemble`: `24.28%` CV MAPE, `0.773` CV R2.
+- `global / price_vnd / ensemble`: `23.72%` CV MAPE, `0.777` CV R2.
 
 The routed approach is not the winner yet. Keep it as an experiment, not the default production choice.
 
@@ -266,6 +268,8 @@ Current practical ranking:
 - Added `--save-predictions`, `--routed-property-models`, and `--derive-price-vnd-from-price-per-m2`.
 - Added `scripts/analyze_model_errors.py` for grouped error diagnostics.
 - Added `scripts/tune_models.py`; it writes best random-search params to `scripts/training_models/tuned_params.json`, and model builders load that file when present.
+- Current tuned params file contains entries for `lightgbm`, `catboost`, and `xgboost`; `ensemble` uses those tuned base models through their builders.
+- Tuning improved the best global `price_vnd` CV MAPE from about `24.09%` to `23.72%`, but global CV R2 moved from about `0.782` to `0.777`. This is a small MAPE win, not a breakthrough.
 
 Latest full-run diagnostics show the hardest segment is still `property_type=1` (`nha_mat_tien`), especially:
 
@@ -287,7 +291,7 @@ Training output now suppresses the harmless LightGBM feature-name warning and pr
 ## Modeling Interpretation
 
 - The target is right-skewed. The trainer already uses `log1p` on targets and converts predictions back with `expm1`.
-- Current best global model is clustered around `24%` CV MAPE and `0.78` CV R2.
+- Current best global model is clustered around `23.7-24.0%` CV MAPE and `0.77-0.78` CV R2.
 - `property_type_0` can reach about `19.5-20%` CV MAPE depending on target strategy.
 - `property_type_1` remains around `28.5-30%` CV MAPE and is the main performance bottleneck.
 - Next useful work is focused `property_type_1` cleanup/feature work: better street/locality normalization, manual review of low-unit-price street-front rows, better large-area handling, and possibly more precise location features. Adding many more model families is less likely to move the score than fixing this segment.
