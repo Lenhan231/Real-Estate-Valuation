@@ -1,6 +1,6 @@
 # House Price Prediction
 
-Real estate valuation ETL pipeline with geospatial feature engineering.
+A real estate valuation ETL pipeline featuring geospatial feature engineering for property price prediction.
 
 ## Quick Start
 
@@ -8,40 +8,43 @@ Real estate valuation ETL pipeline with geospatial feature engineering.
 # Install dependencies
 pip install -r docs/requirements.txt
 
-# Download POI data (first run only)
-python pipeline/ingestion/download_pois.py
-
-# Run pipeline
+# Run the pipeline
 python main.py
 ```
 
+> **Note:** Install **Warp CLI** before running the crawler.
+
 ## Documentation
 
-See [docs/](docs/) for detailed documentation:
+Detailed documentation is available in the `docs/` directory:
 
-- **[Documentation Index](docs/INDEX.md)** — All docs and quick reference
-- **[Project README](docs/README.md)** — Full project overview
-- **[Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)** — Architecture & technical details
-- **[Refactoring Guide](docs/REFACTORING_GUIDE.md)** — Code improvements & guidelines
+* **[Documentation Index](docs/INDEX.md)** — Quick reference and navigation
+* **[Project README](docs/README.md)** — Project overview and usage
+* **[Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)** — Architecture and technical implementation
+* **[Refactoring Guide](docs/REFACTORING_GUIDE.md)** — Code structure and refactoring guidelines
 
 ## Features
 
-- **Fast Geocoding** — Local mapping + Nominatim API with persistent cache
-- **POI Features** — Schools, hospitals, supermarkets, malls, transit (via BallTree spatial indices)
-- **Batch Processing** — Efficient pipeline with checkpointing (50 records/batch)
-- **Incremental Output** — Saves progress after each batch to prevent data loss
+* **Fast Geocoding** — Hybrid local mapping and Nominatim geocoding with persistent caching
+* **Geospatial Feature Engineering** — Distance-based features for schools, hospitals, supermarkets, shopping malls, and public transportation using BallTree spatial indices
+* **Batch Processing** — Processes data in configurable batches with checkpoint support
+* **Incremental Saving** — Automatically saves progress after each batch to minimize data loss
+* **Persistent Geocoding Cache** — Reuses previously geocoded addresses to reduce API requests and improve performance
 
-## Pipeline Steps
+## Pipeline
 
-1. Load & clean real estate data
-2. Add density features
-3. Geocode addresses (with caching)
-4. Extract geospatial POI features in batches
-5. Save final dataset with all engineered features
+1. Load and clean raw real estate data.
+2. Generate population density features.
+3. Geocode property addresses with cache support.
+4. Extract nearby points of interest (POI) features.
+5. Save the enriched dataset for downstream analysis and modeling.
 
-## Performance
+## Cache
 
-- **First run**: ~10-15 min (includes geocoding API calls)
-- **Subsequent runs**: ~2-5 min (uses cached coordinates)
+The geocoding cache is stored at:
 
-Geocoding cache is stored at `data/geocode_cache.csv`.
+```text
+data/geocode_cache.csv
+```
+
+This cache is automatically updated during pipeline execution and reused in subsequent runs.
