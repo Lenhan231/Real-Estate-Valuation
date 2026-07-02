@@ -1,6 +1,6 @@
 import pandas as pd
 from pathlib import Path
-from overpass_client import OverpassAPIClient
+from .overpass_client import OverpassAPIClient
 
 
 class MetroClient(OverpassAPIClient):
