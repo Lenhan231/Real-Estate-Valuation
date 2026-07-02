@@ -25,9 +25,7 @@ models/
 
 ### Step 1: Train Models
 
-```bash
-python models/training/train.py
-```
+Open and run: **`models/training/train_model.ipynb`**
 
 **What it does:**
 - Fetches data from Supabase database
@@ -36,6 +34,7 @@ python models/training/train.py
   - Random Forest Regressor
   - Gradient Boosting Regressor
 - Evaluates on test set (20% of data)
+- Visualizes feature importance
 - Saves best model + metadata
 
 **Output:**
@@ -44,19 +43,29 @@ python models/training/train.py
 
 ### Step 2: Make Predictions
 
-```bash
-python models/inference/predict.py
-```
+Open and run: **`models/inference/predict.ipynb`**
 
 **What it does:**
 - Loads best trained model
 - Fetches all data from Supabase
 - Makes price predictions
 - Calculates prediction errors (if actual prices available)
+- Visualizes predictions vs actual prices
 - Saves predictions to `data/predictions/predictions_latest.csv`
 
 **Output:**
 - `data/predictions/predictions_latest.csv` (includes actual vs predicted prices)
+
+### Alternative: Command Line Scripts
+
+If you prefer CLI, use the Python scripts:
+- `models/training/train.py` - Non-interactive training
+- `models/inference/predict.py` - Non-interactive prediction
+
+```bash
+python models/training/train.py
+python models/inference/predict.py
+```
 
 ## 📊 Features Used
 
