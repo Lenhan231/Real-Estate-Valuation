@@ -48,6 +48,51 @@ def get_existing_listing_ids():
     return all_ids
 
 
+def fetch_csv_from_supabase(table_name: str = None) -> pd.DataFrame:
+    """
+    Fetch all data from Supabase table and return as DataFrame.
+
+    Args:
+        table_name: Table name to fetch from (defaults to SUPABASE_TABLE)
+
+    Returns:
+        DataFrame with all rows from table
+    """
+    table_name = table_name or SUPABASE_TABLE
+
+    try:
+        print(f"📖 Fetching data from Supabase table: {table_name}")
+        client = get_supabase_client()
+
+        # Fetch all data
+        all_data = []
+        offset = 0
+        limit = 1000
+
+        while True:
+            response = (
+                client.table(table_name)
+                .select("*")
+                .range(offset, offset + limit - 1)
+                .execute()
+            )
+
+            data = response.data
+            if not data:
+                break
+
+            all_data.extend(data)
+            offset += limit
+
+        df = pd.DataFrame(all_data)
+        print(f"✓ Fetched {len(df)} rows from {table_name}\n")
+        return df
+
+    except Exception as e:
+        print(f"❌ Error fetching from Supabase: {e}")
+        return pd.DataFrame()
+
+
 def push_csv_to_supabase(csv_path: str | Path) -> bool:
     """
     Read CSV file and insert all rows into Supabase Raw_Features table.
