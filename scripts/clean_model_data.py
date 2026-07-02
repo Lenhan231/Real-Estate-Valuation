@@ -20,7 +20,7 @@ DEFAULT_OUTPUT = ROOT / "data" / "processed" / "real_estate_cleaned_2.csv"
 def configure_console_encoding() -> None:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
-            stream.reconfigure(encoding="utf-8")
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def parse_args() -> argparse.Namespace:

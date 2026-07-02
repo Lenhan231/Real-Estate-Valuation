@@ -79,15 +79,24 @@ Do not edit `train_regression_models.py` for normal model additions. Edit it onl
 
 After latest cleaning, the modeling file had:
 
-- Raw rows: `3780`
-- Cleaned rows: `3295`
-- Cleaned columns: `48`
-- Missing values: `0`
+- Supabase raw backup rows: `8561` in `data/processed/alonhadat_features_supabase_raw.csv`.
+- Deduped feature rows: `8541` in `data/processed/alonhadat_features.csv`.
+- Duplicate feature rows removed: `20`.
+- Duplicate `listing_id` after recovery: `0`.
+- Duplicate `link` after recovery: `0`.
+- Cleaned modeling rows: `7546`.
+- Cleaned columns: `48`.
+- Missing values: `10`.
 
 Latest IQR filtering report:
 
-- `property_type=0` (`nha_trong_hem`): `1792 -> 1751`, removed `41`.
-- `property_type=1` (`nha_mat_tien`): `1912 -> 1836`, removed `76`.
+- `property_type=0` (`nha_trong_hem`): `4160 -> 4010`, removed `150`, bounds `[-27290482.95, 283040956.44]`.
+- `property_type=1` (`nha_mat_tien`): `4208 -> 3992`, removed `216`, bounds `[-184709119.50, 696737421.38]`.
+
+Cleaned property-type distribution:
+
+- `property_type=0`: `3753` rows.
+- `property_type=1`: `3793` rows.
 
 Default cleaned input:
 
@@ -101,6 +110,12 @@ Clean current local data:
 
 ```bash
 .venv/bin/python scripts/clean_model_data.py
+```
+
+Recover feature rows from Supabase, save a raw backup, and write the deduped feature file:
+
+```bash
+.venv/bin/python scripts/recover_features_from_supabase.py
 ```
 
 Refresh only `data/` from `origin/main`, clean it, and train:
@@ -190,7 +205,7 @@ Then rerun training from `.venv/bin/python`.
 
 ## Current Results Snapshot
 
-Latest tuned full benchmark was written on `2026-07-01 23:51 +0700` to:
+Latest tuned full benchmark was reviewed on `2026-07-02 21:13 +0700` and uses the recovered and deduped Supabase feature data. Outputs were written to:
 
 - `data/processed/model_results.csv`
 - `data/processed/model_predictions.csv`
@@ -198,7 +213,7 @@ Latest tuned full benchmark was written on `2026-07-01 23:51 +0700` to:
 Run shape:
 
 - `33` result rows.
-- `3295` modeling rows.
+- `7546` modeling rows.
 - `5` CV folds.
 - Models: `lightgbm`, `catboost`, `ensemble`.
 - Scopes: `global`, `property_type_0`, `property_type_1`, `routed_property`.
@@ -209,28 +224,29 @@ Use `cv_mape_percent_mean` and `cv_r2_mean` as the official comparison metrics.
 
 ### `price_per_m2`
 
-- Best global CV MAPE: `ensemble`, `24.00%`.
-- Best global CV R2: `lightgbm`, `0.728`.
-- Best specialist CV MAPE: `property_type_0 / ensemble`, `19.57%`.
-- Hardest specialist: `property_type_1 / ensemble`, `29.42%` CV MAPE.
+- Best global CV MAPE: `ensemble`, `20.31%`.
+- Best global CV R2: `ensemble`, `0.784`.
+- Best global holdout MAPE: `ensemble`, `19.21%`.
+- Best specialist CV MAPE: `property_type_0 / ensemble`, `16.88%`.
+- Hardest specialist: `property_type_1 / ensemble`, `24.19%` CV MAPE.
 
 ### `price_vnd`
 
-- Best global CV MAPE: `ensemble`, `23.72%`.
-- Best global CV R2: `ensemble`, `0.777`.
-- Best global holdout MAPE: `catboost`, `24.92%`.
-- Best global holdout R2: `lightgbm`, `0.754`.
-- Best specialist CV MAPE: `property_type_0 / ensemble`, `19.66%`.
-- Best `property_type_1` specialist by CV MAPE: `catboost`, `28.73%` CV MAPE and `0.718` CV R2.
-- Best `property_type_1` specialist by CV R2: `ensemble`, `28.92%` CV MAPE and `0.726` CV R2.
+- Best global CV MAPE: `catboost`, `20.50%`.
+- Best global CV R2: `ensemble`, `0.773`.
+- Best global holdout MAPE: `catboost`, `19.34%`.
+- Best global holdout R2: `ensemble`, `0.778`.
+- Best specialist CV MAPE: `property_type_0 / ensemble`, `16.86%`.
+- Hardest specialist: `property_type_1 / ensemble`, `24.34%` CV MAPE and `0.746` CV R2.
 
 ### Derived `price_vnd_from_price_per_m2`
 
-- Best global CV MAPE: `ensemble`, `24.00%`.
-- Best global holdout R2: `catboost`, `0.820`.
-- Best specialist CV MAPE: `property_type_0 / ensemble`, `19.57%`.
-- Best specialist CV R2: `property_type_0 / catboost`, `0.791`.
-- Derived total price still does not beat direct `price_vnd` globally by CV MAPE, but it remains useful as a comparison target.
+- Best global CV MAPE: `ensemble`, `20.31%`.
+- Best global CV R2: `catboost`, `0.846`.
+- Best global holdout R2: `catboost`, `0.877`.
+- Best specialist CV MAPE: `property_type_0 / ensemble`, `16.88%`.
+- Best specialist CV R2: `property_type_0 / ensemble`, `0.859`.
+- Derived total price is close to direct `price_vnd` by CV MAPE and stronger by CV R2, so keep it as a serious comparison target.
 
 ### Routed Specialist Models
 
@@ -238,10 +254,11 @@ Use `cv_mape_percent_mean` and `cv_r2_mean` as the official comparison metrics.
 
 Latest results:
 
-- `routed_property / price_vnd / ensemble`: `24.28%` CV MAPE, `0.773` CV R2.
-- `global / price_vnd / ensemble`: `23.72%` CV MAPE, `0.777` CV R2.
+- `routed_property / price_vnd / ensemble`: `20.58%` CV MAPE, `0.773` CV R2.
+- `global / price_vnd / ensemble`: `20.53%` CV MAPE, `0.773` CV R2.
+- `global / price_vnd / catboost`: `20.50%` CV MAPE, `0.765` CV R2.
 
-The routed approach is not the winner yet. Keep it as an experiment, not the default production choice.
+The routed approach is still not a clear winner. Keep it as an experiment, not the default production choice.
 
 Current practical ranking:
 
@@ -269,7 +286,7 @@ Current practical ranking:
 - Added `scripts/analyze_model_errors.py` for grouped error diagnostics.
 - Added `scripts/tune_models.py`; it writes best random-search params to `scripts/training_models/tuned_params.json`, and model builders load that file when present.
 - Current tuned params file contains entries for `lightgbm`, `catboost`, and `xgboost`; `ensemble` uses those tuned base models through their builders.
-- Tuning improved the best global `price_vnd` CV MAPE from about `24.09%` to `23.72%`, but global CV R2 moved from about `0.782` to `0.777`. This is a small MAPE win, not a breakthrough.
+- The recovered and deduped Supabase dataset improved the best global `price_vnd` CV MAPE to about `20.50%`. The remaining gap is now mostly segment quality, not basic model choice.
 
 Latest full-run diagnostics show the hardest segment is still `property_type=1` (`nha_mat_tien`), especially:
 
@@ -278,20 +295,20 @@ Latest full-run diagnostics show the hardest segment is still `property_type=1` 
 - Sparse or noisy localities such as `phường tăng nhơn phú`.
 - Some road-width buckets, especially small road width inside `property_type=1`.
 
-The best `property_type_0` (`nha_trong_hem`) specialist is already around the `<20%` CV MAPE milestone. The global score is mostly being held back by `property_type_1`.
+The best `property_type_0` (`nha_trong_hem`) specialist is now around `16.9%` CV MAPE. The global score is still mostly being held back by `property_type_1`, but that segment improved to roughly `24.2-24.4%` CV MAPE with the recovered dataset.
 
 Training output now suppresses the harmless LightGBM feature-name warning and prints progress lines such as:
 
 ```text
 [train] global | price_vnd | lightgbm: fit holdout model
 [cv] global | price_vnd | lightgbm: fold 1/5 using property_type_stratified
-[done] global | price_vnd | lightgbm: holdout MAPE=26.16% CV MAPE=24.85%
+[done] global | price_vnd | lightgbm: holdout MAPE=20.48% CV MAPE=21.57%
 ```
 
 ## Modeling Interpretation
 
 - The target is right-skewed. The trainer already uses `log1p` on targets and converts predictions back with `expm1`.
-- Current best global model is clustered around `23.7-24.0%` CV MAPE and `0.77-0.78` CV R2.
-- `property_type_0` can reach about `19.5-20%` CV MAPE depending on target strategy.
-- `property_type_1` remains around `28.5-30%` CV MAPE and is the main performance bottleneck.
+- Current best global model is clustered around `20.3-20.5%` CV MAPE and `0.76-0.85` CV R2 depending on target strategy.
+- `property_type_0` can reach about `16.9%` CV MAPE.
+- `property_type_1` remains around `24.2-24.4%` CV MAPE and is the main performance bottleneck.
 - Next useful work is focused `property_type_1` cleanup/feature work: better street/locality normalization, manual review of low-unit-price street-front rows, better large-area handling, and possibly more precise location features. Adding many more model families is less likely to move the score than fixing this segment.
