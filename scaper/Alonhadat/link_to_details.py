@@ -183,15 +183,17 @@ def _clean_value(text: str) -> str:
 def fetch(url: str) -> (BeautifulSoup | None):
     try:
         resp = requests.get(url, headers=HEADERS, timeout=20)
+        if resp.status_code == 404:
+            return None, "404"
         resp.raise_for_status()
         if looks_blocked(resp.text):
             # attempt manual resolution via Selenium
-            return fetch_via_selenium_manual(url)
-        return BeautifulSoup(resp.text, "html.parser")
+            return fetch_via_selenium_manual(url), "OK"
+        return BeautifulSoup(resp.text, "html.parser"), "OK"
     except Exception as e:
         # on network/error, try manual Selenium path
         print(f"Failed fetch {url}: {e}")
-        return fetch_via_selenium_manual(url)
+        return fetch_via_selenium_manual(url), "OK"
 
 
 def fetch_via_selenium_manual(url: str) -> (BeautifulSoup | None):
@@ -222,7 +224,7 @@ def fetch_via_selenium_manual(url: str) -> (BeautifulSoup | None):
         print("Retry fetch failed:", e)
         return None
 
-def main():
+def link_to_detail():
     try:
         df = pd.read_csv(INPUT_FILE)
     except Exception as e:
@@ -245,18 +247,25 @@ def main():
             continue
 
         print(f"Processing (remaining {len(df)}): {url}")
-        soup = fetch(url)
+        soup, status = fetch(url)
         if soup is None:
-            print("  skipped (blocked or fetch error)")
-            # move this link to the end to allow others to be processed
-            if len(df) == 1:
-                print("Only one link left and it is blocked; stopping to avoid tight loop.")
-                break
-            first = df.iloc[0:1]
-            df = pd.concat([df.iloc[1:].reset_index(drop=True), first]).reset_index(drop=True)
-            df.to_csv(INPUT_FILE, index=False, encoding="utf-8-sig")
-            time.sleep(random.uniform(1, 2))
-            continue
+            # Retry fetch failed: 404 Client Error: Not Found for url delete
+            if status == "404":
+                print("  link not found (404), removing from listings")
+                df = df.iloc[1:].reset_index(drop=True)
+                df.to_csv(INPUT_FILE, index=False, encoding="utf-8-sig")
+                continue
+            else:
+                print("  skipped (blocked or fetch error)")
+                # move this link to the end to allow others to be processed
+                if len(df) == 1:
+                    print("Only one link left and it is blocked; stopping to avoid tight loop.")
+                    break
+                first = df.iloc[0:1]
+                df = pd.concat([df.iloc[1:].reset_index(drop=True), first]).reset_index(drop=True)
+                df.to_csv(INPUT_FILE, index=False, encoding="utf-8-sig")
+                time.sleep(random.uniform(1, 2))
+                continue
 
         data = dict(listing_row)
         data["link"] = url

@@ -121,11 +121,13 @@ def merge_density_with_alonhadat(
     df = _normalize_case(df, ["locality", "region"])
     density_df = _normalize_case(density_df, ["locality", "region"])
 
+    density_df.to_csv("data/external/density_data.csv", index=False)
+
     merged_df = pd.merge(
         df,
         density_df[["locality", "region", "locality_square", "locality_population_density"]],
         on=["locality", "region"],
-        how="left",
+        how="left"
     )
     
     return merged_df

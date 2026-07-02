@@ -1,3 +1,4 @@
+import argparse
 import random
 import time
 from itertools import product
@@ -21,8 +22,8 @@ TYPES = [
     "can-ban-nha-trong-hem",
 ]
 
-START_PAGE = 14
-END_PAGE = START_PAGE + 25
+DEFAULT_START_PAGE = 1
+DEFAULT_END_PAGE = 50
 
 
 def build_list_page(region_slug: str, type_slug: str) -> str:
@@ -30,11 +31,14 @@ def build_list_page(region_slug: str, type_slug: str) -> str:
     return f"{BASE_URL}/{type_slug}/{region_slug}/trang-{{}}"
 
 
-def crawl_list_pages():
+def crawl_list_pages(
+    start_page: int = DEFAULT_START_PAGE,
+    end_page: int = DEFAULT_END_PAGE,
+) -> None:
     for region_slug, type_slug in product(REGIONS, TYPES):
         list_page = build_list_page(region_slug, type_slug)
 
-        for page in range(START_PAGE, END_PAGE + 1):
+        for page in range(start_page, end_page + 1):
             page_url = list_page.format(page)
             print(f"Scraping: {page_url}")
 
@@ -49,8 +53,17 @@ def crawl_list_pages():
             time.sleep(random.randint(1, 3))
 
 
-def main():
-    crawl_list_pages()
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Scrape Alonhadat listing pages.")
+    parser.add_argument("--start-page", type=int, default=DEFAULT_START_PAGE)
+    parser.add_argument("--end-page", type=int, default=DEFAULT_END_PAGE)
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    crawl_list_pages(start_page=args.start_page, end_page=args.end_page)
+    print("Done. Detail scraping is handled by Link2details.py.")
 
 
 if __name__ == "__main__":

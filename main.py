@@ -24,7 +24,17 @@ Cache: data/localities.csv (auto-updated with features)
 import pandas as pd
 import time
 from pathlib import Path
+import argparse
+import sys
 
+
+def configure_console_encoding() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
+configure_console_encoding()
 
 from pipeline.transformation.cleaning import clean_data, final_clean
 from pipeline.ingestion.load_density import (
@@ -38,9 +48,16 @@ from pipeline.ingestion.load_pois import (
 from pipeline.transformation.feature_pipeline import (
     get_additional_features
 )
-
+from pipeline.supabase_handler import push_csv_to_supabase
+from scaper.Alonhadat.scheduling import crawl_list_pages
+from scaper.Alonhadat.link_to_details import link_to_detail
 OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
+DETAILS_FILE = Path(r"data\raw\alonhadat_details.csv")
+LISTINGS_FILE = Path(r"data\raw\alonhadat_listings.csv")
+CLEAN_FILE = Path(r"data\processed\alonhadat_cleaned.csv")
+
 BATCH_SIZE = 2  # Process 2 records at a time (shows checkpoint clearly)
+
 
 FEATURE_COLS = [
     'nearest_school_km', 'school_count_3km',
@@ -52,6 +69,20 @@ FEATURE_COLS = [
     'nearest_metro_km', 'metro_count_5km'
 ]
 
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--start-page",
+    type=int,
+    default=1,
+)
+
+parser.add_argument(
+    "--end-page",
+    type=int,
+    default=50,
+)
+
+args = parser.parse_args()
 
 def process_batch(batch_df):
     """
@@ -86,17 +117,29 @@ def main():
     print("=" * 60 + "\n")
 
     # Stage 1: Load & Clean
-    INPUT_FILE = Path(r"data\raw\alonhadat_details.csv")
+
     print("[1/5] Loading raw data...")
-    df = pd.read_csv(INPUT_FILE)
+    crawl_list_pages(start_page=args.start_page, end_page=args.end_page)
+    link_to_detail()
+    df = pd.read_csv(DETAILS_FILE)
     print(f"      Loaded {len(df)} records")
 
     print("[2/5] Cleaning data...")
-    df = clean_data(df)
+    clean_data(df)
+
+    # Remove processed data from details.csv
+    pd.DataFrame(columns=df.columns).to_csv(DETAILS_FILE, index=False)
+
+    df = pd.read_csv(CLEAN_FILE)
     print(f"      ✓ Cleaned")
 
     # Stage 2: Add base features
     print("[3/5] Adding base features...")
+    # remove old columns before merge
+    df = df.drop(
+        columns=["locality_square", "locality_population_density"],
+        errors="ignore"
+    )
     density_df = load_density()
     df = merge_density_with_alonhadat(df, density_df)
     print(f"      ✓ Merged density")
@@ -150,7 +193,7 @@ def main():
         # Checkpoint: Write remaining rows to input file after each batch
         mask = ~df.index.isin(all_processed_indices)
         df_remaining = df[mask].reset_index(drop=True)
-        df_remaining.to_csv(INPUT_FILE, index=False)
+        df_remaining.to_csv(CLEAN_FILE, index=False)
         print(f"      [CHECKPOINT] Batch {i+1}: Removed {len(all_processed_indices)} rows, {len(df_remaining)} remain in input")
 
         # Progress
@@ -165,27 +208,11 @@ def main():
     print(f"      ✓ Features extracted in {batch_time:.2f}s\n")
 
     print("[5/5] Finalizing...")
-    if processed_batches:
-        df_final = pd.concat(processed_batches, ignore_index=True)
+    print("      Pushing data to Supabase...")
+    push_csv_to_supabase(OUTPUT_FILE)
 
-        # Keep all columns
-        print(f"      Output columns: {list(df_final.columns)}")
-        df_final.to_csv(OUTPUT_FILE, index=False)
-        final_count = len(df_final)
-        print(f"      ✓ Saved {final_count} records to {OUTPUT_FILE}\n")
-    else:
-        print(f"      ⚠ No records with features saved\n")
-        final_count = 0
-
-    # Summary
-    elapsed = time.time() - t0
-    print("=" * 60)
-    print(f"✅ Pipeline complete in {elapsed:.2f}s")
-    if final_count > 0:
-        features_count = len(df_final.columns)
-        print(f"   Records:  {final_count} rows (dropped {total_rows_dropped})")
-        print(f"   Features: {features_count} columns")
-    print("=" * 60)
+    t_total = time.time() - t0
+    print(f"\n✅ Pipeline complete in {t_total:.2f}s")
 
 
 if __name__ == "__main__":

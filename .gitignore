@@ -23,3 +23,6 @@ data/processed/real_estate_cleaned.csv
 
 # Old Scripts
 scripts/old/
+
+# Environment
+.env
