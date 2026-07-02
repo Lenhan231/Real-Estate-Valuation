@@ -39,8 +39,8 @@ from pipeline.transformation.feature_pipeline import (
     get_additional_features
 )
 from pipeline.supabase_handler import push_csv_to_supabase
-from scaper.Alonhadat.scheduling import crawl_list_pages
-from scaper.Alonhadat.link_to_details import link_to_detail
+from pipeline.ingestion.scrapers.Alonhadat.scheduling import crawl_list_pages
+from pipeline.ingestion.scrapers.Alonhadat.link_to_details import link_to_detail
 OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
 DETAILS_FILE = Path(r"data\raw\alonhadat_details.csv")
 LISTINGS_FILE = Path(r"data\raw\alonhadat_listings.csv")

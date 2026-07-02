@@ -5,8 +5,8 @@ from pathlib import Path
 import sys
 
 if __package__ in (None, ""):
-    sys.path.append(str(Path(__file__).resolve().parents[2]))
-    from scaper.Alonhadat.link_each_status import extract_list_page, save_listings
+    sys.path.append(str(Path(__file__).resolve().parents[4]))
+    from pipeline.ingestion.scrapers.Alonhadat.link_each_status import extract_list_page, save_listings
 else:
     from .link_each_status import extract_list_page, save_listings
 
