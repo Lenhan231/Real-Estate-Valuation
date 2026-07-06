@@ -21,8 +21,7 @@ TYPES = [
     "can-ban-nha-trong-hem",
 ]
 
-START_PAGE = 55
-END_PAGE = START_PAGE + 25
+
 
 
 def build_list_page(region_slug: str, type_slug: str) -> str:
@@ -30,11 +29,14 @@ def build_list_page(region_slug: str, type_slug: str) -> str:
     return f"{BASE_URL}/{type_slug}/{region_slug}/trang-{{}}"
 
 
-def crawl_list_pages():
+def crawl_list_pages(
+        start_page,
+        end_page,
+    ):
     for region_slug, type_slug in product(REGIONS, TYPES):
         list_page = build_list_page(region_slug, type_slug)
 
-        for page in range(START_PAGE, END_PAGE + 1):
+        for page in range(start_page, end_page + 1):
             page_url = list_page.format(page)
             print(f"Scraping: {page_url}")
 
@@ -50,7 +52,8 @@ def crawl_list_pages():
 
 
 def main():
-    crawl_list_pages()
+    crawl_list_pages(REGIONS, TYPES, START_PAGE, END_PAGE)
+    print("Done. Detail scraping is handled by Link2details.py.")
 
 
 if __name__ == "__main__":
