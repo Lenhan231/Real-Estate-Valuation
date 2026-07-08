@@ -41,10 +41,12 @@ from pipeline.transformation.feature_pipeline import (
 from pipeline.supabase_handler import push_csv_to_supabase
 from scaper.Alonhadat.scheduling import crawl_list_pages
 from scaper.Alonhadat.link_to_details import link_to_detail
-OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
-DETAILS_FILE = Path(r"data\raw\alonhadat_details.csv")
-LISTINGS_FILE = Path(r"data\raw\alonhadat_listings.csv")
-CLEAN_FILE = Path(r"data\processed\alonhadat_cleaned.csv")
+from pathlib import Path
+
+OUTPUT_FILE = Path("data") / "processed" / "alonhadat_features.csv"
+DETAILS_FILE = Path("data") / "raw" / "alonhadat_details.csv"
+LISTINGS_FILE = Path("data") / "raw" / "alonhadat_listings.csv"
+CLEAN_FILE = Path("data") / "processed" / "alonhadat_cleaned.csv"
 
 BATCH_SIZE = 2  # Process 2 records at a time (shows checkpoint clearly)
 

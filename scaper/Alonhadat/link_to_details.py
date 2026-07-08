@@ -6,11 +6,13 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import os
+from pathlib import Path
 
 from selenium.common import TimeoutException
 
-INPUT_FILE = r".\data\raw\alonhadat_listings.csv"
-OUTPUT_FILE = r".\data\raw\alonhadat_details.csv"
+INPUT_FILE = Path("data") / "raw" / "alonhadat_listings.csv"
+OUTPUT_FILE = Path("data") / "raw" / "alonhadat_details.csv"
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
