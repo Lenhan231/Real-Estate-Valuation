@@ -65,6 +65,13 @@ python models/predict.py   # load saved model + save predictions
 
 **Dropped columns:** `locality`, `region`, `locality_square` (location identifiers), `listing_type` (single value), `link`/`title`/`street`/addresses (free text), `lat`/`lon`.
 
+**Missing-value rules:**
+
+- `nearest_*` → filled with column **max** (missing = no amenity nearby)
+- `length_m`/`width_m` → derived from `area_m2 / the other side` when one is missing; median when both are
+- `num_floors`, `num_bedrooms`, `road_width_m` → median
+- Rows missing `locality_population_density` → dropped
+
 **Target:**
 
 - `price_billion_vnd` - House price in billion VND (computed as `price_vnd / 1e9` from the `Raw_Features` table)

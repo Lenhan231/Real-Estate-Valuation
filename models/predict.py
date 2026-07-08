@@ -26,6 +26,30 @@ BIN_COLS = [
     'car_parking_bin', 'owner_listing_bin'
 ]
 CAT_COLS = ['property_type', 'legal_status', 'direction']
+NEAREST_COLS = [c for c in NUMERIC_COLS if c.startswith('nearest_')]
+
+
+def build_features(frame):
+    """Fill missing + encode — same rules as training (train.ipynb)."""
+    X = frame[NUMERIC_COLS].copy()
+
+    # nearest_*: missing → column max (no amenity nearby)
+    X[NEAREST_COLS] = X[NEAREST_COLS].fillna(X[NEAREST_COLS].max())
+
+    # length/width: derive from area if one of the two is missing
+    X['length_m'] = X['length_m'].fillna(
+        (X['area_m2'] / X['width_m']).replace([np.inf, -np.inf], np.nan))
+    X['width_m'] = X['width_m'].fillna(
+        (X['area_m2'] / X['length_m']).replace([np.inf, -np.inf], np.nan))
+
+    # Everything else (num_*, road_width_m, both length/width missing): median
+    X = X.fillna(X.median())
+
+    return pd.concat([
+        X,
+        frame[BIN_COLS].astype(int),
+        pd.get_dummies(frame[CAT_COLS].fillna('unknown')).astype(int),
+    ], axis=1)
 
 
 def main():
@@ -63,13 +87,9 @@ def main():
     df['price_billion_vnd'] = df['price_vnd'] / 1e9
     print(f"✓ Loaded {len(df)} records\n")
 
-    # Prepare features (same encoding as training)
+    # Prepare features (same rules as training)
     print("[3/3] Making predictions...")
-    X = pd.concat([
-        df[NUMERIC_COLS].fillna(df[NUMERIC_COLS].median()),
-        df[BIN_COLS].astype(int),
-        pd.get_dummies(df[CAT_COLS].fillna('unknown')).astype(int),
-    ], axis=1).reindex(columns=features, fill_value=0)
+    X = build_features(df).reindex(columns=features, fill_value=0)
 
     # Predict
     y_pred = model.predict(X)
