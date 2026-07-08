@@ -4,6 +4,7 @@ pandas
 joblib
 scikit-learn
 xgboost
+lightgbm
 catboost
 requests
 beautifulsoup4
@@ -11,4 +12,8 @@ selenium
 webdriver-manager
 supabase
 python-dotenv
-geopy
+geopytabpfn
+matplotlib
+seaborn
+plotly
+flask
