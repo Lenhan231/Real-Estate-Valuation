@@ -6,35 +6,38 @@
 ## 🚀 Quick Start
 
 ```bash
-# 1. Train (2 min)
-cd models && python train.py
+# Option 1: Interactive Notebook (Recommended)
+cd models && jupyter notebook train.ipynb
 
-# 2. Predict
-python predict.py
+# Option 2: Python Scripts
+cd models
+python train.py      # Train (2 min)
+python predict.py    # Predict (all 8,636 properties)
 
-# 3. Choose interface
-streamlit run ../app/app.py          # Web UI
-streamlit run ../app/dashboard.py    # BI Dashboard
-python ../app/api_simple.py          # REST API
+# Option 3: Web UI
+streamlit run app/app.py          # Property valuation
+streamlit run app/dashboard.py    # BI Dashboard
 ```
 
 ## 📁 Structure
 
 ```
-├── models/
-│   ├── train.py          ← Training script
-│   ├── predict.py        ← Inference script
-│   ├── README.md         ← Model documentation
-│   ├── saved_models/     ← Trained models
-│   └── data/             ← Datasets & predictions
+HousePricePrediction/
+├── README.md                    ← You are here
 │
-├── app/
-│   ├── app.py            ← Web UI
-│   ├── dashboard.py      ← BI Dashboard
-│   ├── api_simple.py     ← REST API
-│   └── README.md         ← App documentation
+├── models/                      ← ALL MODEL CODE HERE
+│   ├── train.ipynb             # 📓 Main: Complete pipeline (7 parts)
+│   ├── train.py                # Script: Training
+│   ├── predict.py              # Script: Predictions  
+│   ├── README.md               # Model documentation
+│   ├── saved_models/           # Trained models (ready to use)
+│   └── data/                   # Datasets & predictions
 │
-└── README.md             ← This file
+├── app/                         ← Web interfaces
+│   ├── app.py                  # Interactive web UI
+│   ├── dashboard.py            # BI Dashboard
+│   ├── api_simple.py           # REST API
+│   └── README.md               # App documentation
 ```
 
 ## 📊 Performance
@@ -46,17 +49,22 @@ python ../app/api_simple.py          # REST API
 | **R²** | 0.9939 |
 
 By segment:
-- **0-5B:** MAPE 6.6%
-- **5-20B:** MAPE 2.8% (BEST)
-- **20-100B:** MAPE 3.2%
+- **0-5B:** MAPE 6.6% (budget)
+- **5-20B:** MAPE 2.8% (BEST - mass market)
+- **20-100B:** MAPE 3.2% (luxury)
 
 ## 🛠️ What to Do
 
-**For Model Training:**  
+### For Model Work
 See `models/README.md`
+- Train: `cd models && jupyter notebook train.ipynb`
+- Or: `python train.py && python predict.py`
 
-**For Web/API:**  
+### For Web/API
 See `app/README.md`
+- Web UI: `streamlit run app/app.py`
+- Dashboard: `streamlit run app/dashboard.py`
+- API: `python app/api_simple.py`
 
 ---
 

@@ -41,7 +41,13 @@
       "Bash(python -u train.py)",
       "Bash(timeout 120 python train.py)",
       "Read(//tmp/**)",
-      "Bash(python predict.py)"
+      "Bash(python predict.py)",
+      "Bash(python3)",
+      "Bash(python3 -c ' *)",
+      "PowerShell(Copy-Item 'models\\\\train.ipynb.bak' 'models\\\\train.ipynb' -Force)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\nhanl\\OneDrive\\Desktop\\School\\DSP391m\\HousePricePrediction\\models"
     ]
   }
 }
