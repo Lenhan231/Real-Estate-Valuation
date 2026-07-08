@@ -39,12 +39,14 @@ from pipeline.transformation.feature_pipeline import (
     get_additional_features
 )
 from pipeline.supabase_handler import push_csv_to_supabase
-from pipeline.ingestion.scrapers.Alonhadat.scheduling import crawl_list_pages
-from pipeline.ingestion.scrapers.Alonhadat.link_to_details import link_to_detail
-OUTPUT_FILE = Path(r"data\processed\alonhadat_features.csv")
-DETAILS_FILE = Path(r"data\raw\alonhadat_details.csv")
-LISTINGS_FILE = Path(r"data\raw\alonhadat_listings.csv")
-CLEAN_FILE = Path(r"data\processed\alonhadat_cleaned.csv")
+from scaper.Alonhadat.scheduling import crawl_list_pages
+from scaper.Alonhadat.link_to_details import link_to_detail
+from pathlib import Path
+
+OUTPUT_FILE = Path("data") / "processed" / "alonhadat_features.csv"
+DETAILS_FILE = Path("data") / "raw" / "alonhadat_details.csv"
+LISTINGS_FILE = Path("data") / "raw" / "alonhadat_listings.csv"
+CLEAN_FILE = Path("data") / "processed" / "alonhadat_cleaned.csv"
 
 BATCH_SIZE = 2  # Process 2 records at a time (shows checkpoint clearly)
 
@@ -58,10 +60,6 @@ FEATURE_COLS = [
     'nearest_bus_stop_km', 'bus_stop_count_1km',
     'nearest_metro_km', 'metro_count_5km'
 ]
-
-
-def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    return df.loc[:, ~df.columns.duplicated()].copy()
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -119,10 +117,12 @@ def main():
     print(f"      Loaded {len(df)} records")
 
     print("[2/5] Cleaning data...")
-    df = clean_data(df)
+    clean_data(df)
 
     # Remove processed data from details.csv
     pd.DataFrame(columns=df.columns).to_csv(DETAILS_FILE, index=False)
+    
+    df = pd.read_csv(CLEAN_FILE)
     print(f"      ✓ Cleaned")
 
     # Stage 2: Add base features
@@ -143,7 +143,6 @@ def main():
     # Load existing output if it exists (for appending)
     if OUTPUT_FILE.exists():
         df_output = pd.read_csv(OUTPUT_FILE)
-        df_output = normalize_columns(df_output)
         print(f"      Found {len(df_output)} existing records in output")
     else:
         df_output = None
@@ -164,7 +163,6 @@ def main():
 
         batch = add_coordinates(batch)
         batch = distance_to_center(batch)
-        batch = normalize_columns(batch)
 
         # Process batch: add features from cache, drop incomplete rows, save
         batch, kept, dropped = process_batch(batch)
@@ -175,7 +173,6 @@ def main():
         all_processed_indices.extend(batch_indices)
 
         if len(batch) > 0:
-            batch = normalize_columns(batch)
             processed_batches.append(batch)
 
             # Append to existing output (don't overwrite)

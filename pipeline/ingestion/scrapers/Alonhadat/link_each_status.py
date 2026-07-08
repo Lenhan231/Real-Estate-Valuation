@@ -8,11 +8,12 @@ from urllib.parse import urljoin
 import os
 
 from selenium.common import TimeoutException
+from pathlib import Path
 
 INPUT_PAGE = 1
 BASE_URL = "https://alonhadat.com.vn"
 LIST_PAGE = BASE_URL + "/can-ban-nha/ho-chi-minh/trang-{}" # changing the url for others region if need
-OUTPUT_FILE = r"data\raw\alonhadat_listings.csv"
+OUTPUT_FILE = Path("data") / "raw" / "alonhadat_listings.csv"
 
 # Simulator for not 403 forbidden 
 HEADERS = {
