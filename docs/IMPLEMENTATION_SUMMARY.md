@@ -224,7 +224,7 @@ data/
 - [ ] Async Overpass queries (concurrent requests)
 - [ ] Parquet output format (smaller files)
 - [ ] Support multiple cities (Hanoi, Da Nang, etc.)
-- [ ] Dashboard visualization
+- [x] Dashboard visualization
 
 **Phase 4: Production**
 - [ ] Unit test suite

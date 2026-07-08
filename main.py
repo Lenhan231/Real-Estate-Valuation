@@ -59,6 +59,10 @@ FEATURE_COLS = [
     'nearest_metro_km', 'metro_count_5km'
 ]
 
+
+def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    return df.loc[:, ~df.columns.duplicated()].copy()
+
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--start-page",
@@ -115,12 +119,10 @@ def main():
     print(f"      Loaded {len(df)} records")
 
     print("[2/5] Cleaning data...")
-    clean_data(df)
+    df = clean_data(df)
 
     # Remove processed data from details.csv
     pd.DataFrame(columns=df.columns).to_csv(DETAILS_FILE, index=False)
-    
-    df = pd.read_csv(CLEAN_FILE)
     print(f"      ✓ Cleaned")
 
     # Stage 2: Add base features
@@ -141,6 +143,7 @@ def main():
     # Load existing output if it exists (for appending)
     if OUTPUT_FILE.exists():
         df_output = pd.read_csv(OUTPUT_FILE)
+        df_output = normalize_columns(df_output)
         print(f"      Found {len(df_output)} existing records in output")
     else:
         df_output = None
@@ -161,6 +164,7 @@ def main():
 
         batch = add_coordinates(batch)
         batch = distance_to_center(batch)
+        batch = normalize_columns(batch)
 
         # Process batch: add features from cache, drop incomplete rows, save
         batch, kept, dropped = process_batch(batch)
@@ -171,6 +175,7 @@ def main():
         all_processed_indices.extend(batch_indices)
 
         if len(batch) > 0:
+            batch = normalize_columns(batch)
             processed_batches.append(batch)
 
             # Append to existing output (don't overwrite)

@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "C:\Users\nhanl\OneDrive\Desktop\School\DSP391m\HousePricePrediction\models\train_advanced.py", line 23, in <module>
+    from lightgbm import LGBMRegressor
+ModuleNotFoundError: No module named 'lightgbm'

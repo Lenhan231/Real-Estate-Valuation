@@ -1,139 +1,127 @@
-"""Simple prediction script - loads trained model and makes predictions."""
-import sys
+#!/usr/bin/env python3
+"""Generate predictions on full dataset using hybrid model."""
+import sys, pickle, joblib, pandas as pd, numpy as np
 from pathlib import Path
-import pandas as pd
-import numpy as np
-import joblib
-import pickle
+from sklearn.metrics import mean_absolute_percentage_error, mean_absolute_error
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from pipeline.supabase_handler import fetch_csv_from_supabase
-
-NUMERIC_COLS = [
-    'nearest_school_km', 'school_count_3km',
-    'nearest_hospital_km', 'hospital_count_5km',
-    'nearest_marketplace_km', 'marketplace_count_3km',
-    'nearest_supermarket_km', 'supermarket_count_3km',
-    'nearest_mall_km', 'mall_count_3km',
-    'nearest_bus_stop_km', 'bus_stop_count_1km',
-    'nearest_metro_km', 'metro_count_5km',
-    'area_m2', 'distance_to_center_km',
-    'num_floors', 'num_bedrooms', 'road_width_m', 'width_m', 'length_m',
-    'locality_population_density'
-]
-BIN_COLS = [
-    'dining_room_bin', 'kitchen_bin', 'terrace_bin',
-    'car_parking_bin', 'owner_listing_bin'
-]
-CAT_COLS = ['property_type', 'legal_status', 'direction']
-NEAREST_COLS = [c for c in NUMERIC_COLS if c.startswith('nearest_')]
-
-
-def build_features(frame):
-    """Fill missing + encode — same rules as training (train.ipynb)."""
-    X = frame[NUMERIC_COLS].copy()
-
-    # nearest_*: missing → column max (no amenity nearby)
-    X[NEAREST_COLS] = X[NEAREST_COLS].fillna(X[NEAREST_COLS].max())
-
-    # length/width: derive from area if one of the two is missing
-    X['length_m'] = X['length_m'].fillna(
-        (X['area_m2'] / X['width_m']).replace([np.inf, -np.inf], np.nan))
-    X['width_m'] = X['width_m'].fillna(
-        (X['area_m2'] / X['length_m']).replace([np.inf, -np.inf], np.nan))
-
-    # Everything else (num_*, road_width_m, both length/width missing): median
-    X = X.fillna(X.median())
-
-    return pd.concat([
-        X,
-        frame[BIN_COLS].astype(int),
-        pd.get_dummies(frame[CAT_COLS].fillna('unknown')).astype(int),
-    ], axis=1)
-
-
-def main():
-    print("="*60)
-    print("HOUSE PRICE PREDICTION - INFERENCE")
-    print("="*60 + "\n")
-
+try:
     # Load model
-    print("[1/3] Loading model...")
-    model_dir = Path(__file__).parent / "saved_models"
-    model_files = list(model_dir.glob("*.joblib"))
-
-    if not model_files:
-        print("❌ No trained models found!")
-        print("Run the training notebook first: models/train.ipynb")
-        return
-
-    latest_model = sorted(model_files)[-1]
-    model_name = latest_model.stem
-
-    model = joblib.load(latest_model)
-
-    meta_path = model_dir / f"{model_name}_meta.pkl"
-    with open(meta_path, 'rb') as f:
+    model_dir = Path('saved_models')
+    with open(model_dir / 'hybrid_meta.pkl', 'rb') as f:
         metadata = pickle.load(f)
 
-    features = metadata['features']
-    print(f"✓ Loaded {model_name}")
-    print(f"  R²: {metadata['metrics']['r2_score']:.4f}")
-    print(f"  RMSE: {metadata['metrics']['rmse']:.4f}\n")
+    meta_learner = joblib.load(model_dir / 'ensemble_meta_learner.joblib')
+    base_models = joblib.load(model_dir / 'ensemble_base_models.joblib')
+    segment_models = joblib.load(model_dir / 'segment_models.joblib')
+
+    print("="*70)
+    print("HYBRID MODEL INFERENCE")
+    print("="*70)
+    print(f"\n✓ Model: {metadata['model_type']}")
+    print(f"  MAPE: {metadata['metrics_hybrid']['mape']:.2f}%")
+    print(f"  MAE: {metadata['metrics_hybrid']['mae']:.4f}B")
 
     # Load data
-    print("[2/3] Loading data from Supabase...")
-    df = fetch_csv_from_supabase("Raw_Features")
+    print("\n[1] Loading data...")
+    df = pd.read_csv('data/raw_data.csv')
     df['price_billion_vnd'] = df['price_vnd'] / 1e9
-    print(f"✓ Loaded {len(df)} records\n")
+    print(f"✓ {len(df)} records")
 
-    # Prepare features (same rules as training)
-    print("[3/3] Making predictions...")
-    X = build_features(df).reindex(columns=features, fill_value=0)
+    # Prepare features
+    print("\n[2] Engineering features...")
+
+    NUMERIC = ['nearest_school_km', 'school_count_3km', 'nearest_hospital_km', 'hospital_count_5km',
+               'nearest_marketplace_km', 'marketplace_count_3km', 'nearest_supermarket_km', 'supermarket_count_3km',
+               'nearest_mall_km', 'mall_count_3km', 'nearest_bus_stop_km', 'bus_stop_count_1km',
+               'nearest_metro_km', 'metro_count_5km', 'area_m2', 'distance_to_center_km',
+               'num_floors', 'num_bedrooms', 'road_width_m', 'width_m', 'length_m',
+               'locality_population_density', 'locality_square', 'lat', 'lon']
+    BIN = ['dining_room_bin', 'kitchen_bin', 'terrace_bin', 'car_parking_bin', 'owner_listing_bin']
+    CAT = ['property_type', 'legal_status', 'direction']
+
+    for col in ['nearest_metro_km', 'nearest_mall_km', 'nearest_supermarket_km', 'width_m', 'length_m']:
+        df[f'{col}_missing'] = df[col].isna().astype(int)
+
+    title = df['title'].fillna('').str.lower()
+    for flag, pattern in {
+        'title_hem_xe_hoi': 'hẻm xe hơi|hxh', 'title_mat_tien': 'mặt tiền|mat tien',
+        'title_biet_thu': 'biệt thự|villa', 'title_can_goc': 'căn góc|góc 2|2 mặt tiền',
+        'title_thang_may': 'thang máy', 'title_ham': 'hầm',
+        'title_nha_moi': 'nhà mới|mới xây|xây mới', 'title_ban_gap': 'bán gấp|ngộp|thanh lý',
+        'title_kinh_doanh': 'kinh doanh|dòng tiền|cho thuê', 'title_compound': 'compound|khu biệt thự',
+    }.items():
+        df[flag] = title.str.contains(pattern, regex=True).astype(int)
+
+    for col in [c for c in NUMERIC if c.startswith('nearest_')]:
+        df[col] = df[col].fillna(df[col].max())
+
+    df['width_m'] = df.apply(lambda r: r['area_m2']/r['length_m'] if pd.isna(r['width_m']) and r['length_m']>0 else r['width_m'], axis=1)
+    df['length_m'] = df.apply(lambda r: r['area_m2']/r['width_m'] if pd.isna(r['length_m']) and r['width_m']>0 else r['length_m'], axis=1)
+
+    for col in ['length_m', 'width_m', 'num_floors', 'num_bedrooms', 'road_width_m']:
+        df[col] = df[col].fillna(df[col].median())
+
+    df['locality_square'] = pd.to_numeric(df['locality_square'].astype(str).str.replace(',', '.', regex=False), errors='coerce')
+    df = df.dropna(subset=['locality_population_density'])
+    df['locality_square'] = df['locality_square'].fillna(df['locality_square'].median())
+
+    for col in BIN:
+        df[col] = df[col].fillna(False).astype(int)
+
+    df = pd.get_dummies(df, columns=CAT, dummy_na=True, prefix=CAT)
+    df['price_per_m2'] = df['price_billion_vnd'] / (df['area_m2'] + 1)
+    df['amenity_score'] = np.log1p(df['supermarket_count_3km']) + np.log1p(df['school_count_3km'])
+
+    X = df.reindex(columns=metadata['features'], fill_value=0)
+    X['locality_price_median'] = df['locality'].map(metadata['locality_price_map']).fillna(metadata['locality_price_global'])
+
+    print("✓ Features ready")
 
     # Predict
-    y_pred = model.predict(X)
+    print("\n[3] Making predictions...")
+
+    meta_feat = np.zeros((len(X), len(base_models)))
+    for idx, (name, model) in enumerate(base_models.items()):
+        meta_feat[:, idx] = model.predict(X)
+    y_ensemble = np.expm1(meta_learner.predict(meta_feat))
+
+    y_pred = np.zeros(len(X))
+    for seg_lo, seg_hi in metadata['segments']:
+        mask = (df['price_billion_vnd'] > seg_lo) & (df['price_billion_vnd'] <= seg_hi)
+        if mask.sum() == 0:
+            continue
+        key = f'{seg_lo}_{seg_hi}'
+        if key in segment_models:
+            y_log = segment_models[key].predict(X[mask])
+            y_pred[mask] = np.expm1(y_log)
+        else:
+            y_pred[mask] = y_ensemble[mask]
+
+    missing = y_pred == 0
+    if missing.sum() > 0:
+        y_pred[missing] = y_ensemble[missing]
+
     df['predicted_price_billion_vnd'] = y_pred
 
-    print(f"✓ Made {len(y_pred)} predictions\n")
+    print(f"✓ {len(df)} predictions made")
 
-    # Calculate error if actual prices available
+    # Evaluate
     if 'price_billion_vnd' in df.columns:
-        df['error_billion_vnd'] = df['predicted_price_billion_vnd'] - df['price_billion_vnd']
-        mae = np.abs(df['error_billion_vnd']).mean()
-        rmse = np.sqrt((df['error_billion_vnd'] ** 2).mean())
+        mask = df['price_billion_vnd'] > 0
+        mape = mean_absolute_percentage_error(df[mask]['price_billion_vnd'], df[mask]['predicted_price_billion_vnd']) * 100
+        mae = mean_absolute_error(df[mask]['price_billion_vnd'], df[mask]['predicted_price_billion_vnd'])
+        print(f"\n[4] Performance on Full Dataset:")
+        print(f"  MAPE: {mape:.2f}%")
+        print(f"  MAE: {mae:.4f}B")
 
-        print("Prediction Performance:")
-        print(f"  MAE: {mae:.4f} billion VND")
-        print(f"  RMSE: {rmse:.4f} billion VND")
-        print(f"  Mean Error: {df['error_billion_vnd'].mean():.4f} billion VND\n")
+    # Save
+    output = Path('data/predictions_latest.csv')
+    df.to_csv(output, index=False)
+    print(f"\n✓ Saved: {output}")
 
-    # Sample predictions
-    print("Sample Predictions (first 10):")
-    print("-" * 80)
-    sample_cols = ['area_m2', 'distance_to_center_km', 'predicted_price_billion_vnd']
-    if 'price_billion_vnd' in df.columns:
-        sample_cols.append('price_billion_vnd')
-        sample_cols.append('error_billion_vnd')
+    print("\n" + "="*70)
 
-    print(df[sample_cols].head(10).to_string(index=False))
-    print("-" * 80 + "\n")
-
-    # Save predictions
-    print("Saving predictions...")
-    pred_dir = Path(__file__).parent / "data"
-    pred_dir.mkdir(parents=True, exist_ok=True)
-
-    output_file = pred_dir / "predictions_latest.csv"
-    df.to_csv(output_file, index=False)
-    print(f"✓ Saved: {output_file}")
-    print(f"  Records: {len(df)}")
-    print(f"  Size: {output_file.stat().st_size / 1024 / 1024:.2f} MB\n")
-
-    print("="*60)
-    print("✅ Inference complete!")
-    print("="*60)
-
-
-if __name__ == "__main__":
-    main()
+except Exception as e:
+    print(f"❌ Error: {e}")
+    import traceback
+    traceback.print_exc()

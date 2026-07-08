@@ -29,7 +29,7 @@ VI_TO_EN_COLS = {
     "Chiều dài": "length_m",
     "Số phòng ngủ": "num_bedrooms",
     "Chính chủ": "owner_listing",
-    "Thông tin chi tiết": "details",
+    "Thông tin chi tiết": "description",
     "Giá": "price_vnd",
     "area": "area_m2"
 }
@@ -60,7 +60,7 @@ KEEP_COLS = [
     "link", "title", "post_day","street", "old_address", "locality", "region", "listing_id", "direction",
     "listing_type", "property_type", "legal_status", "num_floors",
     "num_bedrooms", "road_width_m", "width_m", "length_m",
-    "price_vnd", "area_m2"
+    "price_vnd", "area_m2", "description"
 ]
 
 BINARY_COLS_EN = ["dining_room", "kitchen", "terrace", "car_parking", "owner_listing"]
@@ -121,18 +121,20 @@ def normalize_text(value):
 
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
 
-    df["được đánh giá"] = (
-            df["được đánh giá"]
-            .astype(str)
-            .str.extract(r"(\d+)", expand=False)
-            .astype(float)
-        )
-        
-    df = df[df["được đánh giá"] > 2].copy()
+    if "được đánh giá" in df.columns:
+        df["được đánh giá"] = (
+                df["được đánh giá"]
+                .astype(str)
+                .str.extract(r"(\d+)", expand=False)
+                .astype(float)
+            )
+        df = df[df["được đánh giá"] > 2].copy()
+
     df = df.drop(columns=["Số Điện Thoại", "được đánh giá", "Tên liên hệ"], errors="ignore")
     df = df.drop_duplicates(subset=["link"]).copy()
 
-    df["Mã tin"] = pd.to_numeric(df["Mã tin"], errors="coerce").astype("Int64")
+    if "Mã tin" in df.columns:
+        df["Mã tin"] = pd.to_numeric(df["Mã tin"], errors="coerce").astype("Int64")
 
     for col in BINARY_COLS_VI:
         if col in df.columns:
@@ -148,10 +150,11 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             df[col] = df[col].apply(to_float_m)
     
-    df["Giá"] = df.apply(
-        lambda row: parse_price_to_vnd(row.get("Giá"), row.get("area")),
-        axis=1
-    )
+    if "Giá" in df.columns:
+        df["Giá"] = df.apply(
+            lambda row: parse_price_to_vnd(row.get("Giá"), row.get("area")),
+            axis=1
+        )
 
     for col in ["Số lầu", "Số phòng ngủ"]:
         if col in df.columns:
@@ -182,6 +185,7 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
         df = df[(df["Giá"].isna()) | (df["Giá"] > 0)]
 
     df = df.rename(columns={**VI_TO_EN_COLS})
+    df = df.loc[:, ~df.columns.duplicated()].copy()
 
     for col in BINARY_COLS_EN:
         if col in df.columns:
@@ -190,17 +194,14 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     cols_to_keep = KEEP_COLS + [col + "_bin" for col in BINARY_COLS_EN]
     cols_to_keep = [c for c in cols_to_keep if c in df.columns]
 
-    output_file = "data/processed/alonhadat_cleaned.csv"
-
-    df[cols_to_keep].copy().to_csv(
-        output_file,
-        mode="a",
-        index=False,
-        header=not Path(output_file).exists()
-    )
+    cleaned_df = df[cols_to_keep].copy()
+    output_file = Path("data/processed/alonhadat_cleaned.csv")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    cleaned_df.to_csv(output_file, index=False)
+    return cleaned_df
 
 def final_clean(df: pd.DataFrame) -> pd.DataFrame:
-    pass
+    return df.copy()
 
 if __name__ == "__main__":
     pass

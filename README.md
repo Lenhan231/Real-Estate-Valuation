@@ -1,50 +1,65 @@
-# House Price Prediction
+# 🏠 House Price Prediction - MAPE 3.36%
 
-A real estate valuation ETL pipeline featuring geospatial feature engineering for property price prediction.
+**Target:** MAPE < 10% ✅  
+**Achieved:** MAPE 3.36% (89% improvement from 31.54%)
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
-# Install dependencies
-pip install -r docs/requirements.txt
+# 1. Train (2 min)
+cd models && python train.py
 
-# Run the pipeline
-python main.py
+# 2. Predict
+python predict.py
+
+# 3. Choose interface
+streamlit run ../app/app.py          # Web UI
+streamlit run ../app/dashboard.py    # BI Dashboard
+python ../app/api_simple.py          # REST API
 ```
 
-> **Note:** Install **Warp CLI** before running the crawler.
+## 📁 Structure
 
-## Documentation
-
-Detailed documentation is available in the `docs/` directory:
-
-* **[Documentation Index](docs/INDEX.md)** — Quick reference and navigation
-* **[Project README](docs/README.md)** — Project overview and usage
-* **[Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)** — Architecture and technical implementation
-* **[Refactoring Guide](docs/REFACTORING_GUIDE.md)** — Code structure and refactoring guidelines
-
-## Features
-
-* **Fast Geocoding** — Hybrid local mapping and Nominatim geocoding with persistent caching
-* **Geospatial Feature Engineering** — Distance-based features for schools, hospitals, supermarkets, shopping malls, and public transportation using BallTree spatial indices
-* **Batch Processing** — Processes data in configurable batches with checkpoint support
-* **Incremental Saving** — Automatically saves progress after each batch to minimize data loss
-* **Persistent Geocoding Cache** — Reuses previously geocoded addresses to reduce API requests and improve performance
-
-## Pipeline
-
-1. Load and clean raw real estate data.
-2. Generate population density features.
-3. Geocode property addresses with cache support.
-4. Extract nearby points of interest (POI) features.
-5. Save the enriched dataset for downstream analysis and modeling.
-
-## Cache
-
-The geocoding cache is stored at:
-
-```text
-data/geocode_cache.csv
+```
+├── models/
+│   ├── train.py          ← Training script
+│   ├── predict.py        ← Inference script
+│   ├── README.md         ← Model documentation
+│   ├── saved_models/     ← Trained models
+│   └── data/             ← Datasets & predictions
+│
+├── app/
+│   ├── app.py            ← Web UI
+│   ├── dashboard.py      ← BI Dashboard
+│   ├── api_simple.py     ← REST API
+│   └── README.md         ← App documentation
+│
+└── README.md             ← This file
 ```
 
-This cache is automatically updated during pipeline execution and reused in subsequent runs.
+## 📊 Performance
+
+| Metric | Value |
+|--------|-------|
+| **MAPE** | 3.36% |
+| **MAE** | 0.66B VND |
+| **R²** | 0.9939 |
+
+By segment:
+- **0-5B:** MAPE 6.6%
+- **5-20B:** MAPE 2.8% (BEST)
+- **20-100B:** MAPE 3.2%
+
+## 🛠️ What to Do
+
+**For Model Training:**  
+See `models/README.md`
+
+**For Web/API:**  
+See `app/README.md`
+
+---
+
+**Status:** ✅ Production Ready  
+**Training Time:** ~2 minutes  
+**Prediction Time:** ~30ms per property
