@@ -20,4 +20,9 @@ __pycache__/
 
 # WandB & Models
 wandb/
-Models/
+Models/
+
+.agents
+.kiro
+
+run_train.py
