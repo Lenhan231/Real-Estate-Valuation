@@ -12,7 +12,8 @@ selenium
 webdriver-manager
 supabase
 python-dotenv
-geopytabpfn
+geopy
+tabpfn
 matplotlib
 seaborn
 plotly
