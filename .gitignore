@@ -29,3 +29,8 @@ Models/
 data/processed/split_*.csv
 data/processed/alonhadat_features_cleaned2.csv
 trai_xgboost.csv
+
+.agents
+.kiro
+
+run_train.py

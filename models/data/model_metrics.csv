@@ -1,3 +1,0 @@
-model,mape,test_size
-random_forest,17.235313438863656,1536
-xgboost,21.222311986966304,1536

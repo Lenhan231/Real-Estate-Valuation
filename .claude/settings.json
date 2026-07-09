@@ -44,7 +44,19 @@
       "Bash(python predict.py)",
       "Bash(python3)",
       "Bash(python3 -c ' *)",
-      "PowerShell(Copy-Item 'models\\\\train.ipynb.bak' 'models\\\\train.ipynb' -Force)"
+      "PowerShell(Copy-Item 'models\\\\train.ipynb.bak' 'models\\\\train.ipynb' -Force)",
+      "Bash(python combine_csv.py)",
+      "Bash(python combine_features.py)",
+      "Bash(git stash *)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(python -m jupyter nbconvert --to notebook --execute models/train.ipynb --output train_output.ipynb)",
+      "Bash(python models/train.ipynb)",
+      "Bash(python run_train.py)",
+      "Bash(python -m jupyter execute models/train.ipynb --output models/train_step1.ipynb)",
+      "Bash(rm -rf saved_models/)",
+      "Bash(rm -f train_*.log)",
+      "Bash(rm -f models/saved_models/random_forest.joblib models/saved_models/xgboost.joblib models/saved_models/random_forest_meta.pkl models/saved_models/xgboost_meta.pkl)"
     ],
     "additionalDirectories": [
       "C:\\Users\\nhanl\\OneDrive\\Desktop\\School\\DSP391m\\HousePricePrediction\\models"
