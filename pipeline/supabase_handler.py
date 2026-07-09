@@ -61,7 +61,7 @@ def fetch_csv_from_supabase(table_name: str = None) -> pd.DataFrame:
     table_name = table_name or SUPABASE_TABLE
 
     try:
-        print(f"📖 Fetching data from Supabase table: {table_name}")
+        print(f"[Supabase] Fetching data from table: {table_name}")
         client = get_supabase_client()
 
         # Fetch all data
@@ -85,11 +85,11 @@ def fetch_csv_from_supabase(table_name: str = None) -> pd.DataFrame:
             offset += limit
 
         df = pd.DataFrame(all_data)
-        print(f"✓ Fetched {len(df)} rows from {table_name}\n")
+        print(f"[Supabase] Fetched {len(df)} rows from {table_name}\n")
         return df
 
     except Exception as e:
-        print(f"❌ Error fetching from Supabase: {e}")
+        print(f"[Supabase Error] fetching from Supabase: {e}")
         return pd.DataFrame()
 
 
