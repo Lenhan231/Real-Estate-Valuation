@@ -157,7 +157,10 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
             df[f'{col}_missing'] = df[col].isna().astype(int)
             df[col] = df[col].fillna(df[col].median())
 
-    drop_cols = ["id", "price_vnd", "url", "title", "post_day"]
+    drop_cols = ["id", "price_vnd", "url", "link", "title", "post_day", "description",
+                 "street", "ward", "district", "locality", "region", "street_n", "locality_n",
+                 "matched_address", "old_address", "lat", "lon",  # high-cardinality / leaky
+                 "listing_id", "owner_listing_bin"]  # not available at inference time
     features_df = df.drop(columns=[c for c in drop_cols if c in df.columns])
     
     cat_cols = features_df.select_dtypes(include=['object', 'category']).columns
@@ -241,6 +244,10 @@ def main():
         X_test = X_test.drop(columns=drop_text)
 
     print(f"      Train: {X_train.shape[0]} | Test: {X_test.shape[0]}")
+    
+    # Update meta['features'] with the newly added locality columns
+    meta["features"] = list(X_train.columns)
+    feature_names = meta["features"]
 
     # ------------------------------------------------------------------
     # 4. Train LightGBM & CatBoost (6-Bucket Ensemble Models)
