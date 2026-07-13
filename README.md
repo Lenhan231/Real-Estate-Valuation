@@ -40,7 +40,7 @@ Real-Estate-Valuation/
 ├── requirements.txt             # Project dependencies
 ├── .env                         # Configuration & API secrets
 │
-├── Models/                      ← ALL MODEL DEVELOPMENT & ARTIFACTS
+├── models/                      ← ALL MODEL DEVELOPMENT & ARTIFACTS
 │   ├── train_xgboost.py         # Script: Trains LightGBM + CatBoost ensemble
 │   ├── train_tabpfn.py          # Script: Trains TabPFN baseline models
 │   ├── save_meta.py             # Script: Generates locality lookup metadata
@@ -50,23 +50,50 @@ Real-Estate-Valuation/
 │   │   └── model_ready_data.csv
 │   └── *.pkl                    # Serialized model binaries (12 files for ensemble)
 │
+├── data/                        ← DATASETS & PROCESSED DATA
+│   ├── raw/                     # Raw scraped data
+│   │   ├── alonhadat_listings.csv
+│   │   └── alonhadat_details.csv
+│   ├── processed/               # Cleaned & feature-engineered datasets
+│   │   ├── alonhadat_features.csv
+│   │   ├── alonhadat_features_cleaned.csv
+│   ├── external/                # External reference data
+│   │   └── density_data.csv
+│   └── localities.csv           # Location metadata
+│
 ├── app/                         ← STREAMLIT UI & SERVING LAYER
 │   ├── app.py                   # Property appraisal user interface
 │   ├── dashboard.py             # BI Market dashboard
 │   ├── inference.py             # Single-property feature pipeline & router
 │   ├── geo.py                   # Spatial queries & local geocode lookup
+│   ├── api.py                   # Full REST API
 │   ├── api_simple.py            # Simple REST API
 │   └── README.md                # UI application guide
 │
 ├── docs/                        ← ARCHITECTURE & REFERENCE DOCUMENTATION
 │   ├── INDEX.md                 # Documentation catalog
 │   ├── MODEL_SPLITTING_GUIDE.md # Property type segmentation & outlier guidelines
-│   └── IMPLEMENTATION_SUMMARY.md# Tech stack and pipeline phases
+│   ├── IMPLEMENTATION_SUMMARY.md# Tech stack and pipeline phases
+│   ├── REFACTORING_GUIDE.md     # Code refactoring guidelines
+│   └── README.md                # Documentation overview
 │
 └── pipeline/                    ← ETL PIPELINE MODULES
-    ├── supabase_handler.py      # Supabase cloud db interface
-    ├── ingestion/               # Scrapers and density loader
-    └── transformation/          # Base cleaners & spatial POI extractors
+    ├── supabase_handler.py      # Supabase cloud database interface
+    ├── ingestion/               # Data scrapers and loaders
+    │   ├── load_density.py      # Load population density data
+    │   ├── load_pois.py         # Load Points of Interest
+    │   └── scrapers/            # Web scrapers
+    │       ├── Alonhadat/
+    │       │   ├── link_each_status.py
+    │       │   ├── link_to_details.py
+    │       │   └── scheduling.py
+    │       └── __init__.py
+    └── transformation/          # Data cleaning & feature engineering
+        ├── cleaning.py          # Data validation and cleaning
+        ├── feature_pipeline.py  # Core feature engineering
+        ├── poi_features.py      # POI-based features
+        ├── metro_features.py    # Metro station features
+        └── overpass_client.py   # OpenStreetMap/Overpass API client
 ```
 
 ---
