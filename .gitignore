@@ -33,3 +33,5 @@ trai_xgboost.csv
 .kiro
 
 run_train.py
+
+.claude
