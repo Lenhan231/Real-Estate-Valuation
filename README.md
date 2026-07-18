@@ -16,13 +16,13 @@ Predicts property prices using Machine Learning based on area, location, ameniti
 
 ## 📁 Repository Organization
 
-### `/data` — Input Data & Features
-- `raw/` — Original web-scraped listings (12.8k properties)
-- `processed/` — Cleaned & feature-engineered datasets (10.4k after filtering)
+### `/data` — Data Layers
+- `raw/` — Source exports from scraping / ingestion
+- `processed/` — Cleaned data and model-ready datasets
 - `external/` — Reference data (density, POI)
-- `cache/` — Supabase cache (1,208 locality records)
+- `cache/` — Local cache for repeat lookups
 
-**Why separate?** Raw data is messy; processed is the clean version used by models.
+**Why separate?** Keep source data, cleaned data, and train-ready data distinct so EDA and training do not mix responsibilities.
 
 ### `/pipeline` — Data Processing (ETL)
 ```
@@ -34,10 +34,10 @@ pipeline/
 ```
 
 **What it does:**
-1. Load raw data from Supabase
-2. Clean outliers & missing values
-3. Engineer 166 features (geometric, temporal, POI, text)
-4. Save to `/data/processed/` & cache
+1. Load ingested data from Supabase `Raw_Features`
+2. Clean outliers, duplicates, and invalid values
+3. Engineer model features
+4. Save cleaned and model-ready datasets to `/data/processed/`
 
 See [DATA.md](DATA.md) for detailed pipeline steps.
 
@@ -47,13 +47,11 @@ notebooks/
 ├── 01_eda/
 │   ├── 01_eda_complete.ipynb    ← Exploratory data analysis
 │   └── output/                  ← Generated visualizations
-├── 02_model_training/
-│   └── 02_model_training.ipynb  ← Train & compare 3 models
 └── README.md
 ```
 
-**01_eda:** Price distributions, correlations, geographic patterns  
-**02_model_training:** Train LightGBM, XGBoost, CatBoost; save production model
+**01_eda:** Explore `Raw_Features` first, then compare against cleaned data  
+Training now lives in `models/scripts/`
 
 ### `/models` — Trained ML Models
 ```
@@ -64,7 +62,6 @@ models/
 ├── archive/             ← Previous models
 │   ├── lightgbm_model.pkl (18.76% MAPE)
 │   └── catboost_model.pkl (19.52% MAPE)
-├── data/                ← Training datasets
 └── README.md           ← Model usage guide
 ```
 
@@ -92,9 +89,9 @@ Analyzes 12,814 properties: price ranges, feature correlations, geographic clust
 
 ### 2. Train Models
 ```bash
-jupyter notebook notebooks/02_model_training/02_model_training.ipynb
+python models/scripts/train_ensemble.py --data-source supabase
 ```
-Trains 3 algorithms, compares MAPE, saves best model to `models/production/`.
+Trains the 6-bucket ensemble on Supabase data and saves the best model to `models/production/`.
 
 ### 3. Use Web App
 ```bash
@@ -131,17 +128,15 @@ python app/api_simple.py
 ## 🔄 Data Processing Pipeline
 
 ```
-Scraped Data (12,814 properties)
-    ↓ [pipeline/ingestion/]
-Raw CSV Files
-    ↓ [pipeline/transformation/]
-Clean Data (10,432 after outlier removal)
-    ↓ [Feature Engineering]
-166 Features (geometric, temporal, POI, interactions)
-    ↓
-Supabase Cache (Raw_Features table)
-    ↓ [Model Training]
-Production Model (XGBoost)
+Raw source files
+    ↓ [ingestion]
+Supabase Raw_Features
+    ↓ [EDA / cleaning]
+Cleaned dataset
+    ↓ [feature engineering / model prep cache]
+model_ready_data.csv
+    ↓ [model training]
+Production model
     ↓
 Web App / Dashboard / API
 ```
@@ -151,6 +146,7 @@ Web App / Dashboard / API
 - Each folder has one responsibility
 - Easy to trace where errors come from
 - Documentation explains the "why", not just "what"
+ - `model_ready_data.csv` is a derived cache for inspection, not the source of truth for training
 
 ---
 
@@ -178,7 +174,7 @@ Web App / Dashboard / API
 **"Model not found"**
 ```bash
 ls models/production/production_model.pkl
-# If missing, re-run: notebooks/02_model_training/02_model_training.ipynb
+# If missing, re-run: `python models/scripts/train_ensemble.py --data-source supabase`
 ```
 
 **"Feature mismatch"**

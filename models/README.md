@@ -14,17 +14,10 @@ models/
 │   ├── catboost_model.pkl         # CatBoost (MAPE: 19.52%)
 │   └── xgboost_tuned_model.pkl    # Tuning experiment (not better)
 │
-├── segment_models/                # (Optional) Segmented by price/type
-│   ├── low/                       # Budget segment (< 5B VND)
-│   ├── mid/                       # Mid-range (5-20B VND)
-│   └── high/                      # Premium (> 20B VND)
-│
-├── data/                          # Training data & cache
-│   ├── model_ready_data.csv       # Preprocessed training data
-│   └── predictions.csv            # Saved predictions
-│
-├── save_models/                   # (Legacy) Raw training outputs
-│   └── [original saved files]
+├── scripts/                        # Training scripts and shared preprocessing
+│   ├── _shared.py
+│   ├── train_xgboost.py
+│   └── train_ensemble.py
 │
 └── README.md                       # This file
 ```
@@ -54,8 +47,8 @@ predictions = model.predict(X_test)
 - 95% CI: ±5.24B VND (±1.96 × MAE)
 
 ### Alternative Models (Archive)
-- **LightGBM:** MAPE 18.76%, R² 0.8642
-- **CatBoost:** MAPE 19.52%, R² 0.8529
+- **XGBoost + LGBM ensemble:** best ensemble candidate on the current split
+- **LightGBM / CatBoost:** removed to keep the repo lean
 
 ## Model Usage
 
@@ -106,11 +99,10 @@ curl -X POST http://localhost:5000/api/predict \
 ## Training Details
 
 ### Data Preparation
-1. Filter outliers: Price (2-50B VND), Area (15-500 m²)
-2. Calculate price per sqm: 30-800M VND/m²
-3. Remove duplicates: 260 rows
-4. Clean invalid values: 1 row with NULL street
-5. **Result:** 10,432 clean properties
+1. Start from Supabase `Raw_Features`
+2. Clean outliers, duplicates, and invalid values
+3. Create engineered features
+4. Save the selected model artifact to `models/production/`
 
 ### Model Training
 ```
@@ -139,11 +131,20 @@ To retrain with new data:
 python run_training.py
 ```
 
-New model will be saved to `models/save_models/` then moved to appropriate folder.
+New model will be saved to `models/production/` if it is the best run, otherwise keep experiment outputs in `models/archive/`.
+
+## Report Shortlist
+
+Use these 2 in the report:
+1. `train_xgboost.py` for the baseline model
+2. `train_ensemble.py` for the best ensemble candidate
+
+Pick the winner by the same split, same preprocessing, and lowest MAPE first.
 
 ## Notes
 
-- All models trained on Supabase `Raw_Features` table
+- EDA should inspect Supabase `Raw_Features`, not the model-ready file
+- Training should use raw Supabase `Raw_Features`
 - Predictions are clipped to [0, ∞) to avoid negative prices
 - Model expects 166 features in specific order (see feature_pipeline.py)
 - Production model is stateless and can be parallelized

@@ -13,8 +13,11 @@ from pathlib import Path
 import os
 import sys
 
-# Add parent to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add the repo root (the folder that contains pipeline/)
+for parent in [Path(__file__).resolve().parent, *Path(__file__).resolve().parents]:
+    if (parent / 'pipeline').exists():
+        sys.path.insert(0, str(parent))
+        break
 
 from pipeline.supabase_handler import fetch_csv_from_supabase
 
