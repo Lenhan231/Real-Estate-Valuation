@@ -20,9 +20,10 @@ __pycache__/
 wandb/
 
 # Local model artifacts & plots
-
 *.json
 *.png
+*.pkl
+catboost_info/
 
 # Temporary and split datasets
 data/processed/split_*.csv
@@ -33,3 +34,5 @@ trai_xgboost.csv
 .kiro
 
 run_train.py
+
+

@@ -12,7 +12,7 @@ import pandas as pd
 import matplotlib
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -24,7 +24,7 @@ import wandb
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "Models" / "data"
 MODEL_DIR = PROJECT_ROOT / "Models"
 
@@ -67,6 +67,7 @@ def mean_absolute_percentage_error(y_true, y_pred):
 
 def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
     df = df.copy()
+    df = df.drop_duplicates()
 
     if 'price_vnd' in df.columns:
         df = df.dropna(subset=['price_vnd'])
