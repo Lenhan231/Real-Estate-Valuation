@@ -1,154 +1,211 @@
-# 🏠 House Price Prediction - 6-Bucket Ensemble (MAPE 13.47%)
+# 🏠 Real Estate Valuation - DSP391m Capstone Project
 
-An end-to-end Automated Valuation Model (AVM) pipeline for the Vietnamese real estate market (specifically Ho Chi Minh City). The production model uses a 6-bucket segmented router ensembling **LightGBM** and **CatBoost** to capture localized market dynamics and mitigate extreme pricing variance.
+**Automated real estate price prediction for Ho Chi Minh City properties**
 
----
+Predicts property prices using Machine Learning based on area, location, amenities, and geospatial features.
 
-## ⚙️ Setup
-
-### 1. Environment Variables
-Create a `.env` file based on `.env.example`:
-
-```bash
-# Copy template
-cp .env.example .env
-
-# Edit .env and add your Supabase credentials:
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=your-service-key
-SUPABASE_TABLE=Raw_Features
-```
-
-**⚠️ Important:** Never commit `.env` to git. It's in `.gitignore` for security.
-
-### 2. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
+| Metric | Value |
+|--------|-------|
+| **Model** | XGBoost |
+| **MAPE** | 18.01% |
+| **R²** | 0.8663 |
+| **Dataset** | 10,432 properties |
+| **Features** | 166 engineered |
 
 ---
 
-## 🚀 Quick Start
+## 📁 Repository Organization
 
-### 1. ETL Pipeline (Data Ingestion & Processing)
-Crawls real estate listings, geocodes addresses with caching, queries Points of Interest (POIs) using spatial indices, and uploads coordinates to Supabase:
-```bash
-python main.py --start-page 1 --end-page 50
+### `/data` — Input Data & Features
+- `raw/` — Original web-scraped listings (12.8k properties)
+- `processed/` — Cleaned & feature-engineered datasets (10.4k after filtering)
+- `external/` — Reference data (density, POI)
+- `cache/` — Supabase cache (1,208 locality records)
+
+**Why separate?** Raw data is messy; processed is the clean version used by models.
+
+### `/pipeline` — Data Processing (ETL)
+```
+pipeline/
+├── ingestion/           ← Data scrapers & loaders
+├── transformation/      ← Feature engineering (166 features from 11 base)
+├── supabase_handler.py  ← Fetch data from cloud database
+└── cache_handler.py     ← Local cache management
 ```
 
-### 2. Model Training & Pipeline Serialization
-All model code and training pipelines reside in the `Models/` directory.
-```bash
-cd Models
-python train_xgboost.py      # Train LightGBM + CatBoost 6-bucket ensemble
-python train_tabpfn.py       # Train TabPFN comparative baseline models
-python save_meta.py          # Process final dataset and save lookup metadata
+**What it does:**
+1. Load raw data from Supabase
+2. Clean outliers & missing values
+3. Engineer 166 features (geometric, temporal, POI, text)
+4. Save to `/data/processed/` & cache
+
+See [DATA.md](DATA.md) for detailed pipeline steps.
+
+### `/notebooks` — Analysis & Training
+```
+notebooks/
+├── 01_eda/
+│   ├── 01_eda_complete.ipynb    ← Exploratory data analysis
+│   └── output/                  ← Generated visualizations
+├── 02_model_training/
+│   └── 02_model_training.ipynb  ← Train & compare 3 models
+└── README.md
 ```
 
-### 3. Web UI & BI Dashboard
-To launch the user interface for live appraisals or explore the analytics dashboard:
-```bash
-# From the project root
-streamlit run app/app.py          # Interactive appraisal form
-streamlit run app/dashboard.py    # Market analysis dashboard
+**01_eda:** Price distributions, correlations, geographic patterns  
+**02_model_training:** Train LightGBM, XGBoost, CatBoost; save production model
+
+### `/models` — Trained ML Models
+```
+models/
+├── production/          ← XGBoost (best model) ⭐
+│   ├── production_model.pkl
+│   └── model_results.csv
+├── archive/             ← Previous models
+│   ├── lightgbm_model.pkl (18.76% MAPE)
+│   └── catboost_model.pkl (19.52% MAPE)
+├── data/                ← Training datasets
+└── README.md           ← Model usage guide
 ```
 
----
+**Why organized?** Keep production separate from experiments. Never delete working models.
 
-## 📁 Repository Structure
-
-```text
-Real-Estate-Valuation/
-├── README.md                    ← You are here
-├── main.py                      # Main ETL pipeline orchestration
-├── requirements.txt             # Project dependencies
-├── .env                         # Configuration & API secrets
-│
-├── models/                      ← ALL MODEL DEVELOPMENT & ARTIFACTS
-│   ├── train_xgboost.py         # Script: Trains LightGBM + CatBoost ensemble
-│   ├── train_tabpfn.py          # Script: Trains TabPFN baseline models
-│   ├── save_meta.py             # Script: Generates locality lookup metadata
-│   ├── data/                    # Local training & validation datasets
-│   │   ├── raw_data.csv
-│   │   ├── alonhadat_features_cleaned.csv
-│   │   └── model_ready_data.csv
-│   └── *.pkl                    # Serialized model binaries (12 files for ensemble)
-│
-├── data/                        ← DATASETS & PROCESSED DATA
-│   ├── raw/                     # Raw scraped listings from web
-│   │   ├── alonhadat_listings.csv          # Listing URLs and basic info
-│   │   └── alonhadat_details.csv           # Detailed property info
-│   ├── processed/               # Cleaned & feature-engineered datasets
-│   │   ├── alonhadat_features.csv          # Full features for model training
-│   │   ├── alonhadat_features_cleaned.csv  # Cleaned version for final analysis
-│   │   └── alonhadat_cleaned.csv           # Intermediate cleaned data
-│   ├── cache/                   # Local cache files
-│   │   └── localities.csv       # Geocoding cache (legacy - now in Supabase)
-│   └── external/                # External reference datasets
-│       └── density_data.csv     # Population density from OpenData Vietnam
-│
-├── app/                         ← STREAMLIT UI & SERVING LAYER
-│   ├── app.py                   # Property appraisal user interface
-│   ├── dashboard.py             # BI Market dashboard
-│   ├── inference.py             # Single-property feature pipeline & router
-│   ├── geo.py                   # Spatial queries & local geocode lookup
-│   ├── api.py                   # Full REST API
-│   ├── api_simple.py            # Simple REST API
-│   └── README.md                # UI application guide
-│
-├── docs/                        ← ARCHITECTURE & REFERENCE DOCUMENTATION
-│   ├── INDEX.md                 # Documentation catalog
-│   ├── MODEL_SPLITTING_GUIDE.md # Property type segmentation & outlier guidelines
-│   ├── IMPLEMENTATION_SUMMARY.md# Tech stack and pipeline phases
-│   ├── REFACTORING_GUIDE.md     # Code refactoring guidelines
-│   └── README.md                # Documentation overview
-│
-├── pipeline/                    ← ETL PIPELINE MODULES
-│   ├── cache_handler.py         # Supabase cache operations
-│   ├── supabase_handler.py      # Supabase cloud database interface
-│   ├── ingestion/               # Data scrapers and loaders
-    │   ├── load_density.py      # Load population density data
-    │   ├── load_pois.py         # Load Points of Interest
-    │   └── scrapers/            # Web scrapers
-    │       ├── Alonhadat/
-    │       │   ├── link_each_status.py
-    │       │   ├── link_to_details.py
-    │       │   └── scheduling.py
-    │       └── __init__.py
-    └── transformation/          # Data cleaning & feature engineering
-        ├── cleaning.py          # Data validation and cleaning
-        ├── feature_pipeline.py  # Core feature engineering
-        ├── poi_features.py      # POI-based features
-        ├── metro_features.py    # Metro station features
-        └── overpass_client.py   # OpenStreetMap/Overpass API client
+### `/app` — User Interfaces
+```
+app/
+├── app_simple.py        ← Streamlit web app 🏠
+├── dashboard.py         ← BI dashboard 📊
+├── api_simple.py        ← REST API 🔌
+├── inference_simple.py  ← Model wrapper
+└── geo.py              ← Geospatial helpers
 ```
 
 ---
 
-## 📊 Performance & Modeling
+## 🚀 How to Use
 
-Rather than fitting a single global model, the dataset is dynamically segmented into **6 specialized sub-market buckets** based on property type and estimated price tier to resolve high pricing variance:
+### 1. Run Exploratory Data Analysis
+```bash
+jupyter notebook notebooks/01_eda/01_eda_complete.ipynb
+```
+Analyzes 12,814 properties: price ranges, feature correlations, geographic clusters.
 
-* **Property Type Splits:** Alley houses (*nhà trong hẻm*) vs. Frontage houses (*nhà mặt tiền*)
-* **Price Tier Splits:** Low (0-5B VND), Mid (5-20B VND), and High (>20B VND)
+### 2. Train Models
+```bash
+jupyter notebook notebooks/02_model_training/02_model_training.ipynb
+```
+Trains 3 algorithms, compares MAPE, saves best model to `models/production/`.
 
-### Model Evaluation Results
-* **Global $R^2$**: `0.9138` (Model explains 91.3% of HCMC price variance)
-* **Global MAPE**: `13.47%`
-* **Low-segment (0-5B VND) MAPE**: `10.48%` (Close to the 10% target threshold)
+### 3. Use Web App
+```bash
+streamlit run app/app_simple.py
+# Visit: http://localhost:8501
+```
+Input: area, floors, bedrooms, type → Output: predicted price + confidence interval
 
-### Data Pruning & Outlier Bounds
-To prevent ultra-luxury outliers from distorting target learning, the pipeline applies segment-specific IQR fences (×1.5 for frontage, ×3.0 for alleys) alongside strict baseline boundaries:
-* **Prices:** Bounded between `2.0B` and `50.0B` VND
-* **Property Area:** Capped between `15m²` and `500m²`
-* **Price per m²:** Bounded between `30M` and `800M` VND/m²
+### 4. Use BI Dashboard
+```bash
+streamlit run app/dashboard.py
+```
+Visualize market trends, price heatmaps, top localities.
+
+### 5. Use REST API
+```bash
+python app/api_simple.py
+# POST http://localhost:5000/api/predict
+```
 
 ---
 
-## 🛠️ Developer Checklist
+## 📚 Documentation Files
 
-* **To run full ETL:** `python main.py`
-* **To retrain ensemble:** `cd Models && python train_xgboost.py`
-* **To rebuild metadata:** `cd Models && python save_meta.py`
-* **To launch UI:** `streamlit run app/app.py`
-* **To launch REST API:** `python app/api_simple.py`
+| File | Purpose |
+|------|---------|
+| [DATA.md](DATA.md) | Data pipeline: sources → cleaning → features → cache |
+| [MODELS.md](MODELS.md) | Model training: architecture, hyperparameters, results |
+| [notebooks/README.md](notebooks/README.md) | How to run EDA & training notebooks |
+| [models/README.md](models/README.md) | Model selection & usage examples |
+
+---
+
+## 🔄 Data Processing Pipeline
+
+```
+Scraped Data (12,814 properties)
+    ↓ [pipeline/ingestion/]
+Raw CSV Files
+    ↓ [pipeline/transformation/]
+Clean Data (10,432 after outlier removal)
+    ↓ [Feature Engineering]
+166 Features (geometric, temporal, POI, interactions)
+    ↓
+Supabase Cache (Raw_Features table)
+    ↓ [Model Training]
+Production Model (XGBoost)
+    ↓
+Web App / Dashboard / API
+```
+
+**Why this structure?**
+- Clear separation between data, processing, models, apps
+- Each folder has one responsibility
+- Easy to trace where errors come from
+- Documentation explains the "why", not just "what"
+
+---
+
+## 🤖 Model Performance
+
+**Best Model: XGBoost**
+- Training: 8,345 properties (80%)
+- Testing: 2,087 properties (20%)
+- Features: 166 engineered features
+- Target: Property price (log-transformed)
+
+**Metrics:**
+- MAPE: 18.01% (mean absolute percentage error)
+- R²: 0.8663 (explains 86.63% of price variance)
+- MAE: 2.67B VND (±1.33B @ 95% confidence)
+
+**Compared to:**
+- LightGBM: 18.76% MAPE
+- CatBoost: 19.52% MAPE
+
+---
+
+## 🚨 Troubleshooting
+
+**"Model not found"**
+```bash
+ls models/production/production_model.pkl
+# If missing, re-run: notebooks/02_model_training/02_model_training.ipynb
+```
+
+**"Feature mismatch"**
+- Ensure `/pipeline/transformation/feature_pipeline.py` hasn't changed
+- Re-run training notebook to regenerate model
+
+**"Supabase connection error"**
+- Check `.env` file has correct `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`
+- Verify Supabase table exists and has data
+
+---
+
+## 📋 Capstone Deliverables
+
+| Item | Status |
+|------|--------|
+| Data Pipeline | ✅ Complete |
+| EDA Analysis | ✅ Complete |
+| Model Training | ✅ Complete |
+| Web App | ✅ Live |
+| BI Dashboard | ✅ Ready |
+| REST API | ✅ Ready |
+| Organization | ✅ Clear structure |
+| Research Paper | ⏳ Next |
+
+---
+
+**Last Updated:** 2026-07-18  
+**Model Version:** v1.0 (XGBoost)  
+**Data Source:** alonhadat.com (web scraping)
