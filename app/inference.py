@@ -13,8 +13,8 @@ import pandas as pd
 from geo import GeoLookup, POI_COLS
 
 ROOT = Path(__file__).resolve().parent.parent
-MODEL_DIR = ROOT / "Models"
-READY_CSV = ROOT / "Models" / "data" / "model_ready_data.csv"
+MODEL_DIR = ROOT / "models" / "save_models"  # Updated path (lowercase)
+READY_CSV = ROOT / "models" / "data" / "model_ready_data.csv"  # Updated path
 
 
 def load_models():
