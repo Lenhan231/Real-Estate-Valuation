@@ -12,7 +12,7 @@ import pandas as pd
 import matplotlib
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -24,7 +24,7 @@ import wandb
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "Models" / "data"
 MODEL_DIR = PROJECT_ROOT / "Models"
 
@@ -35,11 +35,11 @@ WANDB_PROJECT = "real-estate-valuation"
 # Functions
 # ---------------------------------------------------------------------------
 def plot_feature_importance(model, feature_names, save_path):
-    # Only for LGBM
+    # Only for xgboost
     importances = model.feature_importances_
     indices = np.argsort(importances)[-20:]
     plt.figure(figsize=(10, 8))
-    plt.title("Top 20 Feature Importances (LGBM)")
+    plt.title("Top 20 Feature Importances (xgboost)")
     plt.barh(range(len(indices)), importances[indices], align="center")
     plt.yticks(range(len(indices)), [feature_names[i] for i in indices])
     plt.xlabel("Relative Importance")
@@ -67,6 +67,7 @@ def mean_absolute_percentage_error(y_true, y_pred):
 
 def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
     df = df.copy()
+    df = df.drop_duplicates()
 
     if 'price_vnd' in df.columns:
         df = df.dropna(subset=['price_vnd'])
@@ -171,7 +172,7 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
     }
     
     import re
-    # Only remove characters that break LightGBM (JSON chars and spaces)
+    # Only remove characters that break xgboost (JSON chars and spaces)
     features_df = features_df.rename(columns=lambda x: re.sub(r'[\[\]{},"\' :]+', '_', str(x)))
     
     # Handle any remaining duplicates by appending a suffix

@@ -32,7 +32,7 @@ import wandb
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "Models" / "data"
 MODEL_DIR = PROJECT_ROOT / "Models"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
