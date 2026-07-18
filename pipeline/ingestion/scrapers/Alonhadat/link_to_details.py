@@ -203,10 +203,10 @@ def fetch_via_selenium_manual(url: str) -> (BeautifulSoup | None):
 
     try:
         print(run(["warp-cli", "disconnect"]))
-        time.sleep(2)
+        time.sleep(random.uniform(3, 8))
 
         print(run(["warp-cli", "connect"]))
-        time.sleep(5)
+        time.sleep(random.uniform(5, 10))
 
     except Exception as e:
         print("WARP reconnect failed:", e)

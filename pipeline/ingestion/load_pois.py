@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 import subprocess
 
-LOCALITY_FILE = Path(__file__).parent.parent.parent / "data" / "localities.csv"
+LOCALITY_FILE = Path(__file__).parent.parent.parent / "data"/"cache"/ "localities.csv"
 
 # City centers - used for distance_to_center calculation only
 HCM_CENTER = (10.7769, 106.7009)
@@ -118,8 +118,34 @@ def append_to_localities_csv(lat, lon, features=None):
         pass  # Silent fail - don't break pipeline if CSV update fails
 
 
-# Load data on import
-load_cache_from_csv()
+# Load data on import (from Supabase cache instead of CSV)
+try:
+    from pipeline.cache_handler import get_supabase_client
+    client = get_supabase_client()
+    response = client.table('address_cache').select('street, locality, region, lat, lon, old_address').execute()
+
+    for row in response.data:
+        lat = row.get('lat')
+        lon = row.get('lon')
+        if lat and lon:
+            street = row.get('street', '').lower().strip()
+            locality = row.get('locality', '').lower().strip()
+            region = row.get('region', '').lower().strip()
+            old_address = str(row.get('old_address', '')).lower().strip()
+
+            # Apply same cleaning as geocode_with_fallback
+            old_address = re.sub(r"\s*\(cũ\)", "", old_address)
+            old_address = re.sub(r"\s+", " ", old_address).strip()
+
+            if old_address:
+                geocode_cache[(old_address,)] = (lat, lon)
+            if street and locality and region:
+                geocode_cache[(street, locality, region)] = (lat, lon)
+
+    print(f"  ✓ Loaded {len(geocode_cache)} geocoding cache keys from Supabase")
+except Exception as e:
+    print(f"  ⚠️  Failed to load Supabase cache, falling back to CSV: {e}")
+    load_cache_from_csv()
 
 
 def geocode_with_fallback(row):

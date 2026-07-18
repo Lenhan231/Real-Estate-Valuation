@@ -35,3 +35,5 @@ trai_xgboost.csv
 run_train.py
 
 .claude
+
+.claude_docs/

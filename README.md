@@ -58,7 +58,7 @@ Real-Estate-Valuation/
 │   │   ├── alonhadat_features.csv
 │   │   ├── alonhadat_features_cleaned.csv
 │   ├── external/                # External reference data
-│   │   └── density_data.csv
+│   │   └── density_data.csv     # Population density data Crawling from Wikipedia
 │   └── localities.csv           # Location metadata
 │
 ├── app/                         ← STREAMLIT UI & SERVING LAYER
