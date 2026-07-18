@@ -131,6 +131,9 @@ def push_csv_to_supabase(csv_path: str | Path) -> bool:
             print("   ✓ All data already in Supabase, skipping push")
             return True
 
+        # Add created_at timestamp for logging
+        df_new['created_at'] = datetime.now().isoformat()
+
         # Clean: Replace NaN and infinity with None for JSON compliance
         print("   Cleaning new data...")
 
@@ -160,8 +163,20 @@ def push_csv_to_supabase(csv_path: str | Path) -> bool:
                 total_inserted += len(batch)
                 print(f"   ✓ Batch {batch_num}/{total_batches}: Inserted {len(batch)} new rows")
             except Exception as e:
-                print(f"   ❌ Batch {batch_num} failed: {e}")
-                return False
+                # If created_at column doesn't exist, try without it
+                if 'created_at' in str(e) and 'PGRST204' in str(e):
+                    print(f"   ⚠️  Batch {batch_num}: 'created_at' column not in schema, retrying without it...")
+                    batch_no_timestamp = [{k: v for k, v in record.items() if k != 'created_at'} for record in batch]
+                    try:
+                        response = client.table(SUPABASE_TABLE).insert(batch_no_timestamp).execute()
+                        total_inserted += len(batch_no_timestamp)
+                        print(f"   ✓ Batch {batch_num}/{total_batches}: Inserted {len(batch_no_timestamp)} new rows (without timestamp)")
+                    except Exception as e2:
+                        print(f"   ❌ Batch {batch_num} failed: {e2}")
+                        return False
+                else:
+                    print(f"   ❌ Batch {batch_num} failed: {e}")
+                    return False
 
         print(f"\n✅ Successfully pushed {total_inserted} new rows to {SUPABASE_TABLE}")
         return True
