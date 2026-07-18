@@ -140,6 +140,8 @@ def get_additional_features(df, school_radius=3000, hospital_radius=5000,
 
     # Convert features list to DataFrame and merge
     features_df = pd.DataFrame(features_list)
+    # Reset index to match df's index before concatenating
+    features_df.index = df.index
     df = pd.concat([df, features_df], axis=1)
 
     print("   ✓ Features added with caching\n")
