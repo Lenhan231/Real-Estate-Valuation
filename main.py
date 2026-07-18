@@ -179,7 +179,7 @@ def main():
                 df_combined = pd.concat([df_output] + processed_batches, ignore_index=True)
             else:
                 df_combined = pd.concat(processed_batches, ignore_index=True)
-            df_combined.to_csv(OUTPUT_FILE, index=False)
+            df_combined.to_csv(OUTPUT_FILE, index=False, quoting=1, escapechar='\\')
 
         # Checkpoint: Write remaining rows to input file after each batch
         mask = ~df.index.isin(all_processed_indices)
