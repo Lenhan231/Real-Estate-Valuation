@@ -4,6 +4,30 @@ An end-to-end Automated Valuation Model (AVM) pipeline for the Vietnamese real e
 
 ---
 
+## ⚙️ Setup
+
+### 1. Environment Variables
+Create a `.env` file based on `.env.example`:
+
+```bash
+# Copy template
+cp .env.example .env
+
+# Edit .env and add your Supabase credentials:
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-service-key
+SUPABASE_TABLE=Raw_Features
+```
+
+**⚠️ Important:** Never commit `.env` to git. It's in `.gitignore` for security.
+
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. ETL Pipeline (Data Ingestion & Processing)
