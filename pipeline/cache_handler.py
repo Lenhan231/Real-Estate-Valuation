@@ -111,16 +111,34 @@ def load_csv_to_supabase(csv_path: str) -> bool:
         df = pd.read_csv(csv_path)
         print(f"   Found {len(df)} rows")
 
+        # Remove rows with NULL street, locality, or region (required for cache key)
+        print("   Filtering invalid rows (NULL street/locality/region)...")
+        rows_before = len(df)
+        df = df.dropna(subset=['street', 'locality', 'region'])
+        rows_removed = rows_before - len(df)
+        if rows_removed > 0:
+            print(f"   Removed {rows_removed} invalid rows")
+
+        # Remove duplicate cache keys (street, locality, region)
+        print("   Removing duplicate entries...")
+        dupes_before = len(df)
+        df = df.drop_duplicates(subset=['street', 'locality', 'region'], keep='first')
+        dupes_removed = dupes_before - len(df)
+        if dupes_removed > 0:
+            print(f"   Removed {dupes_removed} duplicate rows")
+
         # Clean invalid float values (NaN, inf, -inf → None)
         print("   Cleaning invalid float values...")
         df = df.replace({float('inf'): None, float('-inf'): None})
-        df = df.astype(object).where(pd.notna(df), None)
 
-        # Convert count columns from float to int (47.0 → 47)
+        # Convert count columns from float to int FIRST (before replacing NaN with None)
         print("   Converting count columns to integers...")
         count_columns = [col for col in df.columns if 'count' in col.lower()]
         for col in count_columns:
             df[col] = df[col].apply(lambda x: int(x) if pd.notna(x) else None)
+
+        # Then replace NaN with None for JSON compliance
+        df = df.astype(object).where(pd.notna(df), None)
 
         print(f"   Found {len(df)} rows\n")
 
@@ -128,6 +146,13 @@ def load_csv_to_supabase(csv_path: str) -> bool:
 
         # Convert to records for batch insert
         records = df.to_dict(orient='records')
+
+        # Ensure count columns are int, not float strings
+        count_columns = [col for col in df.columns if 'count' in col.lower()]
+        for record in records:
+            for col in count_columns:
+                if col in record and record[col] is not None:
+                    record[col] = int(record[col]) if isinstance(record[col], (int, float)) else record[col]
 
         # Insert in batches
         BATCH_SIZE = 100
