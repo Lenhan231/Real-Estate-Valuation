@@ -4,6 +4,30 @@ An end-to-end Automated Valuation Model (AVM) pipeline for the Vietnamese real e
 
 ---
 
+## ⚙️ Setup
+
+### 1. Environment Variables
+Create a `.env` file based on `.env.example`:
+
+```bash
+# Copy template
+cp .env.example .env
+
+# Edit .env and add your Supabase credentials:
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-service-key
+SUPABASE_TABLE=Raw_Features
+```
+
+**⚠️ Important:** Never commit `.env` to git. It's in `.gitignore` for security.
+
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. ETL Pipeline (Data Ingestion & Processing)
@@ -51,15 +75,17 @@ Real-Estate-Valuation/
 │   └── *.pkl                    # Serialized model binaries (12 files for ensemble)
 │
 ├── data/                        ← DATASETS & PROCESSED DATA
-│   ├── raw/                     # Raw scraped data
-│   │   ├── alonhadat_listings.csv
-│   │   └── alonhadat_details.csv
+│   ├── raw/                     # Raw scraped listings from web
+│   │   ├── alonhadat_listings.csv          # Listing URLs and basic info
+│   │   └── alonhadat_details.csv           # Detailed property info
 │   ├── processed/               # Cleaned & feature-engineered datasets
-│   │   ├── alonhadat_features.csv
-│   │   ├── alonhadat_features_cleaned.csv
-│   ├── external/                # External reference data
-│   │   └── density_data.csv     # Population density data Crawling from Wikipedia
-│   └── localities.csv           # Location metadata
+│   │   ├── alonhadat_features.csv          # Full features for model training
+│   │   ├── alonhadat_features_cleaned.csv  # Cleaned version for final analysis
+│   │   └── alonhadat_cleaned.csv           # Intermediate cleaned data
+│   ├── cache/                   # Local cache files
+│   │   └── localities.csv       # Geocoding cache (legacy - now in Supabase)
+│   └── external/                # External reference datasets
+│       └── density_data.csv     # Population density from OpenData Vietnam
 │
 ├── app/                         ← STREAMLIT UI & SERVING LAYER
 │   ├── app.py                   # Property appraisal user interface
@@ -77,9 +103,10 @@ Real-Estate-Valuation/
 │   ├── REFACTORING_GUIDE.md     # Code refactoring guidelines
 │   └── README.md                # Documentation overview
 │
-└── pipeline/                    ← ETL PIPELINE MODULES
-    ├── supabase_handler.py      # Supabase cloud database interface
-    ├── ingestion/               # Data scrapers and loaders
+├── pipeline/                    ← ETL PIPELINE MODULES
+│   ├── cache_handler.py         # Supabase cache operations
+│   ├── supabase_handler.py      # Supabase cloud database interface
+│   ├── ingestion/               # Data scrapers and loaders
     │   ├── load_density.py      # Load population density data
     │   ├── load_pois.py         # Load Points of Interest
     │   └── scrapers/            # Web scrapers
