@@ -70,7 +70,14 @@ def main():
     print("[2/5] Preprocessing...")
     X, y, meta = preprocess(df)
     feature_names = meta["features"]
-    
+
+    processed_data_dir = PROJECT_ROOT / "data" / "processed"
+    processed_data_dir.mkdir(parents=True, exist_ok=True)
+    X_with_target = X.copy()
+    X_with_target['price_vnd'] = y
+    X_with_target.to_csv(processed_data_dir / "model_training_data.csv", index=False)
+    print(f"  Saved training data to {processed_data_dir / 'model_training_data.csv'}")
+
     y_log = np.log1p(y)
 
     print("[3/5] Splitting data (80/20)...")

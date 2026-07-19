@@ -1,164 +1,221 @@
-# 🤖 Models - Trained ML Models
+# 🤖 Models - Real Estate Valuation
 
-## Structure
+## Directory Structure
 
 ```
 models/
-├── production/                     # Production-ready models
-│   ├── production_model.pkl       # ⭐ XGBoost (MAPE: 18.01%)
-│   ├── xgboost_model.pkl          # Same as production_model
-│   └── model_results.csv          # Evaluation metrics
+├── scripts/                        # Training and utility scripts
+│   ├── shared/                    # Shared utilities (imported by all scripts)
+│   │   ├── preprocessing.py       # Data preprocessing and feature engineering
+│   │   ├── plotting.py            # Visualization functions
+│   │   ├── wandb_logging.py       # Weights & Biases integration
+│   │   └── __init__.py            # Module initialization
+│   ├── train_xgboost.py           # XGBoost model training
+│   └── train_ensemble_3model.py   # ⭐ Recommended: 3-model ensemble (LGBM+CatBoost+XGB)
 │
-├── archive/                        # Previous/experimental models
-│   ├── lightgbm_model.pkl         # LightGBM (MAPE: 18.76%)
-│   ├── catboost_model.pkl         # CatBoost (MAPE: 19.52%)
-│   └── xgboost_tuned_model.pkl    # Tuning experiment (not better)
-│
-├── scripts/                        # Training scripts and shared preprocessing
-│   ├── _shared.py
-│   ├── train_xgboost.py
-│   └── train_ensemble.py
+├── saved_models/                   # Trained model artifacts
+│   ├── lgbm_*.pkl                 # LightGBM models (6 buckets)
+│   ├── cb_*.pkl                   # CatBoost models (6 buckets)
+│   ├── xgb_*.pkl                  # XGBoost models (6 buckets)
+│   ├── xgboost_*.pkl              # Single XGBoost model (alternative)
+│   └── plots/                     # Training visualizations & plots
 │
 └── README.md                       # This file
 ```
 
-## Model Selection
+## Models
 
-### ⭐ Production Model (Recommended)
+### ⭐ 3-Model Ensemble (LGBM + CatBoost + XGBoost) - RECOMMENDED
+
+```bash
+python models/scripts/train_ensemble_3model.py --data-source supabase
+```
+
+**Specifications:**
+
+- **Type:** 3-Model Ensemble (LightGBM + CatBoost + XGBoost)
+- **Strategy:** 6-bucket stratification by price & property type
+- **Dataset:** 12,814 Supabase records
+- **Training data:** 8,345 properties (80% split)
+- **Test data:** 2,087 properties (20% split)
+- **Features:** 39+ engineered features
+- **Target:** Price in VND (log-transformed for training)
+- **Training Time:** ~100 seconds
+- **Improvements:** Early stopping + weighted averaging by validation performance
+
+**Performance Metrics:**
+
+| Metric | Value |
+| --- | --- |
+| Global RMSE | 3.35 Billion VND |
+| Global MAE | 2.12 Billion VND |
+| Global R² | 0.9214 |
+| Global MAPE | 13.53% |
+| RMSE(log) | 0.1752 |
+
+**Performance by Price Segment:**
+
+| Segment | Price Range | MAPE | Test Samples |
+| --- | --- | --- | --- |
+| Budget | 0-5B VND | 11.92% | 225 |
+| Mid-range | 5-20B VND | 14.09% | 1,270 |
+| Premium | 20B+ VND | 13.21% | 592 |
+
+### XGBoost Model
+
 ```python
 import joblib
-model = joblib.load('models/production/production_model.pkl')
+model = joblib.load('models/saved_models/xgboost_cleaned_supabase.pkl')
 predictions = model.predict(X_test)
 ```
 
 **Specifications:**
+
 - **Type:** XGBoost Regressor
+- **Dataset:** 12,814 Supabase records
 - **Training data:** 8,345 properties (80% split)
-- **Features:** 166 engineered features
-- **Target:** Price (log-transformed)
+- **Test data:** 2,087 properties (20% split)
+- **Features:** 39+ engineered features
+- **Target:** Price in VND (log-transformed for training)
 
-**Performance:**
-- MAPE: 18.01% (Mean Absolute Percentage Error)
-- R²: 0.8663 (Explains 86.63% variance)
-- RMSE: 4.37B VND
-- MAE: 2.67B VND
+**Performance Metrics:**
 
-**Confidence Interval:**
-- 95% CI: ±5.24B VND (±1.96 × MAE)
+| Metric | Value |
+| --- | --- |
+| Global RMSE | 4.12 Billion VND |
+| Global MAE | 2.51 Billion VND |
+| Global R² | 0.8808 |
+| Global MAPE | 17.00% |
+| RMSE(log) | 0.2294 |
+| Training Time | ~24 seconds |
 
-### Alternative Models (Archive)
-- **XGBoost + LGBM ensemble:** best ensemble candidate on the current split
-- **LightGBM / CatBoost:** removed to keep the repo lean
+**Performance by Price Segment:**
 
-## Model Usage
+| Segment | Price Range | MAPE | Test Samples |
+| --- | --- | --- | --- |
+| Budget | 0-5B VND | 26.16% | 225 |
+| Mid-range | 5-20B VND | 16.28% | 1,270 |
+| Premium | 20B+ VND | 15.05% | 592 |
 
-### In Python
-```python
-from app.inference_simple import load_model, predict_price
+## Training Data
 
-model = load_model()
-predictions = predict_price(features_df)  # Returns prices in VND
-```
+**Where:** `data/processed/model_training_data.csv`
 
-### In Streamlit App
+**What:** All 8,345 training samples with 39+ preprocessed features + target price
+
+**Why saved:**
+
+- ✅ **Reproducibility** — exact data used to train the models
+- ✅ **Inspection** — validate feature engineering and preprocessing
+- ✅ **Analysis** — analyze model inputs and feature distributions
+- ✅ **Debugging** — trace any data issues back to source
+- ✅ **Comparison** — compare against test predictions
+
+**Note:** This is the 80% training split only. Test data (20%) is not saved since ground truth should stay separate from model validation.
+
+## Training Scripts
+
+### XGBoost Training
+
 ```bash
-streamlit run app/app_simple.py
+python models/scripts/train_xgboost.py --data-source supabase
 ```
 
-### Via REST API
+Trains an XGBoost regressor on preprocessed real estate features.
+
+### Ensemble Training
+
 ```bash
-python app/api_simple.py
-curl -X POST http://localhost:5000/api/predict \
-  -H "Content-Type: application/json" \
-  -d '{"area_m2": 80, "num_floors": 3, ...}'
+python models/scripts/train_ensemble.py --data-source supabase
 ```
+
+Trains an ensemble combining LightGBM and CatBoost with 6-bucket stratification.
 
 ## Feature Engineering Pipeline
 
-### Input Features (11 base)
+### Base Features
+
 - `num_floors`: Number of stories
 - `num_bedrooms`: Bedroom count
 - `area_m2`: Total area
 - `width_m`, `length_m`: Lot dimensions
-- `road_width_m`: Road frontage width
-- `direction`: Cardinal direction
-- `property_type`: Type (mặt tiền / hẻm)
-- `legal_status`: Documentation status
-- Geographic: lat, lon, distance_to_center
+- Geographic: distance_to_center_km, nearest amenities
+- `locality`: Area/district information
 
-### Engineered Features (155 additional)
+### Engineered Features (39+)
+
 - **Geometric:** perimeter, shape_ratio, area × floors, area × bedrooms
 - **Temporal:** post_day_year, post_day_month, post_day_day
-- **Location:** location_score (distance-weighted amenity access)
-- **Amenity:** amenity_score, school_count, hospital_count, etc.
+- **Location:** location_score, distance_vs_area
+- **Amenity:** amenity_score, nearby_amenities_count
 - **Text:** is_hem_xe_hoi, is_mat_tien, is_gap (from description)
 - **Log transforms:** log_area, log_distance
-- **Interactions:** location × amenity interactions
-- **Categorical:** One-hot encoded direction, type, status
+- **Locality:** locality_price_median, price_per_sqm_market
+- **Categorical:** One-hot encoded for categorical variables
 
 ## Training Details
 
 ### Data Preparation
-1. Start from Supabase `Raw_Features`
-2. Clean outliers, duplicates, and invalid values
-3. Create engineered features
-4. Save the selected model artifact to `models/production/`
+
+1. Source: Supabase `Raw_Features` table (12,814 records)
+2. Preprocessing:
+   - Remove duplicates
+   - Filter outliers (2B-50B VND price range, 15-500 m² area)
+   - Drop rows with missing target
+3. Feature Engineering: 39+ engineered features
+4. Encoding: One-hot for categorical, log-transform for skewed features
+5. Output: `data/processed/model_training_data.csv`
 
 ### Model Training
-```
-XGBoost Hyperparameters:
-- n_estimators: 500
-- max_depth: 8
-- learning_rate: 0.03
-- subsample: 0.8
-- colsample_bytree: 0.8
-- Target transform: log1p (log(1 + price))
-```
 
-### Evaluation Metrics
-```
-Test Set (2,087 properties):
-- MAPE: 18.01%
-- R²: 0.8663
-- RMSE: 4.37B VND
-- MAE: 2.67B VND
+**XGBoost Hyperparameters:**
+
+```yaml
+n_estimators: 1000
+max_depth: 8
+learning_rate: 0.03
+subsample: 0.8
+colsample_bytree: 0.8
+Target transform: log1p (log(1 + price))
 ```
 
-## Model Updates
+**Train/Test Split:**
 
-To retrain with new data:
-```bash
-python run_training.py
-```
+- Train: 8,345 properties (80%)
+- Test: 2,087 properties (20%)
+- Random state: 42 (reproducible)
 
-New model will be saved to `models/production/` if it is the best run, otherwise keep experiment outputs in `models/archive/`.
+## Data Output
 
-## Report Shortlist
+### Saved Artifacts
 
-Use these 2 in the report:
-1. `train_xgboost.py` for the baseline model
-2. `train_ensemble.py` for the best ensemble candidate
-
-Pick the winner by the same split, same preprocessing, and lowest MAPE first.
+- **Models:** `models/saved_models/xgboost_*.pkl`, `ensemble_*.pkl`
+- **Plots:** `models/saved_models/plots/`
+  - Feature importance charts
+  - Predicted vs actual scatter plots
+- **Data:** `data/processed/model_training_data.csv`
 
 ## Notes
 
-- EDA should inspect Supabase `Raw_Features`, not the model-ready file
-- Training should use raw Supabase `Raw_Features`
-- Predictions are clipped to [0, ∞) to avoid negative prices
-- Model expects 166 features in specific order (see feature_pipeline.py)
-- Production model is stateless and can be parallelized
+- All models use Supabase as primary data source
+- Local CSV fallback available if Supabase connection fails
+- Predictions are in Vietnamese Dong (VND)
+- Feature order matters when using saved models
+- Models are stateless and can be parallelized
 
 ## Troubleshooting
 
 **Model won't load:**
+
 ```python
 import joblib
-model = joblib.load('models/production/production_model.pkl')
-# If fails: check file exists and is < 10MB
+model = joblib.load('models/saved_models/xgboost_cleaned_supabase.pkl')
+# Check: file exists, is readable, correct path
 ```
 
 **Poor predictions:**
-- Verify feature engineering matches training pipeline
-- Check for out-of-distribution inputs
-- Consider segmented models for extreme price ranges
+
+- Verify all features are present
+- Check feature engineering matches training pipeline
+- Consider price range segmentation for outliers
+- Validate against `data/processed/model_training_data.csv`

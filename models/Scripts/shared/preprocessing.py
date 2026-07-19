@@ -11,7 +11,7 @@ def mean_absolute_percentage_error(y_true, y_pred):
 
 def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
     df = df.copy()
-    df = df.drop_duplicates()
+    df = df.drop_duplicates(subset=['listing_id'], keep='first')
 
     if 'price_vnd' in df.columns:
         df = df.dropna(subset=['price_vnd'])
