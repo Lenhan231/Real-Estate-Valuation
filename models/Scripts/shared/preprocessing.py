@@ -33,19 +33,29 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
 
     if "locality_square" in df.columns:
         def parse_locality_square(col: pd.Series) -> pd.Series:
-            def parse_arr(x):
-                if pd.isna(x):
+            def parse_val(x):
+                if pd.isna(x) or x == '':
                     return np.nan
                 try:
-                    return float(json.loads(x.replace("'", '"'))[0])
+                    # Handle European format (comma as decimal separator)
+                    return float(str(x).replace(',', '.'))
                 except Exception:
                     return np.nan
-            return col.apply(parse_arr)
+            return col.apply(parse_val)
         df["locality_square"] = parse_locality_square(df["locality_square"])
 
     if 'width_m' in df.columns and 'length_m' in df.columns:
-        df['perimeter_m'] = (df['width_m'] + df['length_m']) * 2
-        df['shape_ratio'] = (df['width_m'] + 0.1) / (df['length_m'] + 0.1)
+        # Only calculate if both width and length are not null
+        valid_dims = df['width_m'].notna() & df['length_m'].notna()
+        df.loc[valid_dims, 'perimeter_m'] = (df.loc[valid_dims, 'width_m'] + df.loc[valid_dims, 'length_m']) * 2
+        df.loc[valid_dims, 'shape_ratio'] = (df.loc[valid_dims, 'width_m'] + 0.1) / (df.loc[valid_dims, 'length_m'] + 0.1)
+        # Fill missing perimeter_m and shape_ratio with median
+        if df['perimeter_m'].isna().any():
+            df['perimeter_m_missing'] = df['perimeter_m'].isna().astype(int)
+            df['perimeter_m'] = df['perimeter_m'].fillna(df['perimeter_m'].median())
+        if df['shape_ratio'].isna().any():
+            df['shape_ratio_missing'] = df['shape_ratio'].isna().astype(int)
+            df['shape_ratio'] = df['shape_ratio'].fillna(df['shape_ratio'].median())
     if 'area_m2' in df.columns and 'num_floors' in df.columns:
         df['area_x_floors'] = df['area_m2'] * df['num_floors']
     if 'area_m2' in df.columns and 'num_bedrooms' in df.columns:
@@ -76,6 +86,11 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
     )
     df['interaction_loc_amenity'] = df['location_score'] * df['amenity_score']
 
+    # Fill missing values for ALL calculated features
+    for col in ['area_x_floors', 'area_x_bedrooms', 'area_per_bedroom', 'distance_vs_area', 'location_score', 'interaction_loc_amenity']:
+        if col in df.columns and df[col].isna().any():
+            df[col] = df[col].fillna(df[col].median())
+
     amenities = ['school_count_3km', 'hospital_count_5km', 'marketplace_count_3km', 'supermarket_count_3km', 'mall_count_3km', 'bus_stop_count_1km', 'metro_count_5km']
     df['nearby_amenities'] = df[[c for c in amenities if c in df.columns]].sum(axis=1)
 
@@ -95,10 +110,11 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
             df[f'{col}_missing'] = df[col].isna().astype(int)
             df[col] = df[col].fillna(999.0)
 
-    for col in ['width_m', 'length_m']:
+    for col in ['width_m', 'length_m', 'road_width_m', 'num_floors', 'num_bedrooms', 'nearest_hospital_km', 'nearest_marketplace_km']:
         if col in df.columns:
-            df[f'{col}_missing'] = df[col].isna().astype(int)
-            df[col] = df[col].fillna(df[col].median())
+            if df[col].isna().sum() > 0:
+                df[f'{col}_missing'] = df[col].isna().astype(int)
+                df[col] = df[col].fillna(df[col].median())
 
     drop_cols = ["id", "price_vnd", "url", "link", "title", "post_day", "description",
                  "street", "ward", "district", "locality", "region", "street_n", "locality_n",
