@@ -69,6 +69,9 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
         df['log_distance_to_center'] = np.log1p(df['distance_to_center_km'])
     if 'locality_population_density' in df.columns:
         df['log_population_density'] = np.log1p(df['locality_population_density'])
+        # Fill missing log values (from missing source values)
+        if df['log_population_density'].isna().any():
+            df['log_population_density'] = df['log_population_density'].fillna(df['log_population_density'].median())
 
     df['location_score'] = (
         (10 / (df['distance_to_center_km'] + 1)) * 2.0 +
@@ -105,10 +108,16 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
             df['is_gap'] = lower.str.contains('gấp|giảm giá|cần bán').astype(int)
             df['is_kinh_doanh'] = lower.str.contains('kinh doanh|cho thuê|thu nhập').astype(int)
 
-    for col in ['nearest_metro_km', 'nearest_mall_km', 'nearest_supermarket_km']:
+    # Fill distance columns with 999.0 (far away marker)
+    for col in ['nearest_metro_km', 'nearest_mall_km', 'nearest_supermarket_km', 'nearest_bus_stop_km']:
         if col in df.columns:
             df[f'{col}_missing'] = df[col].isna().astype(int)
             df[col] = df[col].fillna(999.0)
+
+    # Fill locality features with median
+    for col in ['locality_square', 'locality_population_density']:
+        if col in df.columns and df[col].isna().any():
+            df[col] = df[col].fillna(df[col].median())
 
     for col in ['width_m', 'length_m', 'road_width_m', 'num_floors', 'num_bedrooms', 'nearest_hospital_km', 'nearest_marketplace_km']:
         if col in df.columns:
