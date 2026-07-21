@@ -55,13 +55,17 @@ def _haversine_km(lat1, lon1, lat2, lon2):
 class GeoLookup:
     def __init__(self):
         # Try Supabase first, fallback to CSV
-        self.data_source = None
+        self.data_source = "CSV"  # Default
+
         df = self._load_from_supabase()
         if df is not None:
             self.data_source = "Supabase"
         else:
             df = self._load_from_csv()
             self.data_source = "CSV"
+
+        if df is None or df.empty:
+            raise FileNotFoundError("No data loaded from Supabase or CSV")
 
         df = df.dropna(subset=['lat', 'lon']).copy()
         df['street_n'] = df['street'].map(_norm)
@@ -77,6 +81,7 @@ class GeoLookup:
     def _load_from_supabase():
         """Load từ Supabase address_cache table (real-time)."""
         if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            print("⏭️  Supabase env vars not set, skipping...")
             return None
         try:
             from supabase import create_client
@@ -86,16 +91,24 @@ class GeoLookup:
                 df = pd.DataFrame(response.data)
                 print(f"✅ Loaded {len(df)} rows từ Supabase {SUPABASE_TABLE}")
                 return df
+            else:
+                print(f"⚠️  Supabase table empty, falling back to CSV")
+        except ImportError:
+            print("⚠️  supabase library not installed: pip install supabase")
         except Exception as e:
-            print(f"⚠️  Supabase load failed: {e}, falling back to CSV")
+            print(f"⚠️  Supabase error: {e}")
         return None
 
     @staticmethod
     def _load_from_csv():
         """Load từ CSV (fallback)."""
-        df = pd.read_csv(RAW_CSV)
-        print(f"✅ Loaded {len(df)} rows từ CSV")
-        return df
+        try:
+            df = pd.read_csv(RAW_CSV)
+            print(f"✅ Loaded {len(df)} rows từ CSV")
+            return df
+        except Exception as e:
+            print(f"❌ CSV load failed: {e}")
+            return None
 
     def localities(self) -> list[str]:
         return sorted(self.df['locality_n'].dropna().unique())
