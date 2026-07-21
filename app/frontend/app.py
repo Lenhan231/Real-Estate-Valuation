@@ -17,9 +17,10 @@ try:
 except Exception:
     pdk = None
 
+# Direct imports from modules (avoid __init__.py complexity)
 from api.geo import GeoLookup
 from api.inference import load_models, build_row, predict_price
-from shared.parsers import parse_listing, extract_street_from_address
+from shared.parsers import parse_listing, extract_street_from_address  # noqa: E402
 
 ROOT = PROJECT_ROOT
 BI_DATA_FILE = ROOT / "data" / "processed" / "model_training_data.csv"  # From Supabase via train_production.py
