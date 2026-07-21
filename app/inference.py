@@ -23,7 +23,11 @@ READY_CSV = ROOT / "data" / "processed" / "model_training_data.csv"  # v2.4 trai
 
 
 def load_models():
-    """Load v2.6 production models (9 models: 3-tier × 3-algorithm ensemble)."""
+    """Load v2.6 production models (9 models: 3-tier × 3-algorithm ensemble).
+
+    Feature names sourced from trained model (source of truth).
+    This auto-syncs when models are retrained - no manual list management needed.
+    """
     models = {}
     for path in MODEL_DIR.glob("*.pkl"):
         try:
@@ -34,22 +38,26 @@ def load_models():
     if not models:
         raise FileNotFoundError(f"No models in {MODEL_DIR} — ensure train_production.py has been run")
 
-    # Load training data to get exact feature names and count
-    training_df = pd.read_csv(READY_CSV)
-    feature_cols = [c for c in training_df.columns if c != 'price_vnd']
-
-    # Add 2 locality encoding features that are added at inference time
-    feature_cols_with_locality = feature_cols + ["locality_price_median", "price_per_sqm_market"]
+    # Get feature names from trained model (single source of truth!)
+    # All models trained with same features, so any model's feature_names_in_ is authoritative
+    first_model = models[list(models.keys())[0]]
+    try:
+        feature_names = list(first_model.feature_names_in_)
+    except AttributeError:
+        # Fallback if model doesn't have feature_names_in_
+        training_df = pd.read_csv(READY_CSV)
+        feature_names = [c for c in training_df.columns if c != 'price_vnd']
+        feature_names += ["locality_price_median", "price_per_sqm_market"]
 
     meta = {
         "version": "v2.6",
         "tiers": ["low", "mid", "high"],
         "models_per_tier": 3,
-        "n_features": len(feature_cols_with_locality),
-        "feature_names": feature_cols_with_locality
+        "n_features": len(feature_names),
+        "feature_names": feature_names  # From model, auto-syncs on retrain
     }
 
-    medians = training_df.median(numeric_only=True)
+    medians = pd.read_csv(READY_CSV).median(numeric_only=True)
     return models, meta, medians
 
 
