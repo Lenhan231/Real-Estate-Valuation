@@ -175,6 +175,18 @@ if mode == "Paste địa chỉ nhanh":
             # Auto-parse listing data
             parsed = parse_listing(address_text)
 
+            # Extract street (try to find from address_text)
+            street_default = ""
+            if "đường" in address_text.lower():
+                # Try to extract from "Đường XXX"
+                import re
+                match = re.search(r'(?:đường|street)\s+([^,]+)', address_text.lower())
+                if match:
+                    street_default = match.group(1).strip()
+
+            st.subheader("🗺️ Xác nhận địa chỉ")
+            street_input = st.text_input("Đường/Phố (chỉnh sửa nếu cần)", value=street_default or "")
+
             col_loc, col_house = st.columns(2)
             with col_loc:
                 st.subheader("🏷️ Phân loại")
@@ -212,14 +224,14 @@ if mode == "Paste địa chỉ nhanh":
                 }
 
             st.divider()
-            st.info(f"📍 **Phường được match:** {matched_locality}")
             if st.button("💰 Định giá", type="primary", use_container_width=True):
-                with st.spinner("Đang định giá..."):
-                    # Extract street from address
-                    street_from_text = address_text.split(",")[1].strip() if "," in address_text else address_text
-                    row, info = build_row(
-                        medians, geo,
-                        street=street_from_text,
+                if not street_input.strip():
+                    st.error("❌ Vui lòng nhập tên đường!")
+                else:
+                    with st.spinner("Đang định giá..."):
+                        row, info = build_row(
+                            medians, geo,
+                            street=street_input,
                         locality=matched_locality,
                         property_type=property_type, legal_status=legal_status, direction=direction,
                         area_m2=area_m2, width_m=width_m, length_m=length_m,
@@ -245,7 +257,7 @@ if mode == "Paste địa chỉ nhanh":
                         st.map(pd.DataFrame({"lat": [info["lat"]], "lon": [info["lon"]]}), zoom=14)
                         st.markdown("##### 📍 Thông tin tọa độ")
                         st.write(f"**Phường:** {matched_locality}")
-                        st.write(f"**Đường:** {street_from_text}")
+                        st.write(f"**Đường:** {street_input}")
                         st.write(f"**Nguồn tọa độ:** {info['source']}")
                         st.write(f"**Lat/Lon:** {info['lat']:.6f}, {info['lon']:.6f}")
                         if info["poi_source"] == "overpass":
