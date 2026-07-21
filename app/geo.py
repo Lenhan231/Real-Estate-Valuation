@@ -58,6 +58,10 @@ class GeoLookup:
         # Try Supabase first, fallback to CSV
         self.data_source = "CSV"  # Default
 
+        print("\n=== GeoLookup Init ===")
+        print(f"RAW_CSV: {RAW_CSV}")
+        print(f"DENSITY_CSV: {DENSITY_CSV}")
+
         df = self._load_from_supabase()
         if df is not None:
             self.data_source = "Supabase"
@@ -66,7 +70,10 @@ class GeoLookup:
             self.data_source = "CSV"
 
         if df is None or df.empty:
+            print(f"❌ ERROR: df={df}, empty={df.empty if df is not None else 'N/A'}")
             raise FileNotFoundError("No data loaded from Supabase or CSV")
+
+        print(f"✅ Loaded {len(df)} rows, source={self.data_source}")
 
         df = df.dropna(subset=['lat', 'lon']).copy()
         df['street_n'] = df['street'].map(_norm)
@@ -104,17 +111,28 @@ class GeoLookup:
     def _load_from_csv():
         """Load từ CSV + merge density data (fallback)."""
         try:
+            print(f"Loading {RAW_CSV}...")
+            if not RAW_CSV.exists():
+                print(f"  ❌ File not found: {RAW_CSV}")
+                return None
+
             df = pd.read_csv(RAW_CSV)
+            print(f"  ✅ Loaded {len(df)} rows from localities.csv")
 
             # Merge với density data để có locality_square & locality_population_density
             if DENSITY_CSV.exists():
+                print(f"Merging with {DENSITY_CSV}...")
                 density = pd.read_csv(DENSITY_CSV)
                 df = df.merge(density, on=['locality', 'region'], how='left')
+                print(f"  ✅ Merged, now {len(df)} rows")
+            else:
+                print(f"  ⚠️  Density file not found: {DENSITY_CSV}")
 
-            print(f"✅ Loaded {len(df)} rows từ CSV + density data")
-            return df
+            return df if not df.empty else None
         except Exception as e:
-            print(f"❌ CSV load failed: {e}")
+            print(f"❌ CSV load error: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def localities(self) -> list[str]:
