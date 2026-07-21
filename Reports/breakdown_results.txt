@@ -1,0 +1,93 @@
+================================================================================
+DETAILED BUCKET-BY-BUCKET MAPE BREAKDOWN
+================================================================================
+
+Loading data...
+[Supabase] Fetching data from table: Raw_Features
+[Supabase] Fetched 12814 rows from Raw_Features
+
+Preprocessing...
+
+================================================================================
+CURRENT STRATEGY: PRICE + PROPERTY TYPE (6 BUCKETS × 3 MODELS)
+================================================================================
+
+Training: Low (0-5B) + Nha Mat Tien
+  Train samples: 68
+  Test samples:  16
+Training until validation scores don't improve for 50 rounds
+Early stopping, best iteration is:
+[4]	valid_0's l2: 0.00919766
+  ✓ MAPE: 17906842566.20% | R²: -1867999000843300110336.0000 | MAE: 3.96B | RMSE: 3.96B
+
+Training: Low (0-5B) + Nha Trong Hem
+  Train samples: 856
+  Test samples:  216
+Training until validation scores don't improve for 50 rounds
+Early stopping, best iteration is:
+[429]	valid_0's l2: 0.0203017
+  ✓ MAPE: 18550768930.83% | R²: -503841256754814058496.0000 | MAE: 4.11B | RMSE: 4.13B
+
+Training: Mid (5-20B) + Nha Mat Tien
+  Train samples: 1457
+  Test samples:  359
+Training until validation scores don't improve for 50 rounds
+Early stopping, best iteration is:
+[305]	valid_0's l2: 0.0548688
+  ✓ MAPE: 54382362523.72% | R²: -1422610492390897614848.0000 | MAE: 12.66B | RMSE: 13.06B
+
+Training: Mid (5-20B) + Nha Trong Hem
+  Train samples: 3612
+  Test samples:  891
+Training until validation scores don't improve for 50 rounds
+Early stopping, best iteration is:
+[573]	valid_0's l2: 0.028396
+  ✓ MAPE: 40403863178.17% | R²: -729085576907368824832.0000 | MAE: 9.30B | RMSE: 9.81B
+
+Training: High (20B+) + Nha Mat Tien
+  Train samples: 1878
+  Test samples:  462
+Training until validation scores don't improve for 50 rounds
+Early stopping, best iteration is:
+[319]	valid_0's l2: 0.0300204
+  ✓ MAPE: 135482317200.96% | R²: -18181768496992623788032.0000 | MAE: 32.83B | RMSE: 33.31B
+
+Training: High (20B+) + Nha Trong Hem
+  Train samples: 465
+  Test samples:  141
+Training until validation scores don't improve for 50 rounds
+Early stopping, best iteration is:
+[218]	valid_0's l2: 0.0338494
+  ✓ MAPE: 128329682550.07% | R²: -16644800963381387329536.0000 | MAE: 30.98B | RMSE: 31.42B
+
+================================================================================
+SUMMARY TABLE - INDIVIDUAL BUCKET PERFORMANCE
+================================================================================
+
+Price Segment Property Type  Samples         MAPE            R²  MAE (B VND)  RMSE (B VND)
+   Low (0-5B)  Nha Mat Tien       16 1.790684e+10 -1.867999e+21     3.961907      3.963014
+   Low (0-5B) Nha Trong Hem      216 1.855077e+10 -5.038413e+20     4.107722      4.134698
+  Mid (5-20B)  Nha Mat Tien      359 5.438236e+10 -1.422610e+21    12.664621     13.060903
+  Mid (5-20B) Nha Trong Hem      891 4.040386e+10 -7.290856e+20     9.301086      9.808484
+  High (20B+)  Nha Mat Tien      462 1.354823e+11 -1.818177e+22    32.834366     33.305208
+  High (20B+) Nha Trong Hem      141 1.283297e+11 -1.664480e+22    30.981092     31.418735
+
+================================================================================
+GLOBAL PERFORMANCE (All buckets combined)
+================================================================================
+Global MAPE:  13.47%
+Global R²:    0.9142
+Global MAE:   2.22B VND
+Global RMSE:  3.54B VND
+
+================================================================================
+INSIGHTS
+================================================================================
+
+🏆 BEST:  Low (0-5B) + Nha Mat Tien
+   MAPE: 17906842566.20% (16 samples)
+
+⚠️  WORST: High (20B+) + Nha Mat Tien
+   MAPE: 135482317200.96% (462 samples)
+
+✅ Done!
