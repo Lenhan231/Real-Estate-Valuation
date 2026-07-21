@@ -2,93 +2,18 @@
 Chạy: streamlit run app/app.py
 Để xem BI Dashboard: streamlit run app/dashboard.py
 """
-import re
 import sys
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-try:
-    import pydeck as pdk
-except Exception:
-    pdk = None
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from geo import GeoLookup
 from inference import load_models, build_row, apply_locality_encoding, predict_price
+from parsers import parse_listing, extract_street_from_address
 
 ROOT = Path(__file__).resolve().parent.parent
-
-# ---------------------------------------------------------------------------
-# Listing parser
-# ---------------------------------------------------------------------------
-def parse_listing(text: str) -> dict:
-    """Parse Vietnamese real estate listing text → extract data."""
-    result = {
-        "area_m2": 80.0,
-        "num_floors": 3,
-        "num_bedrooms": 3,
-        "width_m": 4.0,
-        "length_m": 20.0,
-        "road_width_m": 6.0,
-        "is_gap": False,
-        "is_hem_xe_hoi": False,
-        "has_noi_that": False,
-        "is_kinh_doanh": False,
-        "is_no_hau": False,
-        "legal_status": "unknown",
-    }
-
-    text_lower = text.lower()
-
-    # Diện tích: "46m2", "46 m²", "diện tích 46"
-    area_match = re.search(r'(\d+(?:[.,]\d+)?)\s*m[²2²]', text_lower)
-    if area_match:
-        result["area_m2"] = float(area_match.group(1).replace(",", "."))
-
-    # Số tầng: "3 tầng", "lầu", "trệt"
-    floor_match = re.search(r'(\d+)\s*tầng', text_lower)
-    if floor_match:
-        result["num_floors"] = int(floor_match.group(1))
-
-    # Phòng ngủ: "4 phòng ngủ", "4 PN"
-    bed_match = re.search(r'(\d+)\s*(?:phòng ngủ|PN)', text_lower)
-    if bed_match:
-        result["num_bedrooms"] = int(bed_match.group(1))
-
-    # Đường trước nhà: "5m", "6 mét"
-    road_match = re.search(r'(?:hẻm|đường)\s*(?:trước|rộng)?\s*(\d+)\s*m', text_lower)
-    if road_match:
-        result["road_width_m"] = float(road_match.group(1))
-
-    # Cần bán gấp
-    if "cần bán gấp" in text_lower or "bán gấp" in text_lower:
-        result["is_gap"] = True
-
-    # Hẻm xe hơi
-    if "hẻm xe" in text_lower or "ô tô vào" in text_lower:
-        result["is_hem_xe_hoi"] = True
-
-    # Nở hậu
-    if "nở hậu" in text_lower:
-        result["is_no_hau"] = True
-
-    # Có nội thất / cho thuê
-    if "nội thất" in text_lower or "cho thuê" in text_lower:
-        result["has_noi_that"] = True
-
-    # Tiện kinh doanh
-    if "kinh doanh" in text_lower or "thích hợp" in text_lower:
-        result["is_kinh_doanh"] = True
-
-    # Pháp lý: Sổ hồng / Sổ đỏ
-    if "sổ hồng" in text_lower or "sổ đỏ" in text_lower:
-        result["legal_status"] = "so_hong_so_do"
-    elif "giấy tờ" in text_lower:
-        result["legal_status"] = "giay_to_hop_le"
-
-    return result
 
 st.set_page_config(
     page_title="Định giá nhà TP.HCM",
@@ -121,17 +46,14 @@ DIRECTIONS = {
 }
 
 # ---------------------------------------------------------------------------
-# Model + geo assets (cached across reruns)
+# Load assets
 # ---------------------------------------------------------------------------
 @st.cache_resource
 def load_assets():
     models, meta, medians = load_models()
     return models, meta, medians, GeoLookup()
 
-
 models, meta, medians, geo = load_assets()
-
-
 
 # ---------------------------------------------------------------------------
 # Header
@@ -148,7 +70,7 @@ with col_status:
     st.caption(f"{status_color} {geo.data_source}")
 
 # ---------------------------------------------------------------------------
-# Input form
+# Input mode selection
 # ---------------------------------------------------------------------------
 mode = st.radio("📝 Cách nhập", ["Paste địa chỉ nhanh", "Form chi tiết"], horizontal=True)
 
@@ -161,7 +83,6 @@ if mode == "Paste địa chỉ nhanh":
     )
 
     if address_text.strip():
-        # Parse địa chỉ tìm phường
         address_lower = address_text.lower()
         matched_locality = None
         for locality in geo.localities():
@@ -174,15 +95,7 @@ if mode == "Paste địa chỉ nhanh":
 
             # Auto-parse listing data
             parsed = parse_listing(address_text)
-
-            # Extract street (try to find from address_text)
-            street_default = ""
-            if "đường" in address_text.lower():
-                # Try to extract from "Đường XXX"
-                import re
-                match = re.search(r'(?:đường|street)\s+([^,]+)', address_text.lower())
-                if match:
-                    street_default = match.group(1).strip()
+            street_default = extract_street_from_address(address_text)
 
             st.subheader("🗺️ Xác nhận địa chỉ")
             street_input = st.text_input("Đường/Phố (chỉnh sửa nếu cần)", value=street_default or "")
@@ -232,49 +145,49 @@ if mode == "Paste địa chỉ nhanh":
                         row, info = build_row(
                             medians, geo,
                             street=street_input,
-                        locality=matched_locality,
-                        property_type=property_type, legal_status=legal_status, direction=direction,
-                        area_m2=area_m2, width_m=width_m, length_m=length_m,
-                        num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
-                        bin_flags=bin_flags, text_flags=text_flags,
-                    )
+                            locality=matched_locality,
+                            property_type=property_type, legal_status=legal_status, direction=direction,
+                            area_m2=area_m2, width_m=width_m, length_m=length_m,
+                            num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
+                            bin_flags=bin_flags, text_flags=text_flags,
+                        )
 
-                if row is None:
-                    st.error("Không geocode được địa chỉ")
-                else:
-                    row = apply_locality_encoding(row, meta, matched_locality)
-                    price = predict_price(models, meta, row, budget_range)
-                    mape_err = price * 0.1325
+                    if row is None:
+                        st.error("Không geocode được địa chỉ")
+                    else:
+                        row = apply_locality_encoding(row, meta, matched_locality)
+                        price = predict_price(models, meta, row, budget_range)
+                        mape_err = price * 0.1325
 
-                    r1, r2, r3 = st.columns(3)
-                    r1.metric("Giá dự đoán", f"{price / 1e9:,.2f} tỷ VND")
-                    r2.metric("Khoảng ±MAPE", f"{max(price - mape_err, 0) / 1e9:,.1f} – {(price + mape_err) / 1e9:,.1f} tỷ")
-                    r3.metric("Giá / m²", f"{price / area_m2 / 1e6:,.0f} triệu/m²")
+                        r1, r2, r3 = st.columns(3)
+                        r1.metric("Giá dự đoán", f"{price / 1e9:,.2f} tỷ VND")
+                        r2.metric("Khoảng ±MAPE", f"{max(price - mape_err, 0) / 1e9:,.1f} – {(price + mape_err) / 1e9:,.1f} tỷ")
+                        r3.metric("Giá / m²", f"{price / area_m2 / 1e6:,.0f} triệu/m²")
 
-                    m_col, f_col = st.columns([1, 1])
+                        m_col, f_col = st.columns([1, 1])
 
-                    with m_col:
-                        st.map(pd.DataFrame({"lat": [info["lat"]], "lon": [info["lon"]]}), zoom=14)
-                        st.markdown("##### 📍 Thông tin tọa độ")
-                        st.write(f"**Phường:** {matched_locality}")
-                        st.write(f"**Đường:** {street_input}")
-                        st.write(f"**Nguồn tọa độ:** {info['source']}")
-                        st.write(f"**Lat/Lon:** {info['lat']:.6f}, {info['lon']:.6f}")
-                        if info["poi_source"] == "overpass":
-                            st.info("Vị trí nằm ngoài vùng đã crawl - dùng Overpass API")
+                        with m_col:
+                            st.map(pd.DataFrame({"lat": [info["lat"]], "lon": [info["lon"]]}), zoom=14)
+                            st.markdown("##### 📍 Thông tin tọa độ")
+                            st.write(f"**Phường:** {matched_locality}")
+                            st.write(f"**Đường:** {street_input}")
+                            st.write(f"**Nguồn tọa độ:** {info['source']}")
+                            st.write(f"**Lat/Lon:** {info['lat']:.6f}, {info['lon']:.6f}")
+                            if info["poi_source"] == "overpass":
+                                st.info("Vị trí nằm ngoài vùng đã crawl - dùng Overpass API")
 
-                    with f_col:
-                        st.markdown("#### 🔍 64 Features")
-                        feature_df = pd.DataFrame([
-                            {"Feature": k, "Value": f"{v:.4g}" if isinstance(v, float) else v}
-                            for k, v in sorted(row.items())
-                        ])
-                        st.dataframe(feature_df, hide_index=True, use_container_width=True, height=400)
+                        with f_col:
+                            st.markdown("#### 🔍 64 Features")
+                            feature_df = pd.DataFrame([
+                                {"Feature": k, "Value": f"{v:.4g}" if isinstance(v, float) else v}
+                                for k, v in sorted(row.items())
+                            ])
+                            st.dataframe(feature_df, hide_index=True, use_container_width=True, height=400)
         else:
             st.warning("Không tìm thấy phường trong địa chỉ. Thử dùng Form chi tiết!")
 
 else:
-    # Form chi tiết (cũ)
+    # Form chi tiết
     col_loc, col_house = st.columns(2)
 
     with col_loc:
@@ -327,10 +240,6 @@ else:
         }
 
     st.divider()
-
-    # ---------------------------------------------------------------------------
-    # Predict (Form chi tiết)
-    # ---------------------------------------------------------------------------
     if st.button("💰 Định giá", type="primary", use_container_width=True):
         with st.spinner("Đang tra cứu vị trí và tính feature địa lý..."):
             row, info = build_row(
@@ -346,9 +255,8 @@ else:
             st.error("Không xác định được vị trí — kiểm tra lại tên đường / phường.")
         else:
             row = apply_locality_encoding(row, meta, locality)
-            # v2.4: Price-only model (no property_type segmentation)
             price = predict_price(models, meta, row, budget_range)
-            mape_err = price * 0.1325  # v2.4 Global MAPE 13.25%
+            mape_err = price * 0.1325
 
             r1, r2, r3 = st.columns(3)
             r1.metric("Giá dự đoán", f"{price:,.2f} tỷ VND")
