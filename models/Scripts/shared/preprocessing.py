@@ -30,6 +30,10 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
         df["post_day_month"] = post_day_dt.dt.month
         df["post_day_day"] = post_day_dt.dt.day
 
+        # Drop post_day_year if it has no variance (all same year)
+        if df["post_day_year"].nunique() == 1:
+            df = df.drop("post_day_year", axis=1)
+
     if "locality_square" in df.columns:
         def parse_locality_square(col: pd.Series) -> pd.Series:
             def parse_val(x):
@@ -44,6 +48,8 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
         df["locality_square"] = parse_locality_square(df["locality_square"])
    
     # Fill locality features with median
+    # Note: locality_square may be redundant with locality_population_density
+    # (pop_density = population / locality_square). Consider dropping after SHAP analysis.
     for col in ['locality_square', 'locality_population_density']:
         if col in df.columns and df[col].isna().any():
             df[col] = df[col].fillna(df[col].median())
@@ -54,10 +60,11 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
         df['road_width_m'] = df['road_width_m'].fillna(df['road_width_m'].median())
         
     # Fill num_bedrooms with median group by property_type and area_segment
-    df["area_segment"] = pd.qcut(
+    # Use fixed bins to avoid CV leakage (qcut on entire dataset leaks test info)
+    df["area_segment"] = pd.cut(
         df["area_m2"],
-        q=10,
-        duplicates="drop"
+        bins=[0, 30, 60, 100, 150, 200, 300, 500],
+        labels=['tiny', 'small', 'med_low', 'med', 'med_high', 'large', 'xlarge']
     )
     group_cols = ["property_type", "area_segment"]
 
@@ -88,6 +95,22 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
             df['shape_ratio_missing'] = df['shape_ratio'].isna().astype(int)
             df['shape_ratio'] = df['shape_ratio'].fillna(df['shape_ratio'].median())
     
+    for col in ["width_m", "length_m"]:
+        if col in df.columns and df[col].isna().any():
+            df[f"{col}_missing"] = df[col].isna().astype(int)
+            # Fill by property_type + area_segment first (more granular)
+            df[col] = (
+                df.groupby(group_cols)[col]
+                .transform(lambda x: x.fillna(x.median()))
+            )
+            # Then fill remaining with property_type only
+            df[col] = (
+                df.groupby("property_type")[col]
+                .transform(lambda x: x.fillna(x.median()))
+            )
+            # Finally fill any remaining with global median
+            df[col] = df[col].fillna(df[col].median())
+            
     # # Fill missing values for all calculated features
     # amenities = ['school_count_3km', 'hospital_count_5km', 'marketplace_count_3km', 'supermarket_count_3km', 'mall_count_3km', 'bus_stop_count_1km', 'metro_count_5km']
     # df['nearby_amenities'] = df[[c for c in amenities if c in df.columns]].sum(axis=1)
@@ -183,93 +206,93 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
             df[col] = df[col].fillna(fill_value)
 
 
-    # =====================================================
-    # Accessibility Scores
-    # =====================================================
+    # # =====================================================
+    # # Accessibility Scores
+    # # =====================================================
 
-    if 'distance_to_center_km' in df.columns:
-        df['center_score'] = np.exp(-df['distance_to_center_km'] / 5)
+    # if 'distance_to_center_km' in df.columns:
+    #     df['center_score'] = np.exp(-df['distance_to_center_km'] / 5)
 
-    if 'nearest_school_km' in df.columns:
-        df['school_score'] = np.exp(-df['nearest_school_km'] / 2)
+    # if 'nearest_school_km' in df.columns:
+    #     df['school_score'] = np.exp(-df['nearest_school_km'] / 2)
 
-    if 'nearest_hospital_km' in df.columns:
-        df['hospital_score'] = np.exp(-df['nearest_hospital_km'] / 2)
+    # if 'nearest_hospital_km' in df.columns:
+    #     df['hospital_score'] = np.exp(-df['nearest_hospital_km'] / 2)
 
-    if 'nearest_mall_km' in df.columns:
-        df['mall_score'] = np.exp(-df['nearest_mall_km'] / 3)
+    # if 'nearest_mall_km' in df.columns:
+    #     df['mall_score'] = np.exp(-df['nearest_mall_km'] / 3)
 
-    if 'nearest_supermarket_km' in df.columns:
-        df['supermarket_score'] = np.exp(-df['nearest_supermarket_km'] / 2)
+    # if 'nearest_supermarket_km' in df.columns:
+    #     df['supermarket_score'] = np.exp(-df['nearest_supermarket_km'] / 2)
 
-    if 'nearest_metro_km' in df.columns:
-        df['metro_score'] = np.exp(-df['nearest_metro_km'] / 4)
+    # if 'nearest_metro_km' in df.columns:
+    #     df['metro_score'] = np.exp(-df['nearest_metro_km'] / 4)
 
-    if 'nearest_bus_stop_km' in df.columns:
-        df['bus_score'] = np.exp(-df['nearest_bus_stop_km'] / 1)
-
-
-    # =====================================================
-    # Location Score
-    # =====================================================
-
-    score_cols = {
-        'center_score': 2.0,
-        'school_score': 1.5,
-        'hospital_score': 1.5,
-        'mall_score': 1.0,
-        'supermarket_score': 0.8,
-        'metro_score': 2.5,
-        'bus_score': 0.5,
-    }
-
-    df['location_score'] = 0
-
-    for col, weight in score_cols.items():
-        if col in df.columns:
-            df['location_score'] += weight * df[col]
+    # if 'nearest_bus_stop_km' in df.columns:
+    #     df['bus_score'] = np.exp(-df['nearest_bus_stop_km'] / 1)
 
 
-    # =====================================================
-    # Amenity Score
-    # =====================================================
+    # # =====================================================
+    # # Location Score
+    # # =====================================================
 
-    df['amenity_score'] = 0
+    # score_cols = {
+    #     'center_score': 2.0,
+    #     'school_score': 1.5,
+    #     'hospital_score': 1.5,
+    #     'mall_score': 1.0,
+    #     'supermarket_score': 0.8,
+    #     'metro_score': 2.5,
+    #     'bus_score': 0.5,
+    # }
 
-    count_weights = {
-        'school_count_3km': 1.0,
-        'hospital_count_5km': 1.5,
-        'marketplace_count_3km': 1.0,
-        'supermarket_count_3km': 1.0,
-        'mall_count_3km': 2.0,
-        'metro_count_5km': 3.0,
-        'bus_stop_count_1km': 0.5,
-    }
+    # df['location_score'] = 0
 
-    for col, weight in count_weights.items():
-
-        if col in df.columns:
-
-            df['amenity_score'] += (
-                weight *
-                np.log1p(df[col])
-            )
+    # for col, weight in score_cols.items():
+    #     if col in df.columns:
+    #         df['location_score'] += weight * df[col]
 
 
-    # =====================================================
-    # Interaction Features
-    # =====================================================
+    # # =====================================================
+    # # Amenity Score
+    # # =====================================================
 
-    df['interaction_loc_amenity'] = (
-        df['location_score'] *
-        np.log1p(df['amenity_score'])
-    )
+    # df['amenity_score'] = 0
 
-    if 'nearby_amenities' in df.columns:
-        df['interaction_center_amenity'] = (
-            df['center_score'] *
-            np.log1p(df['nearby_amenities'])
-        )
+    # count_weights = {
+    #     'school_count_3km': 1.0,
+    #     'hospital_count_5km': 1.5,
+    #     'marketplace_count_3km': 1.0,
+    #     'supermarket_count_3km': 1.0,
+    #     'mall_count_3km': 2.0,
+    #     'metro_count_5km': 3.0,
+    #     'bus_stop_count_1km': 0.5,
+    # }
+
+    # for col, weight in count_weights.items():
+
+    #     if col in df.columns:
+
+    #         df['amenity_score'] += (
+    #             weight *
+    #             np.log1p(df[col])
+    #         )
+
+
+    # # =====================================================
+    # # Interaction Features
+    # # =====================================================
+
+    # df['interaction_loc_amenity'] = (
+    #     df['location_score'] *
+    #     np.log1p(df['amenity_score'])
+    # )
+
+    # if 'nearby_amenities' in df.columns:
+    #     df['interaction_center_amenity'] = (
+    #         df['center_score'] *
+    #         np.log1p(df['nearby_amenities'])
+    #     )
 
 
     # =====================================================
@@ -365,6 +388,12 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
         df["length_m"] /
         (df["width_m"] + 0.1)
     )
+
+    if 'area_m2' in df.columns and 'road_width_m' in df.columns:
+        df["road_area_ratio"] = (
+            df["road_width_m"] /
+            np.sqrt(df["area_m2"] + 1)
+        )
 
     drop_cols = ["id", "price_vnd", "url", "link", "title", "post_day", "description",
                  "street", "ward", "district", "locality", "region", "street_n", "locality_n",
