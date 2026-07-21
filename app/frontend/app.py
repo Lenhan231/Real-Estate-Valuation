@@ -4,11 +4,9 @@ Chạy: streamlit run app/frontend/app.py
 import sys
 from pathlib import Path
 
-# Setup path from PROJECT_ROOT (before any module imports)
+# Setup path from PROJECT_ROOT only (before any module imports)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-APP_ROOT = PROJECT_ROOT / "app"
-sys.path.insert(0, str(PROJECT_ROOT))  # Add project root
-sys.path.insert(0, str(APP_ROOT))      # Add app/ with higher priority
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import pandas as pd
 import streamlit as st
@@ -18,7 +16,7 @@ try:
 except Exception:
     pdk = None
 
-# Import after paths are set up
+# Import after paths are set up (use fully qualified names)
 from app.api.geo import GeoLookup
 from app.api.inference import load_models, build_row, predict_price
 from app.shared.parsers import parse_listing, extract_street_from_address
