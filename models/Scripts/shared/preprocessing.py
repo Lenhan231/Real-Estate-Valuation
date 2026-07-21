@@ -10,6 +10,7 @@ def mean_absolute_percentage_error(y_true, y_pred):
 def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
     df = df.copy()
     df = df.drop_duplicates(subset=['listing_id'], keep='first')
+    df = df.drop('created_at', axis=1, errors='ignore')
 
     if 'price_vnd' in df.columns:
         df = df.dropna(subset=['price_vnd'])
@@ -78,10 +79,7 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
         df.loc[valid_dims, 'shape_ratio'] = (df.loc[valid_dims, 'width_m'] + 0.1) / (df.loc[valid_dims, 'length_m'] + 0.1)
         # If either width or length is null, fill both with square root of area_m2 (if area_m2 is available)
         missing_dims = df['width_m'].isna() | df['length_m'].isna()
-        if 'area_m2' in df.columns:
-            df.loc[missing_dims, 'width_m'] = np.sqrt(df.loc[missing_dims, 'area_m2'])
-            df.loc[missing_dims, 'length_m'] = np.sqrt(df.loc[missing_dims, 'area_m2'])
-        
+
         # Fill missing perimeter_m and shape_ratio with median
         if df['perimeter_m'].isna().any():
             df['perimeter_m_missing'] = df['perimeter_m'].isna().astype(int)
@@ -340,7 +338,12 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
         df['area_x_floors'] = df['area_m2'] * df['num_floors']
     if 'area_m2' in df.columns and 'num_bedrooms' in df.columns:
         df['area_x_bedrooms'] = df['area_m2'] * df['num_bedrooms']
-        df['area_per_bedroom'] = df['area_m2'] / (df['num_bedrooms'] + 1)
+        mask = df["num_bedrooms"] > 0
+
+        df.loc[mask, "area_per_bedroom"] = (
+            df.loc[mask, "area_m2"] /
+            df.loc[mask, "num_bedrooms"]
+        )
     if 'distance_to_center_km' in df.columns and 'area_m2' in df.columns:
         df['distance_vs_area'] = df['distance_to_center_km'] / (df['area_m2'] + 1)
     if 'area_m2' in df.columns:
@@ -352,11 +355,21 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
         # Fill missing log values (from missing source values)
         if df['log_population_density'].isna().any():
             df['log_population_density'] = df['log_population_density'].fillna(df['log_population_density'].median())
+    
+    df["frontage_ratio"] = (
+        df["width_m"] /
+        (df["road_width_m"] + 0.1)
+    )
+
+    df["depth_ratio"] = (
+        df["length_m"] /
+        (df["width_m"] + 0.1)
+    )
 
     drop_cols = ["id", "price_vnd", "url", "link", "title", "post_day", "description",
                  "street", "ward", "district", "locality", "region", "street_n", "locality_n",
                  "matched_address", "old_address", "lat", "lon",
-                 "listing_id", "owner_listing_bin", 'area_segment', 'create_at']
+                 "listing_id", "owner_listing_bin", 'area_segment']
 
     features_df = df.drop(columns=[c for c in drop_cols if c in df.columns])
 
