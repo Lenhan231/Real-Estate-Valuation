@@ -4,6 +4,11 @@ Chạy: streamlit run app/frontend/app.py
 import sys
 from pathlib import Path
 
+# Setup path FIRST before any imports
+APP_ROOT = Path(__file__).resolve().parent.parent  # app/
+PROJECT_ROOT = APP_ROOT.parent  # project root
+sys.path.insert(0, str(APP_ROOT))  # Add app/ so we can import api, shared, etc.
+
 import pandas as pd
 import streamlit as st
 
@@ -12,14 +17,11 @@ try:
 except Exception:
     pdk = None
 
-# Add parent (app/) to path for imports
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 from api.geo import GeoLookup
 from api.inference import load_models, build_row, predict_price
 from shared.parsers import parse_listing, extract_street_from_address
 
-ROOT = Path(__file__).resolve().parent.parent.parent  # project root
+ROOT = PROJECT_ROOT
 BI_DATA_FILE = ROOT / "data" / "processed" / "model_training_data.csv"  # From Supabase via train_production.py
 
 st.set_page_config(
