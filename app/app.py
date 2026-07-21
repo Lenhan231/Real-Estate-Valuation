@@ -18,7 +18,7 @@ from inference import load_models, build_row, predict_price
 from parsers import parse_listing, extract_street_from_address
 
 ROOT = Path(__file__).resolve().parent.parent
-BI_DATA_FILE = ROOT / "data" / "processed" / "alonhadat_features.csv"
+BI_DATA_FILE = ROOT / "data" / "processed" / "model_training_data.csv"  # From Supabase via train_production.py
 
 st.set_page_config(
     page_title="Định giá & Phân tích BĐS TP.HCM",
