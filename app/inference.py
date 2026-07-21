@@ -249,7 +249,19 @@ def predict_price(models, meta, row, price_tier) -> float:
     else:
         feat = list(row.keys())  # Fallback: use all keys from row
 
-    X = pd.DataFrame([{f: row.get(f, 0.0) for f in feat}])
+    # Only use features that exist in the training data
+    X_dict = {f: row.get(f, 0.0) for f in feat if f in row}
+    # Add missing features as 0
+    for f in feat:
+        if f not in X_dict:
+            X_dict[f] = 0.0
+
+    X = pd.DataFrame([X_dict])
+
+    # Ensure only the model's expected features
+    if X.shape[1] != len(feat):
+        print(f"⚠️  Warning: Expected {len(feat)} features, got {X.shape[1]}")
+        X = X[[f for f in feat if f in X.columns]]
 
     # Ensemble: average 3 models' log predictions
     predictions = []
