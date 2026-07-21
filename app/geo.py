@@ -1,9 +1,10 @@
 """Geo enrichment cho app — tái sử dụng dữ liệu pipeline ETL đã build.
 
-Tọa độ + feature POI lấy từ snapshot crawl (data/processed/alonhadat_features.csv, cùng
-nguồn với dữ liệu train nên đơn vị luôn khớp với model). Chỉ khi gặp đường
-chưa có trong cache mới gọi Nominatim API.
+Tọa độ + feature POI lấy từ Supabase real-time (address_cache table), với
+CSV fallback nếu Supabase không available. Chỉ khi gặp đường chưa có trong
+cache mới gọi Nominatim API.
 """
+import os
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +12,11 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW_CSV = ROOT / "data" / "processed" / "alonhadat_features.csv"
+
+# Supabase config
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+SUPABASE_TABLE = os.getenv("SUPABASE_TABLE_CACHE", "address_cache")
 
 HCM_CENTER = (10.7769, 106.7009)
 
@@ -48,7 +54,15 @@ def _haversine_km(lat1, lon1, lat2, lon2):
 
 class GeoLookup:
     def __init__(self):
-        df = pd.read_csv(RAW_CSV)
+        # Try Supabase first, fallback to CSV
+        self.data_source = None
+        df = self._load_from_supabase()
+        if df is not None:
+            self.data_source = "Supabase"
+        else:
+            df = self._load_from_csv()
+            self.data_source = "CSV"
+
         df = df.dropna(subset=['lat', 'lon']).copy()
         df['street_n'] = df['street'].map(_norm)
         df['locality_n'] = df['locality'].map(_norm)
@@ -58,6 +72,30 @@ class GeoLookup:
             errors='coerce',
         )
         self.df = df
+
+    @staticmethod
+    def _load_from_supabase():
+        """Load từ Supabase address_cache table (real-time)."""
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            return None
+        try:
+            from supabase import create_client
+            client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+            response = client.table(SUPABASE_TABLE).select("*").execute()
+            if response.data:
+                df = pd.DataFrame(response.data)
+                print(f"✅ Loaded {len(df)} rows từ Supabase {SUPABASE_TABLE}")
+                return df
+        except Exception as e:
+            print(f"⚠️  Supabase load failed: {e}, falling back to CSV")
+        return None
+
+    @staticmethod
+    def _load_from_csv():
+        """Load từ CSV (fallback)."""
+        df = pd.read_csv(RAW_CSV)
+        print(f"✅ Loaded {len(df)} rows từ CSV")
+        return df
 
     def localities(self) -> list[str]:
         return sorted(self.df['locality_n'].dropna().unique())

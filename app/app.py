@@ -159,11 +159,15 @@ def render_dashboard():
 # Header
 # ---------------------------------------------------------------------------
 st.title("🏠 Định giá nhà TP.HCM")
-st.caption(
-    "Model: **6-Bucket Ensemble (LightGBM + CatBoost)** · "
-    "R² **0.915** · MAPE **13.6%** · "
-    "Phân khúc: Low 11.6% · Mid 14.1% · High 13.4%"
-)
+col_title, col_status = st.columns([3, 1])
+with col_title:
+    st.caption(
+        "Model: **v2.4 Ensemble (LightGBM + XGBoost + CatBoost)** · "
+        "R² **0.9187** · MAPE **13.25%**"
+    )
+with col_status:
+    status_color = "🟢" if geo.data_source == "Supabase" else "🟡"
+    st.caption(f"{status_color} {geo.data_source}")
 
 # ---------------------------------------------------------------------------
 # Input form
