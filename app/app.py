@@ -14,7 +14,7 @@ except Exception:
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from geo import GeoLookup
-from inference import load_models, build_row, apply_locality_encoding, predict_price
+from inference import load_models, build_row, predict_price
 from parsers import parse_listing, extract_street_from_address
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -168,7 +168,7 @@ with tab_valuation:
                     else:
                         with st.spinner("Đang định giá..."):
                             row, info = build_row(
-                                medians, geo,
+                                meta, geo,
                                 street=street_input,
                                 locality=matched_locality,
                                 property_type=property_type, legal_status=legal_status, direction=direction,
@@ -180,7 +180,6 @@ with tab_valuation:
                         if row is None:
                             st.error("Không geocode được địa chỉ")
                         else:
-                            row = apply_locality_encoding(row, meta, matched_locality)
                             price = predict_price(models, meta, row, budget_range)
                             mape_err = price * 0.1325
 
@@ -268,7 +267,7 @@ with tab_valuation:
         if st.button("💰 Định giá", type="primary", use_container_width=True):
             with st.spinner("Đang tra cứu vị trí và tính feature địa lý..."):
                 row, info = build_row(
-                    medians, geo,
+                    meta, geo,
                     street=street, locality=locality,
                     property_type=property_type, legal_status=legal_status, direction=direction,
                     area_m2=area_m2, width_m=width_m, length_m=length_m,
@@ -279,7 +278,6 @@ with tab_valuation:
             if row is None:
                 st.error("Không xác định được vị trí — kiểm tra lại tên đường / phường.")
             else:
-                row = apply_locality_encoding(row, meta, locality)
                 price = predict_price(models, meta, row, budget_range)
                 mape_err = price * 0.1325
 

@@ -76,13 +76,14 @@ def load_models():
     return models, meta, medians
 
 
-def build_row(medians, geo: GeoLookup, *,
+def build_row(meta, geo: GeoLookup, *,
               street, locality, property_type, legal_status, direction,
               area_m2, width_m, length_m, num_floors, num_bedrooms, road_width_m,
               bin_flags: dict, text_flags: dict):
-    """Build exact 78-feature row matching v2.6 training data.
+    """Build exact 80-feature row (78 from preprocessing + 2 locality encoding).
 
     Reuses preprocessing.py for feature engineering (single source of truth).
+    Applies locality encoding from training data (meta dict).
     Returns (row dict with 80 features, info dict) or (None, None).
     """
     lat, lon, source = geo.geocode(street, locality)
@@ -162,25 +163,21 @@ def build_row(medians, geo: GeoLookup, *,
         print(f"Error in preprocessing: {e}")
         return None, None
 
-    # Add 2 locality encoding features (will be populated by apply_locality_encoding)
-    row["locality_price_median"] = float(medians.get("locality_price_median", 0.0))
-    row["price_per_sqm_market"] = float(medians.get("price_per_sqm_market", 0.0))
+    # Add 2 locality encoding features from training data (in meta)
+    locality_price_map = meta.get("locality_price_map", {})
+    locality_sqm_map = meta.get("locality_sqm_map", {})
+    row["locality_price_median"] = float(
+        locality_price_map.get(locality, meta.get("locality_price_global", 0.0))
+    )
+    row["price_per_sqm_market"] = float(
+        locality_sqm_map.get(locality, meta.get("locality_sqm_global", 0.0))
+    )
 
     info = {
         "lat": lat, "lon": lon, "source": source,
         "pois": pois, "cache_dist_km": cache_dist, "poi_source": poi_source,
     }
     return row, info
-
-
-def apply_locality_encoding(row, meta, locality):
-    row["locality_price_median"] = float(
-        meta.get("locality_price_map", {}).get(locality, meta.get("locality_price_global", 0.0))
-    )
-    row["price_per_sqm_market"] = float(
-        meta.get("locality_sqm_map", {}).get(locality, meta.get("locality_sqm_global", 0.0))
-    )
-    return row
 
 
 def predict_price(models, meta, row, price_tier) -> float:
