@@ -15,25 +15,24 @@ import pandas as pd
 from geo import GeoLookup, POI_COLS
 
 ROOT = Path(__file__).resolve().parent.parent
-MODEL_DIR = ROOT / "models" / "save_models"  # Updated path (lowercase)
-READY_CSV = ROOT / "models" / "data" / "model_ready_data.csv"  # Updated path
+MODEL_DIR = ROOT / "models" / "saved_models"  # v2.4 production models
+READY_CSV = ROOT / "data" / "processed" / "model_training_data.csv"  # v2.4 training data
 
 
 def load_models():
+    """Load v2.4 production models (9 models: 3-tier × 3-algorithm ensemble)."""
     models = {}
     for path in MODEL_DIR.glob("*.pkl"):
-        if "_meta" in path.name:
-            continue
         try:
             models[path.stem] = joblib.load(path)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: Failed to load {path.stem}: {e}")
 
     if not models:
-        raise FileNotFoundError(f"No models in {MODEL_DIR} — run scripts/train_xgboost.py first")
+        raise FileNotFoundError(f"No models in {MODEL_DIR} — ensure train_production.py has been run")
 
-    with open(MODEL_DIR / "ensemble_meta.pkl", "rb") as f:
-        meta = pickle.load(f)
+    # v2.4: No ensemble_meta.pkl needed (simpler 3-tier architecture)
+    meta = {"version": "v2.4", "tiers": ["low", "mid", "high"], "models_per_tier": 3}
 
     medians = pd.read_csv(READY_CSV).median(numeric_only=True)
     return models, meta, medians
@@ -240,7 +239,16 @@ def predict_price(models, meta, row, price_tier) -> float:
         raise ValueError(f"Model {lgbm_key} not found. Available: {list(models.keys())}")
 
     # Get feature list from first model (all use same features)
-    feat = models[lgbm_key].feature_names_
+    model = models[lgbm_key]
+    if hasattr(model, 'feature_name'):
+        feat = model.feature_name()  # LightGBM: method call
+    elif hasattr(model, 'feature_names'):
+        feat = model.feature_names  # XGBoost/CatBoost
+    elif hasattr(model, 'feature_names_'):
+        feat = model.feature_names_
+    else:
+        feat = list(row.keys())  # Fallback: use all keys from row
+
     X = pd.DataFrame([{f: row.get(f, 0.0) for f in feat}])
 
     # Ensemble: average 3 models' log predictions
