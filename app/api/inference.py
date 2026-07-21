@@ -54,10 +54,20 @@ def load_models():
     training_df = pd.read_csv(READY_CSV)
 
     # Compute locality price/sqm stats from training data (same as add_locality_features)
-    locality_price_map = training_df.groupby('locality')['locality_price_median'].first().to_dict()
-    locality_sqm_map = training_df.groupby('locality')['price_per_sqm_market'].first().to_dict()
-    locality_price_global = training_df['locality_price_median'].median()
-    locality_sqm_global = training_df['price_per_sqm_market'].median()
+    # Handle case where locality column might not exist in CSV
+    if 'locality' in training_df.columns and 'locality_price_median' in training_df.columns:
+        locality_price_map = training_df.groupby('locality')['locality_price_median'].first().to_dict()
+        locality_price_global = training_df['locality_price_median'].median()
+    else:
+        locality_price_map = {}
+        locality_price_global = 0.0
+
+    if 'locality' in training_df.columns and 'price_per_sqm_market' in training_df.columns:
+        locality_sqm_map = training_df.groupby('locality')['price_per_sqm_market'].first().to_dict()
+        locality_sqm_global = training_df['price_per_sqm_market'].median()
+    else:
+        locality_sqm_map = {}
+        locality_sqm_global = 0.0
 
     meta = {
         "version": "v2.6",
