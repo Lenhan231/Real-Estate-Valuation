@@ -1,6 +1,7 @@
 """Định giá nhà TP.HCM — 6-Bucket Ensemble Demo
 Chạy: streamlit run app/app.py
 """
+import re
 import sys
 from pathlib import Path
 
@@ -18,6 +19,76 @@ from inference import load_models, build_row, apply_locality_encoding, predict_p
 
 ROOT = Path(__file__).resolve().parent.parent
 BI_DATA_FILE = ROOT / "data" / "processed" / "alonhadat_features.csv"
+
+# ---------------------------------------------------------------------------
+# Listing parser
+# ---------------------------------------------------------------------------
+def parse_listing(text: str) -> dict:
+    """Parse Vietnamese real estate listing text → extract data."""
+    result = {
+        "area_m2": 80.0,
+        "num_floors": 3,
+        "num_bedrooms": 3,
+        "width_m": 4.0,
+        "length_m": 20.0,
+        "road_width_m": 6.0,
+        "is_gap": False,
+        "is_hem_xe_hoi": False,
+        "has_noi_that": False,
+        "is_kinh_doanh": False,
+        "is_no_hau": False,
+        "legal_status": "unknown",
+    }
+
+    text_lower = text.lower()
+
+    # Diện tích: "46m2", "46 m²", "diện tích 46"
+    area_match = re.search(r'(\d+(?:[.,]\d+)?)\s*m[²2²]', text_lower)
+    if area_match:
+        result["area_m2"] = float(area_match.group(1).replace(",", "."))
+
+    # Số tầng: "3 tầng", "lầu", "trệt"
+    floor_match = re.search(r'(\d+)\s*tầng', text_lower)
+    if floor_match:
+        result["num_floors"] = int(floor_match.group(1))
+
+    # Phòng ngủ: "4 phòng ngủ", "4 PN"
+    bed_match = re.search(r'(\d+)\s*(?:phòng ngủ|PN)', text_lower)
+    if bed_match:
+        result["num_bedrooms"] = int(bed_match.group(1))
+
+    # Đường trước nhà: "5m", "6 mét"
+    road_match = re.search(r'(?:hẻm|đường)\s*(?:trước|rộng)?\s*(\d+)\s*m', text_lower)
+    if road_match:
+        result["road_width_m"] = float(road_match.group(1))
+
+    # Cần bán gấp
+    if "cần bán gấp" in text_lower or "bán gấp" in text_lower:
+        result["is_gap"] = True
+
+    # Hẻm xe hơi
+    if "hẻm xe" in text_lower or "ô tô vào" in text_lower:
+        result["is_hem_xe_hoi"] = True
+
+    # Nở hậu
+    if "nở hậu" in text_lower:
+        result["is_no_hau"] = True
+
+    # Có nội thất / cho thuê
+    if "nội thất" in text_lower or "cho thuê" in text_lower:
+        result["has_noi_that"] = True
+
+    # Tiện kinh doanh
+    if "kinh doanh" in text_lower or "thích hợp" in text_lower:
+        result["is_kinh_doanh"] = True
+
+    # Pháp lý: Sổ hồng / Sổ đỏ
+    if "sổ hồng" in text_lower or "sổ đỏ" in text_lower:
+        result["legal_status"] = "so_hong_so_do"
+    elif "giấy tờ" in text_lower:
+        result["legal_status"] = "giay_to_hop_le"
+
+    return result
 
 st.set_page_config(
     page_title="Định giá nhà TP.HCM",
@@ -193,26 +264,31 @@ if mode == "Paste địa chỉ nhanh":
 
         if matched_locality:
             st.success(f"✅ Tìm thấy: **{matched_locality}**")
+
+            # Auto-parse listing data
+            parsed = parse_listing(address_text)
+
             col_loc, col_house = st.columns(2)
             with col_loc:
                 st.subheader("🏷️ Phân loại")
                 property_type = st.radio("Loại nhà", list(PROPERTY_TYPES),
                                         format_func=PROPERTY_TYPES.get, horizontal=True)
                 budget_range = st.selectbox("Phân khúc giá", list(BUDGET_RANGES), format_func=BUDGET_RANGES.get)
-                legal_status = st.selectbox("Pháp lý", list(LEGAL_STATUS), format_func=LEGAL_STATUS.get)
+                legal_status = st.selectbox("Pháp lý", list(LEGAL_STATUS), format_func=LEGAL_STATUS.get,
+                                           index=list(LEGAL_STATUS.keys()).index(parsed.get("legal_status", "unknown")))
                 direction = st.selectbox("Hướng nhà", list(DIRECTIONS), format_func=DIRECTIONS.get)
 
             with col_house:
-                st.subheader("📐 Thông số")
+                st.subheader("📐 Thông số (tự động extract từ listing)")
                 c1, c2 = st.columns(2)
-                area_m2 = c1.number_input("Diện tích (m²)", 10.0, 1000.0, 80.0, step=5.0)
-                road_width_m = c2.number_input("Đường trước nhà (m)", 1.0, 60.0, 6.0, step=0.5)
-                width_m = c1.number_input("Chiều ngang (m)", 1.0, 50.0, 4.0, step=0.5)
-                length_m = c2.number_input("Chiều dài (m)", 1.0, 100.0, 20.0, step=0.5)
-                num_floors = c1.number_input("Số tầng", 1, 15, 3)
-                num_bedrooms = c2.number_input("Số phòng ngủ", 1, 20, 3)
+                area_m2 = c1.number_input("Diện tích (m²)", 10.0, 1000.0, parsed["area_m2"], step=5.0)
+                road_width_m = c2.number_input("Đường trước nhà (m)", 1.0, 60.0, parsed["road_width_m"], step=0.5)
+                width_m = c1.number_input("Chiều ngang (m)", 1.0, 50.0, parsed["width_m"], step=0.5)
+                length_m = c2.number_input("Chiều dài (m)", 1.0, 100.0, parsed["length_m"], step=0.5)
+                num_floors = c1.number_input("Số tầng", 1, 15, parsed["num_floors"])
+                num_bedrooms = c2.number_input("Số phòng ngủ", 1, 20, parsed["num_bedrooms"])
 
-                st.subheader("✨ Tiện ích")
+                st.subheader("✨ Tiện ích (tự detect)")
                 b1, b2, b3 = st.columns(3)
                 bin_flags = {
                     "kitchen_bin": b1.checkbox("Nhà bếp", True),
@@ -221,11 +297,11 @@ if mode == "Paste địa chỉ nhanh":
                     "car_parking_bin": b1.checkbox("Chỗ để xe hơi"),
                 }
                 text_flags = {
-                    "is_hem_xe_hoi": b2.checkbox("Hẻm xe hơi"),
-                    "is_no_hau": b3.checkbox("Nở hậu"),
-                    "has_noi_that": b1.checkbox("Có nội thất"),
-                    "is_gap": b2.checkbox("Cần bán gấp"),
-                    "is_kinh_doanh": b3.checkbox("Tiện kinh doanh"),
+                    "is_hem_xe_hoi": b2.checkbox("Hẻm xe hơi", parsed["is_hem_xe_hoi"]),
+                    "is_no_hau": b3.checkbox("Nở hậu", parsed["is_no_hau"]),
+                    "has_noi_that": b1.checkbox("Có nội thất", parsed["has_noi_that"]),
+                    "is_gap": b2.checkbox("Cần bán gấp", parsed["is_gap"]),
+                    "is_kinh_doanh": b3.checkbox("Tiện kinh doanh", parsed["is_kinh_doanh"]),
                 }
 
             st.divider()
