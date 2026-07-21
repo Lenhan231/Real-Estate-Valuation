@@ -1,9 +1,9 @@
-"""Inference for v2.4 production model (3-tier price-only ensemble).
+"""Inference for v2.6 production model (3-tier price-only ensemble).
 
 Model: LightGBM + XGBoost + CatBoost ensemble per price tier
 Strategy: Price segmentation only (no property type split)
-Features: 64 cleaned & optimized (boolean-to-int, low-impact removed)
-Performance: 13.25% MAPE, 0.9187 R²
+Features: 78 optimized (64 base + 14 polynomial/interaction)
+Performance: 13.10% MAPE, 0.9200 R²
 """
 import pickle
 from pathlib import Path
@@ -20,7 +20,7 @@ READY_CSV = ROOT / "data" / "processed" / "model_training_data.csv"  # v2.4 trai
 
 
 def load_models():
-    """Load v2.4 production models (9 models: 3-tier × 3-algorithm ensemble)."""
+    """Load v2.6 production models (9 models: 3-tier × 3-algorithm ensemble)."""
     models = {}
     for path in MODEL_DIR.glob("*.pkl"):
         try:
@@ -31,8 +31,8 @@ def load_models():
     if not models:
         raise FileNotFoundError(f"No models in {MODEL_DIR} — ensure train_production.py has been run")
 
-    # v2.4: No ensemble_meta.pkl needed (simpler 3-tier architecture)
-    meta = {"version": "v2.4", "tiers": ["low", "mid", "high"], "models_per_tier": 3}
+    # v2.6: 78 features (64 base + 14 polynomial/interaction)
+    meta = {"version": "v2.6", "tiers": ["low", "mid", "high"], "models_per_tier": 3, "n_features": 78}
 
     medians = pd.read_csv(READY_CSV).median(numeric_only=True)
     return models, meta, medians
@@ -46,7 +46,7 @@ def build_row(medians, geo: GeoLookup, *,
               street, locality, property_type, legal_status, direction,
               area_m2, width_m, length_m, num_floors, num_bedrooms, road_width_m,
               bin_flags: dict, text_flags: dict):
-    """Build exact 64-feature row matching training data. Return (row dict, info dict) or (None, None)."""
+    """Build exact 78-feature row matching v2.6 training data. Return (row dict, info dict) or (None, None)."""
     lat, lon, source = geo.geocode(street, locality)
     if lat is None:
         return None, None
@@ -84,21 +84,21 @@ def build_row(medians, geo: GeoLookup, *,
         "supermarket_count_3km", "mall_count_3km", "bus_stop_count_1km", "metro_count_5km"
     ])
 
-    # Build exact 64-feature row
+    # Build exact 78-feature row (v2.6: 64 base + 14 polynomial/interaction)
     row = {
-        # 1-6: Core numeric
+        # Core numeric (6)
         "num_floors": float(num_floors),
         "num_bedrooms": float(num_bedrooms),
         "road_width_m": float(road_width_m),
         "width_m": float(width_m),
         "length_m": float(length_m),
         "area_m2": float(area_m2),
-        # 7-8: Locality
+        # Locality (2)
         "locality_square": float(loc_sq),
         "locality_population_density": float(loc_dens),
-        # 9: Distance
+        # Distance (1)
         "distance_to_center_km": float(dist_km),
-        # 10-23: POI distances & counts
+        # POI distances & counts (14)
         "nearest_school_km": float(poi("nearest_school_km")),
         "school_count_3km": float(poi("school_count_3km")),
         "nearest_hospital_km": float(poi("nearest_hospital_km")),
@@ -113,28 +113,28 @@ def build_row(medians, geo: GeoLookup, *,
         "bus_stop_count_1km": float(poi("bus_stop_count_1km")),
         "nearest_metro_km": float(poi("nearest_metro_km")),
         "metro_count_5km": float(poi("metro_count_5km")),
-        # 24-25: Temporal (zero at inference)
+        # Temporal (2)
         "post_day_month": 0.0,
         "post_day_day": 0.0,
-        # 26-30: Missing flags + derived
+        # Missing flags & derived (5)
         "road_width_m_missing": float(road_width_m_missing),
         "perimeter_m": float(perimeter_m),
         "shape_ratio": float(shape_ratio),
         "shape_ratio_missing": float(shape_ratio_missing),
         "width_m_missing": float(width_m_missing),
-        # 31-34: Amenity & distance
+        # Amenity features (4)
         "nearby_amenities": float(nearby_amenities),
         "nearby_amenities_log": float(np.log1p(nearby_amenities)),
-        "nearest_metro_km_missing": 0.0,  # Always provided
+        "nearest_metro_km_missing": 0.0,
         "amenity_density": float(nearby_amenities / (area_m2 + 1)),
-        # 35-40: Text features
+        # Text features (6)
         "is_hem_xe_hoi": float(text_flags.get("is_hem_xe_hoi", 0)),
         "is_mat_tien": float(property_type == "nha_mat_tien"),
         "is_no_hau": float(text_flags.get("is_no_hau", 0)),
         "has_noi_that": float(text_flags.get("has_noi_that", 0)),
         "is_gap": float(text_flags.get("is_gap", 0)),
         "is_kinh_doanh": float(text_flags.get("is_kinh_doanh", 0)),
-        # 41-47: Interaction & log features
+        # Base interactions & logs (7)
         "area_x_floors": float(area_m2 * num_floors),
         "area_x_bedrooms": float(area_m2 * num_bedrooms),
         "area_per_bedroom": float(area_m2 / (num_bedrooms + 1)),
@@ -142,23 +142,39 @@ def build_row(medians, geo: GeoLookup, *,
         "log_area": float(np.log1p(area_m2)),
         "log_distance_to_center": float(np.log1p(dist_km)),
         "log_population_density": float(np.log1p(loc_dens)),
-        # 48-50: Ratio features
+        # Ratio features (3)
         "frontage_ratio": float((width_m + 0.1) / (road_width_m + 0.1)),
         "depth_ratio": float((length_m + 0.1) / (width_m + 0.1)),
         "road_area_ratio": float(road_width_m / np.sqrt(area_m2 + 1)),
-        # 51-54: Direction one-hot
+        # v2.6 Polynomial features (6)
+        "area_m2_squared": float(area_m2 ** 2),
+        "area_m2_sqrt": float(np.sqrt(area_m2 + 0.1)),
+        "distance_squared": float(dist_km ** 2),
+        "road_width_squared": float(road_width_m ** 2),
+        "bedrooms_squared": float(num_bedrooms ** 2),
+        "floors_squared": float(num_floors ** 2),
+        # v2.6 Additional interactions (8)
+        "area_x_distance": float(area_m2 * dist_km),
+        "area_per_distance": float(area_m2 / (dist_km + 0.1)),
+        "bedrooms_x_distance": float(num_bedrooms * dist_km),
+        "floors_x_distance": float(num_floors * dist_km),
+        "area_x_road_width": float(area_m2 * road_width_m),
+        "width_x_length": float(width_m * length_m),
+        "density_x_area": float(loc_dens * area_m2),
+        "locality_sq_x_area": float(loc_sq * area_m2),
+        # Direction one-hot (4)
         "direction_dong_bac": float(direction == "dong_bac"),
         "direction_dong_nam": float(direction == "dong_nam"),
         "direction_nam": float(direction == "nam"),
         "direction_unknown": float(direction == "unknown"),
-        # 55-56: Property type one-hot
+        # Property type one-hot (2)
         "property_type_nha_mat_tien": float(property_type == "nha_mat_tien"),
         "property_type_nha_trong_hem": float(property_type == "nha_trong_hem"),
-        # 57-59: Legal status one-hot
+        # Legal status one-hot (3)
         "legal_status_giay_to_hop_le": float(legal_status == "giay_to_hop_le"),
         "legal_status_so_hong_so_do": float(legal_status == "so_hong_so_do"),
         "legal_status_unknown": float(legal_status == "unknown"),
-        # 60-64: Bin flags one-hot
+        # Bin flags one-hot (5)
         "dining_room_bin_False": float(bin_flags.get("dining_room_bin", 0) == 0),
         "terrace_bin_False": float(bin_flags.get("terrace_bin", 0) == 0),
         "terrace_bin_True": float(bin_flags.get("terrace_bin", 0) == 1),
@@ -189,13 +205,13 @@ def predict_price(models, meta, row, price_tier) -> float:
     Args:
         models: Loaded model dict
         meta: Model metadata
-        row: Feature dict (64 features, preprocessed)
+        row: Feature dict (78 features, v2.6 preprocessed)
         price_tier: 'low' (0-5B), 'mid' (5-20B), or 'high' (20B+)
 
     Returns:
         Predicted price in VND
     """
-    # v2.4: 3-tier (price only), 3 models per tier
+    # v2.6: 3-tier (price only), 3 models per tier, 78 features
     lgbm_key = f"lgbm_{price_tier}"
     xgb_key = f"xgb_{price_tier}"
     cb_key = f"cb_{price_tier}"

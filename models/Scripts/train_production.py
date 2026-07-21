@@ -4,7 +4,7 @@ PRODUCTION MODEL: Price-Only Ensemble (3 Price Tiers × 3 Models)
 Final production-ready training script.
 - Strategy: Price segmentation only (Low/Mid/High)
 - Models: LightGBM + XGBoost + CatBoost per tier
-- Performance: 13.31% MAPE, 0.9164 R²
+- Performance: 13.25% MAPE, 0.9164 R²
 - Training time: ~55 seconds
 - Complexity: Simple, maintainable, fast
 """

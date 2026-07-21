@@ -1,0 +1,160 @@
+================================================================================
+FEATURE REDUNDANCY ANALYSIS REPORT
+================================================================================
+
+SUMMARY
+--------------------------------------------------------------------------------
+Current features: 88
+High-VIF features (>10): 24
+Redundant pairs (r>0.95): 12
+Recommended to drop: 29
+Recommended to keep: 59
+
+HIGH-VIF FEATURES (VIF > 10)
+--------------------------------------------------------------------------------
+  nearby_amenities                         VIF:   840.13
+  area_m2_cubed                            VIF:   395.96
+  area_m2_squared                          VIF:   197.68
+  sqm_per_bedroom                          VIF:   112.22
+  area_m2                                  VIF:    67.57
+  distance_to_center_km                    VIF:    61.48
+  road_width_m                             VIF:    57.75
+  area_m2_sqrt                             VIF:    47.07
+  school_count_3km                         VIF:    43.20
+  road_quality_score                       VIF:    32.87
+  distance_squared                         VIF:    24.89
+  log_distance_to_center                   VIF:    21.82
+  nearby_amenities_log                     VIF:    21.57
+  area_x_bedrooms                          VIF:    21.14
+  road_width_squared                       VIF:    20.33
+  road_area_ratio                          VIF:    19.14
+  hospital_count_5km                       VIF:    19.12
+  log_area                                 VIF:    18.96
+  distance_cubed                           VIF:    15.57
+  supermarket_count_3km                    VIF:    13.61
+  bedrooms_squared                         VIF:    12.78
+  density_size_interaction                 VIF:    12.50
+  marketplace_count_3km                    VIF:    11.52
+  num_bedrooms                             VIF:    10.87
+
+REDUNDANT FEATURE PAIRS (r > 0.95)
+--------------------------------------------------------------------------------
+  terrace_bin_False                   ↔ terrace_bin_True                    r=1.000
+  property_type_nha_mat_tien          ↔ property_type_nha_trong_hem         r=1.000
+  car_parking_bin_False               ↔ car_parking_bin_True                r=1.000
+  isolation_score                     ↔ isolation_score_log                 r=0.989
+  log_area                            ↔ area_m2_sqrt                        r=0.981
+  area_m2                             ↔ area_m2_sqrt                        r=0.980
+  area_per_bedroom                    ↔ sqm_per_bedroom                     r=0.977
+  nearest_metro_km                    ↔ nearest_metro_km_missing            r=0.970
+  locality_population_density         ↔ density_size_interaction            r=0.966
+  hospital_count_5km                  ↔ nearby_amenities                    r=0.963
+  school_count_3km                    ↔ nearby_amenities                    r=0.961
+  area_m2_squared                     ↔ area_m2_cubed                       r=0.960
+
+FEATURES TO DROP (REDUNDANCY)
+--------------------------------------------------------------------------------
+  area_m2
+  area_m2_cubed
+  area_m2_sqrt
+  area_m2_squared
+  area_x_bedrooms
+  bedrooms_squared
+  car_parking_bin_True
+  density_size_interaction
+  distance_cubed
+  distance_squared
+  distance_to_center_km
+  hospital_count_5km
+  isolation_score_log
+  log_area
+  log_distance_to_center
+  marketplace_count_3km
+  nearby_amenities
+  nearby_amenities_log
+  nearest_metro_km_missing
+  num_bedrooms
+  property_type_nha_trong_hem
+  road_area_ratio
+  road_quality_score
+  road_width_m
+  road_width_squared
+  school_count_3km
+  sqm_per_bedroom
+  supermarket_count_3km
+  terrace_bin_True
+
+FEATURES TO KEEP
+--------------------------------------------------------------------------------
+  amenity_concentration
+  amenity_density
+  area_per_bedroom
+  area_per_distance
+  area_x_distance
+  area_x_floors
+  area_x_road_width
+  bedrooms_per_100sqm
+  bedrooms_x_distance
+  bus_stop_count_1km
+  car_parking_bin_False
+  connectivity_score
+  density_x_area
+  depth_ratio
+  dining_room_bin_False
+  direction_dong_bac
+  direction_dong_nam
+  direction_nam
+  direction_unknown
+  distance_vs_area
+  floors_squared
+  floors_x_distance
+  frontage_ratio
+  has_noi_that
+  is_gap
+  is_hem_xe_hoi
+  is_kinh_doanh
+  is_mat_tien
+  is_no_hau
+  isolation_score
+  legal_status_giay_to_hop_le
+  legal_status_so_hong_so_do
+  legal_status_unknown
+  length_m
+  locality_population_density
+  locality_sq_x_area
+  locality_square
+  log_population_density
+  mall_count_3km
+  metro_count_5km
+  nearest_bus_stop_km
+  nearest_hospital_km
+  nearest_mall_km
+  nearest_marketplace_km
+  nearest_metro_km
+  nearest_school_km
+  nearest_supermarket_km
+  num_floors
+  perimeter_m
+  post_day_day
+  post_day_month
+  property_type_nha_mat_tien
+  road_width_m_missing
+  shape_ratio
+  shape_ratio_missing
+  terrace_bin_False
+  width_m
+  width_m_missing
+  width_x_length
+
+PCA ANALYSIS
+--------------------------------------------------------------------------------
+Components for 90% variance: 31
+Components for 95% variance: 40
+Components for 99% variance: 55
+
+RECOMMENDATION
+--------------------------------------------------------------------------------
+Remove 29 redundant features
+Keep 59 non-redundant features
+Expected: Cleaner model, 0.2-0.5% MAPE improvement
+Next: Retrain with features_to_keep.txt
