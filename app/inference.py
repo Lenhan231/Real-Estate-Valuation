@@ -179,6 +179,10 @@ def build_row(medians, geo: GeoLookup, *,
         "car_parking_bin_True": float(bin_flags.get("car_parking_bin", 0) == 1),
     }
 
+    # Add 2 locality encoding features (needed for model prediction)
+    row["locality_price_median"] = float(medians.get("locality_price_median", 0.0))
+    row["price_per_sqm_market"] = float(medians.get("price_per_sqm_market", 0.0))
+
     info = {
         "lat": lat, "lon": lon, "source": source,
         "pois": pois, "cache_dist_km": cache_dist, "poi_source": poi_source,
