@@ -239,8 +239,9 @@ if st.button("💰 Định giá", type="primary", use_container_width=True):
         st.error("Không xác định được vị trí — kiểm tra lại tên đường / phường.")
     else:
         row = apply_locality_encoding(row, meta, locality)
-        price = predict_price(models, meta, row, budget_range, property_type)
-        mape_err = price * 0.136  # Global MAPE 13.6%
+        # v2.4: Price-only model (no property_type segmentation)
+        price = predict_price(models, meta, row, budget_range)
+        mape_err = price * 0.1325  # v2.4 Global MAPE 13.25%
 
         r1, r2, r3 = st.columns(3)
         r1.metric("Giá dự đoán", f"{price:,.2f} tỷ VND")
