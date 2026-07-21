@@ -5,7 +5,7 @@ Production Streamlit application for automated real estate price prediction in V
 ## 🚀 Quick Start
 
 ```bash
-streamlit run app.py
+streamlit run app/frontend/app.py
 ```
 
 Opens: `http://localhost:8501`
@@ -29,7 +29,7 @@ Opens: `http://localhost:8501`
 
 ## 🏗️ Architecture
 
-```
+```txt
 User Input (Text or Form)
     ↓
 Geolocation Lookup (Supabase + CSV fallback)
@@ -67,7 +67,7 @@ Return Price Estimate ± MAPE Confidence Bounds
 
 **Performance:**
 
-```
+```txt
 Global MAPE:  13.10%
 Global R²:    0.9200
 Global MAE:   2.15 Billion VND
@@ -99,15 +99,21 @@ See [models/README.md](../models/README.md) for detailed feature documentation.
 
 ## 🔧 Files
 
-```
+```txt
 app/
-├── app.py                  # Main Streamlit UI (2 tabs)
-├── inference.py            # Model loading & prediction pipeline
-├── geo.py                  # Geolocation & POI lookup (Supabase + CSV)
-├── constants.py            # Shared constants (patterns, configurations)
-├── parsers.py              # Listing text parsing
-├── README.md               # This file
-└── requirements.txt        # Python dependencies
+├── frontend/               Streamlit UI
+│   ├── app.py              Main application (2 tabs)
+│   └── __init__.py
+├── api/                    Inference & utilities
+│   ├── inference.py        Model loading & prediction
+│   ├── geo.py              Geolocation & POI lookup
+│   └── __init__.py
+├── shared/                 Shared utilities
+│   ├── constants.py        Text/numeric patterns
+│   ├── parsers.py          Listing text parsing
+│   └── __init__.py
+├── README.md               This file
+└── requirements.txt        Python dependencies
 ```
 
 ## 💾 Data Flow
@@ -165,7 +171,7 @@ Edit `app/constants.py` for:
 
 ## ⚙️ Dependencies
 
-```
+```txt
 streamlit>=1.28
 pandas>=2.0
 numpy>=1.24
