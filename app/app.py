@@ -212,11 +212,14 @@ if mode == "Paste địa chỉ nhanh":
                 }
 
             st.divider()
+            st.info(f"📍 **Phường được match:** {matched_locality}")
             if st.button("💰 Định giá", type="primary", use_container_width=True):
                 with st.spinner("Đang định giá..."):
+                    # Extract street from address
+                    street_from_text = address_text.split(",")[1].strip() if "," in address_text else address_text
                     row, info = build_row(
                         medians, geo,
-                        street=address_text.split(",")[1].strip() if "," in address_text else address_text,
+                        street=street_from_text,
                         locality=matched_locality,
                         property_type=property_type, legal_status=legal_status, direction=direction,
                         area_m2=area_m2, width_m=width_m, length_m=length_m,
@@ -240,9 +243,13 @@ if mode == "Paste địa chỉ nhanh":
 
                     with m_col:
                         st.map(pd.DataFrame({"lat": [info["lat"]], "lon": [info["lon"]]}), zoom=14)
+                        st.markdown("##### 📍 Thông tin tọa độ")
+                        st.write(f"**Phường:** {matched_locality}")
+                        st.write(f"**Đường:** {street_from_text}")
                         st.write(f"**Nguồn tọa độ:** {info['source']}")
+                        st.write(f"**Lat/Lon:** {info['lat']:.6f}, {info['lon']:.6f}")
                         if info["poi_source"] == "overpass":
-                            st.info("Vị trí nằm ngoài vùng đã crawl")
+                            st.info("Vị trí nằm ngoài vùng đã crawl - dùng Overpass API")
 
                     with f_col:
                         st.markdown("#### 🔍 64 Features")
