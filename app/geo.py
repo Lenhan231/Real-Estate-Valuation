@@ -1,8 +1,8 @@
 """Geo enrichment cho app — tái sử dụng dữ liệu pipeline ETL đã build.
 
 Tọa độ + feature POI lấy từ Supabase real-time (address_cache table), với
-CSV fallback nếu Supabase không available. Chỉ khi gặp đường chưa có trong
-cache mới gọi Nominatim API.
+CSV fallback (data/cache/localities.csv) nếu Supabase không available.
+Chỉ khi gặp đường chưa có trong cache mới gọi Nominatim API.
 """
 import os
 from pathlib import Path
@@ -12,6 +12,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW_CSV = ROOT / "data" / "cache" / "localities.csv"
+DENSITY_CSV = ROOT / "data" / "external" / "density_data.csv"
 
 # Supabase config
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -101,10 +102,16 @@ class GeoLookup:
 
     @staticmethod
     def _load_from_csv():
-        """Load từ CSV (fallback)."""
+        """Load từ CSV + merge density data (fallback)."""
         try:
             df = pd.read_csv(RAW_CSV)
-            print(f"✅ Loaded {len(df)} rows từ CSV")
+
+            # Merge với density data để có locality_square & locality_population_density
+            if DENSITY_CSV.exists():
+                density = pd.read_csv(DENSITY_CSV)
+                df = df.merge(density, on=['locality', 'region'], how='left')
+
+            print(f"✅ Loaded {len(df)} rows từ CSV + density data")
             return df
         except Exception as e:
             print(f"❌ CSV load failed: {e}")
