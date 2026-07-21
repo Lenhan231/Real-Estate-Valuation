@@ -236,7 +236,23 @@ def predict_price(models, meta, row, price_tier) -> float:
     predictions = []
     for key in [lgbm_key, xgb_key, cb_key]:
         if key in models:
-            pred_log = float(models[key].predict(X)[0])
+            model = models[key]
+
+            # Get model's expected features
+            try:
+                if hasattr(model, 'feature_names_in_'):
+                    model_features = list(model.feature_names_in_)
+                elif hasattr(model, 'feature_name'):
+                    model_features = list(model.feature_name())
+                else:
+                    model_features = list(X.columns)
+
+                # Use only features model expects
+                X_pred = X[[f for f in model_features if f in X.columns]]
+            except:
+                X_pred = X
+
+            pred_log = float(model.predict(X_pred)[0])
             predictions.append(pred_log)
 
     if not predictions:
