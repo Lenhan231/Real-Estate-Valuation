@@ -1,6 +1,6 @@
 """Geo enrichment cho app — tái sử dụng dữ liệu pipeline ETL đã build.
 
-Tọa độ + feature POI lấy từ snapshot crawl (models/data/raw_data.csv, cùng
+Tọa độ + feature POI lấy từ snapshot crawl (data/processed/alonhadat_features.csv, cùng
 nguồn với dữ liệu train nên đơn vị luôn khớp với model). Chỉ khi gặp đường
 chưa có trong cache mới gọi Nominatim API.
 """
@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
-RAW_CSV = ROOT / "models" / "data" / "raw_data.csv"
+RAW_CSV = ROOT / "data" / "processed" / "alonhadat_features.csv"
 
 HCM_CENTER = (10.7769, 106.7009)
 
