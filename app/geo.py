@@ -94,7 +94,7 @@ class GeoLookup:
 
     @staticmethod
     def _load_from_supabase():
-        """Load từ Supabase address_cache table (real-time)."""
+        """Load từ Supabase address_cache table + merge density data (real-time)."""
         if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
             print("⏭️  Supabase env vars not set, skipping...")
             return None
@@ -105,6 +105,14 @@ class GeoLookup:
             if response.data:
                 df = pd.DataFrame(response.data)
                 print(f"✅ Loaded {len(df)} rows từ Supabase {SUPABASE_TABLE}")
+
+                # Merge với density data để có locality_square & locality_population_density
+                if DENSITY_CSV.exists():
+                    print(f"Merging with density data...")
+                    density = pd.read_csv(DENSITY_CSV)
+                    df = df.merge(density, on=['locality', 'region'], how='left')
+                    print(f"  ✅ Merged, now {len(df)} rows with density features")
+
                 return df
             else:
                 print(f"⚠️  Supabase table empty, falling back to CSV")
@@ -112,6 +120,8 @@ class GeoLookup:
             print("⚠️  supabase library not installed: pip install supabase")
         except Exception as e:
             print(f"⚠️  Supabase error: {e}")
+            import traceback
+            traceback.print_exc()
         return None
 
     @staticmethod
