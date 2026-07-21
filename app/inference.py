@@ -91,18 +91,18 @@ def build_row(medians, geo: GeoLookup, *,
 
     dist_km = geo.distance_to_center(lat, lon)
 
-    # POI features
+    # POI features (geo lookup - may return None)
     poi_result = geo.poi_features(lat, lon)
     pois, cache_dist, poi_source = poi_result if len(poi_result) == 3 else (*poi_result, "cache")
 
     def poi(col):
-        v = pois.get(col)
-        return float(v) if v is not None else float(medians.get(col, 999.0))
+        v = pois.get(col) if pois else None
+        return v  # Pass None, let preprocessing handle imputation
 
-    # Locality stats
+    # Locality stats (geo lookup - may return None)
     sq, dens = geo.locality_stats(locality)
-    loc_sq = float(sq) if sq is not None else float(medians.get("locality_square", 0.0))
-    loc_dens = float(dens) if dens is not None else float(medians.get("locality_population_density", 0.0))
+    loc_sq = sq  # Pass None, let preprocessing handle imputation
+    loc_dens = dens
 
     # Build single-row DataFrame to pass through preprocessing.preprocess()
     # This reuses the exact feature engineering logic from training
@@ -119,23 +119,23 @@ def build_row(medians, geo: GeoLookup, *,
         "road_width_m": float(road_width_m) if road_width_m is not None else None,
         "width_m": float(width_m) if width_m is not None else None,
         "length_m": float(length_m) if length_m is not None else None,
-        "locality_square": float(loc_sq),
-        "locality_population_density": float(loc_dens),
+        "locality_square": float(loc_sq) if loc_sq is not None else None,
+        "locality_population_density": float(loc_dens) if loc_dens is not None else None,
         "distance_to_center_km": float(dist_km),
-        "nearest_school_km": float(poi("nearest_school_km")),
-        "school_count_3km": float(poi("school_count_3km")),
-        "nearest_hospital_km": float(poi("nearest_hospital_km")),
-        "hospital_count_5km": float(poi("hospital_count_5km")),
-        "nearest_marketplace_km": float(poi("nearest_marketplace_km")),
-        "marketplace_count_3km": float(poi("marketplace_count_3km")),
-        "nearest_supermarket_km": float(poi("nearest_supermarket_km")),
-        "supermarket_count_3km": float(poi("supermarket_count_3km")),
-        "nearest_mall_km": float(poi("nearest_mall_km")),
-        "mall_count_3km": float(poi("mall_count_3km")),
-        "nearest_bus_stop_km": float(poi("nearest_bus_stop_km")),
-        "bus_stop_count_1km": float(poi("bus_stop_count_1km")),
-        "nearest_metro_km": float(poi("nearest_metro_km")),
-        "metro_count_5km": float(poi("metro_count_5km")),
+        "nearest_school_km": poi("nearest_school_km"),
+        "school_count_3km": poi("school_count_3km"),
+        "nearest_hospital_km": poi("nearest_hospital_km"),
+        "hospital_count_5km": poi("hospital_count_5km"),
+        "nearest_marketplace_km": poi("nearest_marketplace_km"),
+        "marketplace_count_3km": poi("marketplace_count_3km"),
+        "nearest_supermarket_km": poi("nearest_supermarket_km"),
+        "supermarket_count_3km": poi("supermarket_count_3km"),
+        "nearest_mall_km": poi("nearest_mall_km"),
+        "mall_count_3km": poi("mall_count_3km"),
+        "nearest_bus_stop_km": poi("nearest_bus_stop_km"),
+        "bus_stop_count_1km": poi("bus_stop_count_1km"),
+        "nearest_metro_km": poi("nearest_metro_km"),
+        "metro_count_5km": poi("metro_count_5km"),
         "post_day_month": 0,
         "post_day_day": 0,
         # Text flags
