@@ -1,0 +1,118 @@
+================================================================================
+FEATURE IMPORTANCE & SELECTION ANALYSIS
+================================================================================
+
+METHOD
+--------------------------------------------------------------------------------
+- Tree-based feature importance (averaged across 9 models)
+- Covers: LightGBM, XGBoost, CatBoost × Low/Mid/High price tiers
+- Features analyzed: 92
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Features: 92
+Low-Impact Features (bottom 30%): 28
+Highly Correlated Pairs (r>0.95): 15
+
+Key Insights:
+- 80% of importance captured by top 34 features (37.0%)
+- Bottom 28 features (30.4%) contribute minimal signal
+
+RECOMMENDATION
+--------------------------------------------------------------------------------
+Phase 1: Remove 28 low-impact features
+  Expected: 0.3-0.8% MAPE improvement (noise reduction)
+  Expected: 15-20% faster training
+  Risk: Very low (removing noise)
+
+Phase 2: Review 15 correlated feature pairs
+  Consider dropping one from each pair if both low-signal
+  Expected: 0.1-0.3% additional improvement
+
+FEATURES TO REMOVE (PHASE 1)
+--------------------------------------------------------------------------------
+  kitchen_bin_False                        Importance:   0.26%
+  dining_room_bin_True                     Importance:   0.26%
+  perimeter_m_missing                      Importance:   0.25%
+  direction_dong                           Importance:   0.24%
+  direction_tay_bac                        Importance:   0.22%
+  nearest_mall_km_missing                  Importance:   0.22%
+  length_m_missing                         Importance:   0.17%
+  kitchen_bin_True                         Importance:   0.17%
+  direction_tay_nam                        Importance:   0.13%
+  post_day_year                            Importance:   0.06%
+  direction_bac                            Importance:   0.05%
+  direction_tay                            Importance:   0.04%
+  nearest_hospital_km_missing              Importance:   0.00%
+  terrace_bin_nan                          Importance:   0.00%
+  kitchen_bin_nan                          Importance:   0.00%
+  dining_room_bin_nan                      Importance:   0.00%
+  property_type_nan                        Importance:   0.00%
+  legal_status_nan                         Importance:   0.00%
+  legal_status_giấy_phép_xd                Importance:   0.00%
+  distance_to_center_km_missing            Importance:   0.00%
+  nearest_bus_stop_km_missing              Importance:   0.00%
+  nearest_school_km_missing                Importance:   0.00%
+  listing_type_nan                         Importance:   0.00%
+  listing_type_can_ban                     Importance:   0.00%
+  direction_nan                            Importance:   0.00%
+  nearest_marketplace_km_missing           Importance:   0.00%
+  nearest_supermarket_km_missing           Importance:   0.00%
+  car_parking_bin_nan                      Importance:   0.00%
+
+HIGHLY CORRELATED PAIRS (r>0.95)
+--------------------------------------------------------------------------------
+  school_count_3km     ↔ nearby_amenities     r=0.961
+  hospital_count_5km   ↔ nearby_amenities     r=0.963
+  nearest_metro_km     ↔ nearest_metro_km_missing r=0.970
+  perimeter_m_missing  ↔ shape_ratio_missing  r=1.000
+  perimeter_m_missing  ↔ length_m_missing     r=0.991
+  shape_ratio_missing  ↔ length_m_missing     r=0.991
+  property_type_nha_mat_tien ↔ property_type_nha_trong_hem r=1.000
+  dining_room_bin_False ↔ dining_room_bin_True r=1.000
+  dining_room_bin_False ↔ kitchen_bin_False    r=0.982
+  dining_room_bin_False ↔ kitchen_bin_True     r=0.982
+  ... and 5 more pairs
+
+TOP 30 IMPORTANT FEATURES (KEEP THESE)
+--------------------------------------------------------------------------------
+  distance_vs_area                         Importance:   7.44%
+  area_x_floors                            Importance:   5.01%
+  area_x_bedrooms                          Importance:   4.40%
+  road_width_m                             Importance:   4.26%
+  road_area_ratio                          Importance:   3.14%
+  width_m                                  Importance:   2.84%
+  frontage_ratio                           Importance:   2.68%
+  property_type_nha_trong_hem              Importance:   2.66%
+  area_per_bedroom                         Importance:   2.58%
+  area_m2                                  Importance:   2.53%
+  nearest_supermarket_km                   Importance:   2.28%
+  locality_square                          Importance:   2.21%
+  nearest_marketplace_km                   Importance:   2.20%
+  nearest_bus_stop_km                      Importance:   2.17%
+  nearest_hospital_km                      Importance:   2.17%
+  nearest_school_km                        Importance:   2.14%
+  property_type_nha_mat_tien               Importance:   2.06%
+  nearest_mall_km                          Importance:   2.05%
+  perimeter_m                              Importance:   2.01%
+  depth_ratio                              Importance:   1.85%
+  post_day_day                             Importance:   1.83%
+  amenity_density                          Importance:   1.83%
+  log_area                                 Importance:   1.80%
+  shape_ratio                              Importance:   1.79%
+  bus_stop_count_1km                       Importance:   1.63%
+  length_m                                 Importance:   1.52%
+  supermarket_count_3km                    Importance:   1.42%
+  nearby_amenities                         Importance:   1.38%
+  nearest_metro_km                         Importance:   1.38%
+  distance_to_center_km                    Importance:   1.32%
+
+NEXT STEPS
+--------------------------------------------------------------------------------
+1. Update preprocessing.py to skip/drop identified low-impact features
+2. Retrain models with reduced feature set
+3. Compare MAPE: current (13.15%) vs cleaned
+4. If improvement ≥0.3%, proceed with cleaned version
+5. Then apply hyperparameter tuning on final feature set
+6. Target: <10% MAPE
+
