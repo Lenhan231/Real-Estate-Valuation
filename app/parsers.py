@@ -1,5 +1,6 @@
 """Listing parser - extract data from Vietnamese real estate listing text."""
 import re
+from constants import TEXT_FEATURE_PATTERNS, NUMERIC_PATTERNS, LEGAL_PATTERNS
 
 
 def parse_listing(text: str) -> dict:
@@ -21,54 +22,29 @@ def parse_listing(text: str) -> dict:
 
     text_lower = text.lower()
 
-    # Diện tích: "46m2", "46 m²", "diện tích 46"
-    area_match = re.search(r'(\d+(?:[.,]\d+)?)\s*m[²2²]', text_lower)
-    if area_match:
-        result["area_m2"] = float(area_match.group(1).replace(",", "."))
+    # Numeric features using shared patterns
+    for key, pattern in NUMERIC_PATTERNS.items():
+        match = re.search(pattern, text_lower)
+        if match:
+            try:
+                val = float(match.group(1).replace(",", "."))
+                if key == "num_floors" or key == "num_bedrooms":
+                    result[key] = int(val)
+                else:
+                    result[key] = val
+            except (ValueError, IndexError):
+                pass
 
-    # Số tầng: "3 tầng", "lầu"
-    floor_match = re.search(r'(\d+)\s*tầng', text_lower)
-    if floor_match:
-        result["num_floors"] = int(floor_match.group(1))
+    # Text-based flags using shared patterns
+    for flag_name, patterns in TEXT_FEATURE_PATTERNS.items():
+        if any(pattern in text_lower for pattern in patterns):
+            result[flag_name] = True
 
-    # Phòng ngủ: "4 phòng ngủ", "4 PN"
-    bed_match = re.search(r'(\d+)\s*(?:phòng ngủ|PN)', text_lower)
-    if bed_match:
-        result["num_bedrooms"] = int(bed_match.group(1))
-
-    # Đường trước nhà: "5m", "hẻm rộng 5m", "hẻm trước nhà rộng 5m"
-    road_match = re.search(
-        r'(?:hẻm|đường)(?:\s+\w+)*?\s*(?:trước|rộng)?\s*(?:\w+)?\s*(\d+)\s*m',
-        text_lower
-    )
-    if road_match:
-        result["road_width_m"] = float(road_match.group(1))
-
-    # Cần bán gấp
-    if "cần bán gấp" in text_lower or "bán gấp" in text_lower:
-        result["is_gap"] = True
-
-    # Hẻm xe hơi
-    if "hẻm xe" in text_lower or "ô tô vào" in text_lower:
-        result["is_hem_xe_hoi"] = True
-
-    # Nở hậu
-    if "nở hậu" in text_lower:
-        result["is_no_hau"] = True
-
-    # Có nội thất / cho thuê
-    if "nội thất" in text_lower or "cho thuê" in text_lower:
-        result["has_noi_that"] = True
-
-    # Tiện kinh doanh
-    if "kinh doanh" in text_lower or "thích hợp" in text_lower:
-        result["is_kinh_doanh"] = True
-
-    # Pháp lý: Sổ hồng / Sổ đỏ
-    if "sổ hồng" in text_lower or "sổ đỏ" in text_lower:
-        result["legal_status"] = "so_hong_so_do"
-    elif "giấy tờ" in text_lower:
-        result["legal_status"] = "giay_to_hop_le"
+    # Legal status using shared patterns
+    for status, patterns in LEGAL_PATTERNS.items():
+        if any(pattern in text_lower for pattern in patterns):
+            result["legal_status"] = status
+            break
 
     return result
 
