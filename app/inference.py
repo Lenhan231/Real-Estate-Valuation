@@ -46,30 +46,21 @@ def build_row(medians, geo: GeoLookup, *,
               street, locality, property_type, legal_status, direction,
               area_m2, width_m, length_m, num_floors, num_bedrooms, road_width_m,
               bin_flags: dict, text_flags: dict):
-    """Return (row dict, info dict) or (None, None) if geocoding fails.
-
-    row contains every feature preprocess() would produce for this property.
-    info is for display only (lat, lon, source, pois, cache_dist_km, poi_source).
-    """
+    """Build exact 64-feature row matching training data. Return (row dict, info dict) or (None, None)."""
     lat, lon, source = geo.geocode(street, locality)
     if lat is None:
         return None, None
 
     dist_km = geo.distance_to_center(lat, lon)
 
-    # --- missing-value flags ---
+    # Handle missing width/length
     width_m_missing = int(width_m is None)
-    length_m_missing = int(length_m is None)
-    if width_m is None and length_m:
-        width_m = area_m2 / length_m
-    if length_m is None and width_m:
-        length_m = area_m2 / width_m
     if width_m is None:
         width_m = float(medians.get("width_m", 4.0))
     if length_m is None:
         length_m = float(medians.get("length_m", 20.0))
 
-    # --- POI features ---
+    # POI features
     poi_result = geo.poi_features(lat, lon)
     pois, cache_dist, poi_source = poi_result if len(poi_result) == 3 else (*poi_result, "cache")
 
@@ -77,132 +68,103 @@ def build_row(medians, geo: GeoLookup, *,
         v = pois.get(col)
         return float(v) if v is not None else float(medians.get(col, 999.0))
 
-    nearest_metro = pois.get("nearest_metro_km")
-    nearest_mall = pois.get("nearest_mall_km")
-    nearest_supermarket = pois.get("nearest_supermarket_km")
-
-    # --- locality stats ---
+    # Locality stats
     sq, dens = geo.locality_stats(locality)
     loc_sq = float(sq) if sq is not None else float(medians.get("locality_square", 0.0))
     loc_dens = float(dens) if dens is not None else float(medians.get("locality_population_density", 0.0))
 
-    # --- derived features (same formulas as preprocess()) ---
+    # Derived features (exactly matching preprocessing.py)
     perimeter_m = (width_m + length_m) * 2
     shape_ratio = (width_m + 0.1) / (length_m + 0.1)
-    area_x_floors = area_m2 * num_floors
-    area_x_bedrooms = area_m2 * num_bedrooms
-    area_per_bedroom = area_m2 / (num_bedrooms + 1)
-    distance_vs_area = dist_km / (area_m2 + 1)
-    log_area = np.log1p(area_m2)
-    log_dist = np.log1p(dist_km)
-    log_dens = np.log1p(loc_dens)
+    shape_ratio_missing = int(shape_ratio is None or np.isnan(shape_ratio))
+    road_width_m_missing = 0  # Always provided
 
-    ns_km = poi("nearest_school_km")
-    nh_km = poi("nearest_hospital_km")
-    nm_km = float(nearest_mall) if nearest_mall is not None else float(medians.get("nearest_mall_km", 999.0))
-
-    # v2.4: Removed location_score & amenity_score (low-impact per XAI analysis)
-    # Models use raw POI distances + counts directly (more predictive)
     nearby_amenities = sum(poi(c) for c in [
         "school_count_3km", "hospital_count_5km", "marketplace_count_3km",
         "supermarket_count_3km", "mall_count_3km", "bus_stop_count_1km", "metro_count_5km"
     ])
 
-    # --- post_day features (not available at inference; zero = neutral) ---
-    post_day_year = 0
-    post_day_month = 0
-    post_day_day = 0
-
+    # Build exact 64-feature row
     row = {
-        # core numeric
-        "num_floors": num_floors,
-        "num_bedrooms": num_bedrooms,
-        "road_width_m": road_width_m,
-        "width_m": width_m,
-        "length_m": length_m,
-        "area_m2": area_m2,
-        # bin flags from form (these will be one-hot encoded below)
-        # DO NOT include here - they're one-hot encoded in training data
-        # locality
-        "locality_square": loc_sq,
-        "locality_population_density": loc_dens,
-        "distance_to_center_km": dist_km,
-        # POI
-        "nearest_school_km": ns_km,
-        "school_count_3km": poi("school_count_3km"),
-        "nearest_hospital_km": nh_km,
-        "hospital_count_5km": poi("hospital_count_5km"),
-        "nearest_marketplace_km": poi("nearest_marketplace_km"),
-        "marketplace_count_3km": poi("marketplace_count_3km"),
-        "nearest_supermarket_km": float(nearest_supermarket) if nearest_supermarket is not None else float(medians.get("nearest_supermarket_km", 999.0)),
-        "supermarket_count_3km": poi("supermarket_count_3km"),
-        "nearest_mall_km": nm_km,
-        "mall_count_3km": poi("mall_count_3km"),
-        "nearest_bus_stop_km": poi("nearest_bus_stop_km"),
-        "bus_stop_count_1km": poi("bus_stop_count_1km"),
-        "nearest_metro_km": float(nearest_metro) if nearest_metro is not None else float(medians.get("nearest_metro_km", 999.0)),
-        "metro_count_5km": poi("metro_count_5km"),
-        # post_day (zero at inference)
-        "post_day_year": post_day_year,
-        "post_day_month": post_day_month,
-        "post_day_day": post_day_day,
-        # derived
-        "perimeter_m": perimeter_m,
-        "shape_ratio": shape_ratio,
-        "area_x_floors": area_x_floors,
-        "area_x_bedrooms": area_x_bedrooms,
-        "area_per_bedroom": area_per_bedroom,
-        "distance_vs_area": distance_vs_area,
-        "log_area": log_area,
-        "log_distance_to_center": log_dist,
-        "log_population_density": log_dens,
-        "nearby_amenities": nearby_amenities,
-        "nearby_amenities_log": np.log1p(nearby_amenities),
-        # v2.4 ratio features
-        "frontage_ratio": (width_m + 0.1) / (road_width_m + 0.1) if road_width_m else 0.0,
-        "depth_ratio": (length_m + 0.1) / (width_m + 0.1) if width_m else 0.0,
-        "road_area_ratio": road_width_m / np.sqrt(area_m2 + 1) if road_width_m else 0.0,
-        "amenity_density": nearby_amenities / (area_m2 + 1),
-        # text-derived flags (from user checkboxes)
-        "is_hem_xe_hoi": int(text_flags.get("is_hem_xe_hoi", 0)),
-        "is_mat_tien": int(property_type == "nha_mat_tien"),
-        "is_no_hau": int(text_flags.get("is_no_hau", 0)),
-        "has_noi_that": int(text_flags.get("has_noi_that", 0)),
-        "is_gap": int(text_flags.get("is_gap", 0)),
-        "is_kinh_doanh": int(text_flags.get("is_kinh_doanh", 0)),
-        # missing-value flags
-        "nearest_metro_km_missing": int(nearest_metro is None),
-        "nearest_mall_km_missing": int(nearest_mall is None),
-        "nearest_supermarket_km_missing": int(nearest_supermarket is None),
-        "width_m_missing": width_m_missing,
-        "length_m_missing": length_m_missing,
-        # locality encoding (filled later by apply_locality_encoding)
-        "locality_price_median": 0.0,
-        "price_per_sqm_market": 0.0,
+        # 1-6: Core numeric
+        "num_floors": float(num_floors),
+        "num_bedrooms": float(num_bedrooms),
+        "road_width_m": float(road_width_m),
+        "width_m": float(width_m),
+        "length_m": float(length_m),
+        "area_m2": float(area_m2),
+        # 7-8: Locality
+        "locality_square": float(loc_sq),
+        "locality_population_density": float(loc_dens),
+        # 9: Distance
+        "distance_to_center_km": float(dist_km),
+        # 10-23: POI distances & counts
+        "nearest_school_km": float(poi("nearest_school_km")),
+        "school_count_3km": float(poi("school_count_3km")),
+        "nearest_hospital_km": float(poi("nearest_hospital_km")),
+        "hospital_count_5km": float(poi("hospital_count_5km")),
+        "nearest_marketplace_km": float(poi("nearest_marketplace_km")),
+        "marketplace_count_3km": float(poi("marketplace_count_3km")),
+        "nearest_supermarket_km": float(poi("nearest_supermarket_km")),
+        "supermarket_count_3km": float(poi("supermarket_count_3km")),
+        "nearest_mall_km": float(poi("nearest_mall_km")),
+        "mall_count_3km": float(poi("mall_count_3km")),
+        "nearest_bus_stop_km": float(poi("nearest_bus_stop_km")),
+        "bus_stop_count_1km": float(poi("bus_stop_count_1km")),
+        "nearest_metro_km": float(poi("nearest_metro_km")),
+        "metro_count_5km": float(poi("metro_count_5km")),
+        # 24-25: Temporal (zero at inference)
+        "post_day_month": 0.0,
+        "post_day_day": 0.0,
+        # 26-30: Missing flags + derived
+        "road_width_m_missing": float(road_width_m_missing),
+        "perimeter_m": float(perimeter_m),
+        "shape_ratio": float(shape_ratio),
+        "shape_ratio_missing": float(shape_ratio_missing),
+        "width_m_missing": float(width_m_missing),
+        # 31-34: Amenity & distance
+        "nearby_amenities": float(nearby_amenities),
+        "nearby_amenities_log": float(np.log1p(nearby_amenities)),
+        "nearest_metro_km_missing": 0.0,  # Always provided
+        "amenity_density": float(nearby_amenities / (area_m2 + 1)),
+        # 35-40: Text features
+        "is_hem_xe_hoi": float(text_flags.get("is_hem_xe_hoi", 0)),
+        "is_mat_tien": float(property_type == "nha_mat_tien"),
+        "is_no_hau": float(text_flags.get("is_no_hau", 0)),
+        "has_noi_that": float(text_flags.get("has_noi_that", 0)),
+        "is_gap": float(text_flags.get("is_gap", 0)),
+        "is_kinh_doanh": float(text_flags.get("is_kinh_doanh", 0)),
+        # 41-47: Interaction & log features
+        "area_x_floors": float(area_m2 * num_floors),
+        "area_x_bedrooms": float(area_m2 * num_bedrooms),
+        "area_per_bedroom": float(area_m2 / (num_bedrooms + 1)),
+        "distance_vs_area": float(dist_km / (area_m2 + 1)),
+        "log_area": float(np.log1p(area_m2)),
+        "log_distance_to_center": float(np.log1p(dist_km)),
+        "log_population_density": float(np.log1p(loc_dens)),
+        # 48-50: Ratio features
+        "frontage_ratio": float((width_m + 0.1) / (road_width_m + 0.1)),
+        "depth_ratio": float((length_m + 0.1) / (width_m + 0.1)),
+        "road_area_ratio": float(road_width_m / np.sqrt(area_m2 + 1)),
+        # 51-54: Direction one-hot
+        "direction_dong_bac": float(direction == "dong_bac"),
+        "direction_dong_nam": float(direction == "dong_nam"),
+        "direction_nam": float(direction == "nam"),
+        "direction_unknown": float(direction == "unknown"),
+        # 55-56: Property type one-hot
+        "property_type_nha_mat_tien": float(property_type == "nha_mat_tien"),
+        "property_type_nha_trong_hem": float(property_type == "nha_trong_hem"),
+        # 57-59: Legal status one-hot
+        "legal_status_giay_to_hop_le": float(legal_status == "giay_to_hop_le"),
+        "legal_status_so_hong_so_do": float(legal_status == "so_hong_so_do"),
+        "legal_status_unknown": float(legal_status == "unknown"),
+        # 60-64: Bin flags one-hot
+        "dining_room_bin_False": float(bin_flags.get("dining_room_bin", 0) == 0),
+        "terrace_bin_False": float(bin_flags.get("terrace_bin", 0) == 0),
+        "terrace_bin_True": float(bin_flags.get("terrace_bin", 0) == 1),
+        "car_parking_bin_False": float(bin_flags.get("car_parking_bin", 0) == 0),
+        "car_parking_bin_True": float(bin_flags.get("car_parking_bin", 0) == 1),
     }
-
-    # --- one-hot categorical columns (same as pd.get_dummies in preprocess) ---
-    # property_type
-    row["property_type_nha_mat_tien"] = int(property_type == "nha_mat_tien")
-    row["property_type_nha_trong_hem"] = int(property_type == "nha_trong_hem")
-
-    # legal_status (training data has: giay_to_hop_le, so_hong_so_do, unknown)
-    row["legal_status_giay_to_hop_le"] = int(legal_status == "giay_to_hop_le")
-    row["legal_status_so_hong_so_do"] = int(legal_status == "so_hong_so_do")
-    row["legal_status_unknown"] = int(legal_status == "unknown")
-
-    # direction (training data has: dong_bac, dong_nam, nam, unknown)
-    row["direction_dong_bac"] = int(direction == "dong_bac")
-    row["direction_dong_nam"] = int(direction == "dong_nam")
-    row["direction_nam"] = int(direction == "nam")
-    row["direction_unknown"] = int(direction == "unknown")
-
-    # bin flags - one-hot encoding (training data has these with _False/_True)
-    row["dining_room_bin_False"] = int(bin_flags.get("dining_room_bin", 0) == 0)
-    row["terrace_bin_False"] = int(bin_flags.get("terrace_bin", 0) == 0)
-    row["terrace_bin_True"] = int(bin_flags.get("terrace_bin", 0) == 1)
-    row["car_parking_bin_False"] = int(bin_flags.get("car_parking_bin", 0) == 0)
-    row["car_parking_bin_True"] = int(bin_flags.get("car_parking_bin", 0) == 1)
 
     info = {
         "lat": lat, "lon": lon, "source": source,
