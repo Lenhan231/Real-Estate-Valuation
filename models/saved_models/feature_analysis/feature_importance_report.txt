@@ -6,92 +6,99 @@ METHOD
 --------------------------------------------------------------------------------
 - Tree-based feature importance (averaged across 9 models)
 - Covers: LightGBM, XGBoost, CatBoost × Low/Mid/High price tiers
-- Features analyzed: 64
+- Features analyzed: 78
 
 SUMMARY
 --------------------------------------------------------------------------------
-Total Features: 64
-Low-Impact Features (bottom 30%): 19
-Highly Correlated Pairs (r>0.95): 6
+Total Features: 78
+Low-Impact Features (bottom 30%): 24
+Highly Correlated Pairs (r>0.95): 8
 
 Key Insights:
-- 80% of importance captured by top 33 features (51.6%)
-- Bottom 19 features (29.7%) contribute minimal signal
+- 80% of importance captured by top 40 features (51.3%)
+- Bottom 24 features (30.8%) contribute minimal signal
 
 RECOMMENDATION
 --------------------------------------------------------------------------------
-Phase 1: Remove 19 low-impact features
+Phase 1: Remove 24 low-impact features
   Expected: 0.3-0.8% MAPE improvement (noise reduction)
   Expected: 15-20% faster training
   Risk: Very low (removing noise)
 
-Phase 2: Review 6 correlated feature pairs
+Phase 2: Review 8 correlated feature pairs
   Consider dropping one from each pair if both low-signal
   Expected: 0.1-0.3% additional improvement
 
 FEATURES TO REMOVE (PHASE 1)
 --------------------------------------------------------------------------------
-  road_width_m_missing                     Importance:   0.71%
-  direction_nam                            Importance:   0.69%
-  is_gap                                   Importance:   0.61%
-  is_mat_tien                              Importance:   0.61%
-  legal_status_so_hong_so_do               Importance:   0.59%
-  terrace_bin_True                         Importance:   0.56%
-  is_kinh_doanh                            Importance:   0.54%
-  terrace_bin_False                        Importance:   0.54%
-  car_parking_bin_False                    Importance:   0.53%
-  is_hem_xe_hoi                            Importance:   0.52%
-  width_m_missing                          Importance:   0.47%
-  dining_room_bin_False                    Importance:   0.47%
-  legal_status_unknown                     Importance:   0.45%
-  is_no_hau                                Importance:   0.37%
-  car_parking_bin_True                     Importance:   0.34%
-  has_noi_that                             Importance:   0.31%
-  direction_unknown                        Importance:   0.30%
-  shape_ratio_missing                      Importance:   0.27%
-  direction_dong_bac                       Importance:   0.26%
+  is_mat_tien                              Importance:   0.63%
+  bedrooms_squared                         Importance:   0.62%
+  metro_count_5km                          Importance:   0.59%
+  is_gap                                   Importance:   0.53%
+  car_parking_bin_False                    Importance:   0.52%
+  legal_status_so_hong_so_do               Importance:   0.49%
+  legal_status_giay_to_hop_le              Importance:   0.49%
+  terrace_bin_False                        Importance:   0.46%
+  is_hem_xe_hoi                            Importance:   0.45%
+  is_kinh_doanh                            Importance:   0.43%
+  area_m2_squared                          Importance:   0.42%
+  direction_nam                            Importance:   0.40%
+  dining_room_bin_False                    Importance:   0.38%
+  terrace_bin_True                         Importance:   0.35%
+  width_m_missing                          Importance:   0.31%
+  area_m2_sqrt                             Importance:   0.31%
+  legal_status_unknown                     Importance:   0.28%
+  has_noi_that                             Importance:   0.26%
+  car_parking_bin_True                     Importance:   0.26%
+  shape_ratio_missing                      Importance:   0.24%
+  is_no_hau                                Importance:   0.22%
+  direction_unknown                        Importance:   0.22%
+  direction_dong_bac                       Importance:   0.13%
+  nearest_metro_km_missing                 Importance:   0.12%
 
 HIGHLY CORRELATED PAIRS (r>0.95)
 --------------------------------------------------------------------------------
+  area_m2              ↔ area_m2_sqrt         r=0.980
   school_count_3km     ↔ nearby_amenities     r=0.961
   hospital_count_5km   ↔ nearby_amenities     r=0.963
   nearest_metro_km     ↔ nearest_metro_km_missing r=0.970
+  log_area             ↔ area_m2_sqrt         r=0.981
   property_type_nha_mat_tien ↔ property_type_nha_trong_hem r=1.000
   terrace_bin_False    ↔ terrace_bin_True     r=1.000
   car_parking_bin_False ↔ car_parking_bin_True r=1.000
 
 TOP 30 IMPORTANT FEATURES (KEEP THESE)
 --------------------------------------------------------------------------------
-  distance_vs_area                         Importance:   7.69%
-  area_x_floors                            Importance:   5.11%
-  area_x_bedrooms                          Importance:   4.46%
-  road_width_m                             Importance:   4.33%
-  road_area_ratio                          Importance:   3.23%
-  frontage_ratio                           Importance:   2.76%
-  width_m                                  Importance:   2.76%
-  area_m2                                  Importance:   2.60%
-  area_per_bedroom                         Importance:   2.59%
-  property_type_nha_trong_hem              Importance:   2.52%
-  nearest_school_km                        Importance:   2.30%
-  nearest_supermarket_km                   Importance:   2.24%
-  nearest_hospital_km                      Importance:   2.22%
-  log_area                                 Importance:   2.21%
-  nearest_bus_stop_km                      Importance:   2.20%
-  nearest_mall_km                          Importance:   2.01%
-  nearest_marketplace_km                   Importance:   2.00%
-  locality_square                          Importance:   2.00%
-  perimeter_m                              Importance:   1.96%
-  shape_ratio                              Importance:   1.95%
-  property_type_nha_mat_tien               Importance:   1.91%
-  post_day_day                             Importance:   1.84%
-  depth_ratio                              Importance:   1.77%
-  amenity_density                          Importance:   1.72%
-  length_m                                 Importance:   1.61%
-  nearest_metro_km                         Importance:   1.54%
-  bus_stop_count_1km                       Importance:   1.47%
-  nearby_amenities                         Importance:   1.44%
-  hospital_count_5km                       Importance:   1.31%
-  distance_to_center_km                    Importance:   1.31%
+  area_x_road_width                        Importance:   6.79%
+  area_per_distance                        Importance:   5.45%
+  area_x_floors                            Importance:   3.64%
+  area_x_bedrooms                          Importance:   3.30%
+  distance_vs_area                         Importance:   3.14%
+  density_x_area                           Importance:   2.64%
+  property_type_nha_trong_hem              Importance:   2.29%
+  road_area_ratio                          Importance:   2.27%
+  width_m                                  Importance:   2.09%
+  floors_x_distance                        Importance:   2.07%
+  width_x_length                           Importance:   2.03%
+  nearest_supermarket_km                   Importance:   1.98%
+  area_per_bedroom                         Importance:   1.97%
+  nearest_school_km                        Importance:   1.93%
+  nearest_mall_km                          Importance:   1.91%
+  nearest_marketplace_km                   Importance:   1.88%
+  frontage_ratio                           Importance:   1.82%
+  nearest_bus_stop_km                      Importance:   1.80%
+  locality_sq_x_area                       Importance:   1.76%
+  bedrooms_x_distance                      Importance:   1.75%
+  nearest_hospital_km                      Importance:   1.75%
+  shape_ratio                              Importance:   1.73%
+  post_day_day                             Importance:   1.70%
+  area_x_distance                          Importance:   1.65%
+  depth_ratio                              Importance:   1.63%
+  floors_squared                           Importance:   1.38%
+  property_type_nha_mat_tien               Importance:   1.34%
+  locality_square                          Importance:   1.33%
+  nearest_metro_km                         Importance:   1.31%
+  bus_stop_count_1km                       Importance:   1.30%
 
 NEXT STEPS
 --------------------------------------------------------------------------------
