@@ -13,11 +13,9 @@ webdriver-manager
 supabase
 python-dotenv
 geopy
-tabpfn
 matplotlib
 seaborn
 plotly
 flask
-boto3
 fastparquet
 pyarrow
