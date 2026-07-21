@@ -138,14 +138,6 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
                 fill_value = 50
             df[col] = df[col].fillna(fill_value)
 
-    # ===== URBANIZATION INDEX =====
-    urban = []
-    if 'locality_population_density' in df.columns:
-        urban.append(0.4 * np.log1p(df['locality_population_density']))
-    if 'nearby_amenities' in df.columns:
-        urban.append(0.3 * np.log1p(df['nearby_amenities']))
-    if urban:
-        df['urban_index'] = sum(urban)
 
     # ===== AREA-NORMALIZED FEATURES =====
     if 'area_m2' in df.columns and 'nearby_amenities' in df.columns:
@@ -220,6 +212,23 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
     bool_cols = features_df.select_dtypes(include=['bool']).columns
     features_df[bool_cols] = features_df[bool_cols].astype(int)
 
+    # Drop low-impact features (identified via feature importance analysis)
+    # Phase 1 cleanup: remove 28 features contributing <0.27% importance
+    low_impact_features = [
+        'kitchen_bin_False', 'dining_room_bin_True', 'perimeter_m_missing',
+        'direction_dong', 'direction_tay_bac', 'nearest_mall_km_missing',
+        'length_m_missing', 'kitchen_bin_True', 'direction_tay_nam',
+        'post_day_year', 'direction_bac', 'direction_tay',
+        'nearest_hospital_km_missing', 'terrace_bin_nan', 'kitchen_bin_nan',
+        'dining_room_bin_nan', 'property_type_nan', 'legal_status_nan',
+        'legal_status_giấy_phép_xd', 'distance_to_center_km_missing',
+        'nearest_bus_stop_km_missing', 'nearest_school_km_missing',
+        'listing_type_nan', 'listing_type_can_ban', 'direction_nan',
+        'nearest_marketplace_km_missing', 'nearest_supermarket_km_missing',
+        'car_parking_bin_nan'
+    ]
+    features_df = features_df.drop(columns=[c for c in low_impact_features if c in features_df.columns])
+
     # Handle duplicate column names
     if features_df.columns.duplicated().any():
         cols = pd.Series(features_df.columns)
@@ -243,8 +252,15 @@ def add_locality_features(X_train, X_test, df, train_idx, test_idx, y_train):
 
     locality_train = df.loc[train_idx, 'locality']
     locality_test = df.loc[test_idx, 'locality']
+
+    # Price by locality
     locality_price_map = df.loc[train_idx].groupby('locality')['price_vnd'].median()
-    locality_sqm_map = df.loc[train_idx].groupby('locality').apply(lambda x: (x['price_vnd'] / (x['area_m2'] + 1)).median())
+
+    # Price per sqm by locality (avoid groupby.apply warning with explicit calculation)
+    train_data = df.loc[train_idx].copy()
+    train_data['price_per_sqm'] = train_data['price_vnd'] / (train_data['area_m2'] + 1)
+    locality_sqm_map = train_data.groupby('locality')['price_per_sqm'].median()
+
     global_median = float(y_train.median())
     global_sqm = float((df.loc[train_idx, 'price_vnd'] / (df.loc[train_idx, 'area_m2'] + 1)).median())
 
