@@ -91,12 +91,6 @@ def build_row(medians, geo: GeoLookup, *,
 
     dist_km = geo.distance_to_center(lat, lon)
 
-    # Handle missing width/length
-    if width_m is None:
-        width_m = float(medians.get("width_m", 4.0))
-    if length_m is None:
-        length_m = float(medians.get("length_m", 20.0))
-
     # POI features
     poi_result = geo.poi_features(lat, lon)
     pois, cache_dist, poi_source = poi_result if len(poi_result) == 3 else (*poi_result, "cache")
@@ -112,6 +106,7 @@ def build_row(medians, geo: GeoLookup, *,
 
     # Build single-row DataFrame to pass through preprocessing.preprocess()
     # This reuses the exact feature engineering logic from training
+    # Note: Pass None for missing values so preprocessing can apply hierarchical imputation
     row_df = pd.DataFrame([{
         "listing_id": 0,
         "price_vnd": 1e9,  # Dummy price (not used, just for preprocessing)
@@ -119,11 +114,11 @@ def build_row(medians, geo: GeoLookup, *,
         "legal_status": legal_status,
         "direction": direction,
         "area_m2": float(area_m2),
-        "num_floors": float(num_floors),
-        "num_bedrooms": float(num_bedrooms),
-        "road_width_m": float(road_width_m),
-        "width_m": float(width_m),
-        "length_m": float(length_m),
+        "num_floors": float(num_floors) if num_floors is not None else None,
+        "num_bedrooms": float(num_bedrooms) if num_bedrooms is not None else None,
+        "road_width_m": float(road_width_m) if road_width_m is not None else None,
+        "width_m": float(width_m) if width_m is not None else None,
+        "length_m": float(length_m) if length_m is not None else None,
         "locality_square": float(loc_sq),
         "locality_population_density": float(loc_dens),
         "distance_to_center_km": float(dist_km),
