@@ -121,11 +121,8 @@ def build_row(medians, geo: GeoLookup, *,
         "width_m": width_m,
         "length_m": length_m,
         "area_m2": area_m2,
-        # bin flags from form
-        "dining_room_bin": int(bin_flags.get("dining_room_bin", 0)),
-        "kitchen_bin": int(bin_flags.get("kitchen_bin", 0)),
-        "terrace_bin": int(bin_flags.get("terrace_bin", 0)),
-        "car_parking_bin": int(bin_flags.get("car_parking_bin", 0)),
+        # bin flags from form (these will be one-hot encoded below)
+        # DO NOT include here - they're one-hot encoded in training data
         # locality
         "locality_square": loc_sq,
         "locality_population_density": loc_dens,
@@ -188,18 +185,24 @@ def build_row(medians, geo: GeoLookup, *,
     # property_type
     row["property_type_nha_mat_tien"] = int(property_type == "nha_mat_tien")
     row["property_type_nha_trong_hem"] = int(property_type == "nha_trong_hem")
-    row["property_type_nan"] = 0
 
-    # legal_status
-    for ls in ["so_hong_so_do", "giay_to_hop_le", "unknown", "nan"]:
-        row[f"legal_status_{ls}"] = int(legal_status == ls)
+    # legal_status (training data has: giay_to_hop_le, so_hong_so_do, unknown)
+    row["legal_status_giay_to_hop_le"] = int(legal_status == "giay_to_hop_le")
+    row["legal_status_so_hong_so_do"] = int(legal_status == "so_hong_so_do")
+    row["legal_status_unknown"] = int(legal_status == "unknown")
 
-    # direction
-    for d in ["bac", "dong", "dong_bac", "dong_nam", "nam", "tay", "tay_bac", "tay_nam", "unknown", "nan"]:
-        row[f"direction_{d}"] = int(direction == d)
+    # direction (training data has: dong_bac, dong_nam, nam, unknown)
+    row["direction_dong_bac"] = int(direction == "dong_bac")
+    row["direction_dong_nam"] = int(direction == "dong_nam")
+    row["direction_nam"] = int(direction == "nam")
+    row["direction_unknown"] = int(direction == "unknown")
 
-    # listing_type (app always uses "ban" / selling — one-hot with dummy_na)
-    row["listing_type_nan"] = 0
+    # bin flags - one-hot encoding (training data has these with _False/_True)
+    row["dining_room_bin_False"] = int(bin_flags.get("dining_room_bin", 0) == 0)
+    row["terrace_bin_False"] = int(bin_flags.get("terrace_bin", 0) == 0)
+    row["terrace_bin_True"] = int(bin_flags.get("terrace_bin", 0) == 1)
+    row["car_parking_bin_False"] = int(bin_flags.get("car_parking_bin", 0) == 0)
+    row["car_parking_bin_True"] = int(bin_flags.get("car_parking_bin", 0) == 1)
 
     info = {
         "lat": lat, "lon": lon, "source": source,
