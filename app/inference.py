@@ -4,6 +4,8 @@ Model: LightGBM + XGBoost + CatBoost ensemble per price tier
 Strategy: Price segmentation only (no property type split)
 Features: 78 optimized (64 base + 14 polynomial/interaction)
 Performance: 13.10% MAPE, 0.9200 R²
+
+Note: Features built via shared feature_builder.py (single source of truth)
 """
 import pickle
 from pathlib import Path
@@ -12,6 +14,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from feature_builder import build_features_from_row, FEATURE_NAMES
 from geo import GeoLookup, POI_COLS
 
 ROOT = Path(__file__).resolve().parent.parent
