@@ -4,10 +4,11 @@ Chạy: streamlit run app/frontend/app.py
 import sys
 from pathlib import Path
 
-# Setup path FIRST before any imports
-APP_ROOT = Path(__file__).resolve().parent.parent  # app/
-PROJECT_ROOT = APP_ROOT.parent  # project root
-sys.path.insert(0, str(APP_ROOT))  # Add app/ so we can import api, shared, etc.
+# Setup path from PROJECT_ROOT (before any module imports)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+APP_ROOT = PROJECT_ROOT / "app"
+sys.path.insert(0, str(PROJECT_ROOT))  # Add project root
+sys.path.insert(0, str(APP_ROOT))      # Add app/ with higher priority
 
 import pandas as pd
 import streamlit as st
@@ -17,10 +18,10 @@ try:
 except Exception:
     pdk = None
 
-# Direct imports from modules (avoid __init__.py complexity)
-from api.geo import GeoLookup
-from api.inference import load_models, build_row, predict_price
-from shared.parsers import parse_listing, extract_street_from_address  # noqa: E402
+# Import after paths are set up
+from app.api.geo import GeoLookup
+from app.api.inference import load_models, build_row, predict_price
+from app.shared.parsers import parse_listing, extract_street_from_address
 
 ROOT = PROJECT_ROOT
 BI_DATA_FILE = ROOT / "data" / "processed" / "model_training_data.csv"  # From Supabase via train_production.py
