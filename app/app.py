@@ -236,23 +236,21 @@ if mode == "Paste địa chỉ nhanh":
                     r2.metric("Khoảng ±MAPE", f"{max(price - mape_err, 0) / 1e9:,.1f} – {(price + mape_err) / 1e9:,.1f} tỷ")
                     r3.metric("Giá / m²", f"{price / area_m2 / 1e6:,.0f} triệu/m²")
 
-                    m_col, d_col = st.columns([1, 1])
+                    m_col, f_col = st.columns([1, 1])
+
                     with m_col:
                         st.map(pd.DataFrame({"lat": [info["lat"]], "lon": [info["lon"]]}), zoom=14)
-                    with d_col:
                         st.write(f"**Nguồn tọa độ:** {info['source']}")
                         if info["poi_source"] == "overpass":
                             st.info("Vị trí nằm ngoài vùng đã crawl")
 
-                    # Show 64 features used by model
-                    st.divider()
-                    with st.expander("🔍 Xem 64 features đã sử dụng"):
+                    with f_col:
+                        st.markdown("#### 🔍 64 Features")
                         feature_df = pd.DataFrame([
                             {"Feature": k, "Value": f"{v:.4g}" if isinstance(v, float) else v}
                             for k, v in sorted(row.items())
                         ])
-                        st.dataframe(feature_df, hide_index=True, use_container_width=True)
-                        st.caption(f"✅ Total: {len(row)} features")
+                        st.dataframe(feature_df, hide_index=True, use_container_width=True, height=400)
         else:
             st.warning("Không tìm thấy phường trong địa chỉ. Thử dùng Form chi tiết!")
 
