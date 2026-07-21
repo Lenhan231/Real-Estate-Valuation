@@ -1,337 +1,330 @@
-# 🤖 Models - Real Estate Valuation
+# 🏠 Real Estate Valuation Models - v2.6 Production
 
-## Directory Structure
+## Overview
+
+**v2.6** is the production-ready ensemble model for automated real estate price prediction in Vietnam. Achieves **13.10% MAPE** (Mean Absolute Percentage Error) with 78 optimized features and intelligent 3-tier price segmentation.
+
+```
+🎯 Performance
+  MAPE:  13.10%        Mean Absolute Percentage Error
+  R²:    0.9200        Coefficient of Determination  
+  MAE:   2.15B VND     Mean Absolute Error in billions
+  RMSE:  3.41B VND     Root Mean Squared Error
+
+⚙️ Architecture
+  Models:   9 (LightGBM + XGBoost + CatBoost × 3 price tiers)
+  Features: 78 (64 base + 14 polynomial/interaction)
+  Data:     10,421 training samples from Supabase
+  Speed:    ~149 seconds training time
+
+📊 Segmentation Strategy
+  Price Tier Strategy: Low (0-5B) | Mid (5-20B) | High (20B+)
+  Ensemble Method:     Weighted average of 3 algorithms per tier
+```
+
+---
+
+## 🚀 Quick Start
+
+### Training
+```bash
+python models/scripts/train_production.py
+```
+
+### Inference (via Streamlit App)
+```bash
+cd app/
+streamlit run app.py
+```
+
+### Direct Python Usage
+```python
+from app.inference import load_models, build_row, predict_price
+from app.geo import GeoLookup
+
+# Load models (9 files)
+models, meta, medians = load_models()
+geo = GeoLookup()
+
+# Build 78-feature row
+row, info = build_row(
+    medians, geo,
+    street="Nguyễn Hữu Cảnh",
+    locality="Phường Bình Thạnh",
+    property_type="nha_mat_tien",
+    legal_status="so_hong_so_do",
+    direction="dong_nam",
+    area_m2=100, width_m=4, length_m=25,
+    num_floors=3, num_bedrooms=3, road_width_m=20,
+    bin_flags={"terrace_bin": 1, "car_parking_bin": 1},
+    text_flags={"is_gap": 0, "is_kinh_doanh": 1}
+)
+
+# Predict price for mid-tier
+price = predict_price(models, meta, row, price_tier="mid")
+print(f"Predicted: {price/1e9:.2f}B VND")
+```
+
+---
+
+## 📂 Model Files
+
+### Production Models (9 files)
+```
+saved_models/
+├── lgbm_low.pkl        LightGBM for low-price (0-5B VND)
+├── lgbm_mid.pkl        LightGBM for mid-price (5-20B VND)
+├── lgbm_high.pkl       LightGBM for high-price (20B+ VND)
+├── xgb_low.pkl         XGBoost for low-price tier
+├── xgb_mid.pkl         XGBoost for mid-price tier
+├── xgb_high.pkl        XGBoost for high-price tier
+├── cb_low.pkl          CatBoost for low-price tier
+├── cb_mid.pkl          CatBoost for mid-price tier
+└── cb_high.pkl         CatBoost for high-price tier
+```
+
+### Analysis & Documentation
+```
+saved_models/
+├── feature_analysis/              Feature importance analysis
+│   ├── top30_features.png         Top 30 features visualization
+│   ├── cumulative_importance.png  Cumulative curve
+│   └── feature_importance_report.txt
+│
+└── redundancy_analysis/           VIF + correlation analysis (v2.8 experiment)
+    ├── pca_cumulative_variance.png
+    ├── redundancy_analysis_report.txt
+    └── features_to_drop.txt
+```
+
+---
+
+## 📊 Features (78 Total)
+
+### Core (6)
+`num_floors`, `num_bedrooms`, `road_width_m`, `width_m`, `length_m`, `area_m2`
+
+### Locality (2)
+`locality_square`, `locality_population_density`
+
+### Distance & POI (15)
+`distance_to_center_km`, `nearest_school_km`, `school_count_3km`, `nearest_hospital_km`, `hospital_count_5km`, `nearest_marketplace_km`, `marketplace_count_3km`, `nearest_supermarket_km`, `supermarket_count_3km`, `nearest_mall_km`, `mall_count_3km`, `nearest_bus_stop_km`, `bus_stop_count_1km`, `nearest_metro_km`, `metro_count_5km`
+
+### Temporal (2)
+`post_day_month`, `post_day_day` (set to 0 at inference)
+
+### Flags & Derived (5)
+`road_width_m_missing`, `perimeter_m`, `shape_ratio`, `shape_ratio_missing`, `width_m_missing`
+
+### Text Features (6)
+`is_hem_xe_hoi`, `is_mat_tien`, `is_no_hau`, `has_noi_that`, `is_gap`, `is_kinh_doanh`
+
+### Base Interactions (7)
+`area_x_floors`, `area_x_bedrooms`, `area_per_bedroom`, `distance_vs_area`, `log_area`, `log_distance_to_center`, `log_population_density`
+
+### Ratios (3)
+`frontage_ratio`, `depth_ratio`, `road_area_ratio`
+
+### Polynomial Features ⭐ (6)
+`area_m2_squared`, `area_m2_sqrt`, `distance_squared`, `road_width_squared`, `bedrooms_squared`, `floors_squared`
+
+### Advanced Interactions ⭐ (8)
+`area_x_distance`, `area_per_distance`, `bedrooms_x_distance`, `floors_x_distance`, `area_x_road_width`, `width_x_length`, `density_x_area`, `locality_sq_x_area`
+
+### Categorical One-Hot (14)
+- Direction (4): `direction_dong_bac`, `direction_dong_nam`, `direction_nam`, `direction_unknown`
+- Property (2): `property_type_nha_mat_tien`, `property_type_nha_trong_hem`
+- Legal (3): `legal_status_giay_to_hop_le`, `legal_status_so_hong_so_do`, `legal_status_unknown`
+- Amenities (5): `dining_room_bin_False`, `terrace_bin_False`, `terrace_bin_True`, `car_parking_bin_False`, `car_parking_bin_True`
+
+---
+
+## 📈 Performance Comparison
+
+| Version | Features | Strategy | MAPE | R² | Approach |
+|---------|----------|----------|------|----|----|
+| v2.4 | 64 | Baseline | 13.25% | 0.9164 | Base features |
+| v2.5 | 45 | Remove low-impact | 13.36% | 0.9167 | ❌ Noise was useful |
+| **v2.6** | **78** | **+Polynomial** | **13.10%** | **0.9200** | ✅ **BEST** |
+| v2.7 | 88 | +Cubic/aggressive | 13.17% | 0.9193 | ❌ Overfitting |
+| v2.8 | 59 | Remove redundant | 13.16% | 0.9192 | ❌ Lost signal |
+
+**Why v2.6 Wins:**
+- ✅ **Lowest MAPE**: 13.10% (polynomial features capture non-linearity)
+- ✅ **Highest R²**: 0.9200 (explains 92% of variance)
+- ✅ **No Overfitting**: Adds just polynomial terms (v2.7 was too aggressive)
+- ✅ **Balanced**: 78 features = good signal-to-noise ratio
+
+---
+
+## 🔧 Training Pipeline
+
+### Data Processing (`shared/preprocessing.py`)
+
+1. **Load**: Supabase `Raw_Features` + CSV fallback
+2. **Clean**: Remove duplicates, filter outliers (2-50B VND, 15-500 m² area)
+3. **Encode**: Boolean → int, categorical → one-hot
+4. **Impute**: Hierarchical (property_type + area_segment → property_type → global)
+5. **Engineer**: Polynomial, interactions, ratios, log transforms
+6. **Output**: 10,421 × 78 features
+
+### Hyperparameters
+
+```python
+LGBM:
+  n_estimators: 1000, max_depth: 8, learning_rate: 0.05
+  subsample: 0.8, colsample_bytree: 0.8
+
+XGBoost:
+  n_estimators: 1500, max_depth: 8, learning_rate: 0.03
+  subsample: 0.8, colsample_bytree: 0.8
+
+CatBoost:
+  iterations: 1500, depth: 8, learning_rate: 0.05
+  loss_function: RMSE, early_stopping_rounds: 50
+```
+
+### Price Tiers
+- **Low**: 0-5 billion VND (924 train, 232 test)
+- **Mid**: 5-20 billion VND (5,069 train, 1,250 test)
+- **High**: 20+ billion VND (2,343 train, 603 test)
+
+---
+
+## ⚡ Scripts
+
+### Main Training
+```bash
+python models/scripts/train_production.py
+```
+- Trains all 9 models (3 tiers × 3 algorithms)
+- Saves to `saved_models/`
+- Outputs training data to `data/processed/model_training_data.csv`
+- Time: ~149 seconds
+
+### Feature Analysis
+```bash
+python models/scripts/feature_importance_analysis.py
+```
+- Extracts importance from all 9 models
+- Identifies top 30 and bottom 30% features
+- Generates visualizations + detailed report
+
+### Redundancy Analysis (Experimental)
+```bash
+python models/scripts/feature_redundancy_analysis.py
+```
+- Calculates VIF for multicollinearity
+- Correlation matrix for redundant features
+- PCA variance explained
+- Note: v2.8 removed redundancy but hurt MAPE → kept v2.6
+
+---
+
+## 🎯 Why Polynomial Features Work
+
+**Non-linear Relationships:**
+```python
+# Linear doesn't capture real-world dynamics
+price ≈ 100M × area_m2  # Wrong!
+
+# Polynomial captures diminishing/accelerating returns
+price ≈ 100M × area_m2 + 50k × area_m2²  # More realistic
+
+# Examples:
+- Large plots far from center: less valuable per sqm
+- Small plots in center: more valuable per sqm
+- Distance decay is curved, not linear
+```
+
+**Results:**
+- v2.4 (no polynomial): 13.25% MAPE
+- v2.6 (with polynomial): 13.10% MAPE
+- **Improvement: +0.15% MAPE**
+
+---
+
+## ⚠️ Known Limitations
+
+1. **Target Not Met**: 13.10% MAPE vs 10% goal
+   - Real estate has inherent variance (market timing, subjective valuations)
+   - 10% is very high bar (top-tier performance)
+   - v2.6 is best achievable with current data
+
+2. **Data Quality**: Some listings incomplete
+   - Mitigation: Hierarchical imputation + median filling
+   - No critical issues found in analysis
+
+3. **Temporal**: Post-day set to 0 at inference
+   - Rationale: Inference doesn't know listing date
+   - Impact: Minimal (~1.8% importance)
+
+4. **Market Changes**: Trained on 2025 data
+   - Recommend quarterly retraining
+   - Monitor prediction residuals
+
+---
+
+## 📋 Files & Directories
 
 ```
 models/
-├── scripts/                        # Training and utility scripts
-│   ├── shared/                    # Shared utilities (imported by all scripts)
-│   │   ├── preprocessing.py       # Data preprocessing and feature engineering
-│   │   ├── plotting.py            # Visualization functions
-│   │   ├── wandb_logging.py       # Weights & Biases integration
-│   │   └── __init__.py            # Module initialization
-│   ├── train_xgboost.py           # XGBoost model training
-│   └── train_ensemble_3model.py   # ⭐ Recommended: 3-model ensemble (LGBM+CatBoost+XGB)
-│
-├── saved_models/                   # Trained model artifacts
-│   ├── lgbm_*.pkl                 # LightGBM models (6 buckets)
-│   ├── cb_*.pkl                   # CatBoost models (6 buckets)
-│   ├── xgb_*.pkl                  # XGBoost models (6 buckets)
-│   ├── xgboost_*.pkl              # Single XGBoost model (alternative)
-│   └── plots/                     # Training visualizations & plots
-│
-└── README.md                       # This file
+├── README.md                          This file
+├── scripts/
+│   ├── train_production.py            Main training (v2.6)
+│   ├── feature_importance_analysis.py Feature analysis
+│   ├── feature_redundancy_analysis.py Redundancy detection
+│   ├── train_stacking.py              Stacking (experimental)
+│   ├── shared/
+│   │   └── preprocessing.py           Feature engineering
+│   └── data/
+│       └── raw_data.csv               Raw training data
+├── saved_models/
+│   ├── *.pkl                          9 production models
+│   ├── feature_analysis/              Importance analysis
+│   ├── redundancy_analysis/           Redundancy results
+│   └── plots/                         Visualizations
+├── data/
+│   ├── raw/                           Raw data
+│   ├── processed/                     model_training_data.csv
+│   └── external/                      Density data
+└── docs/
+    ├── DEPLOYMENT.md                  Deployment guide
+    ├── OPTIMIZATION_SUMMARY.md        Optimization history
+    ├── PRODUCTION_STATUS.md           Current status
+    └── XAI_ANALYSIS_SUMMARY.md        Explainability
 ```
-
-## Models
-
-### 📊 Model Performance Comparison
-
-| Model | MAPE | R² | MAE (B VND) | RMSE (B VND) | Training Time | Notes |
-| --- | --- | --- | --- | --- | --- | --- |
-| **3-Model Ensemble** 🏆 | **13.47%** | **0.9142** | **2.22** | **3.54** | 81.6s | Best overall, 6-bucket strategy |
-| Single XGBoost | 18.16% | 0.8645 | 2.72 | 4.44 | 12.7s | Baseline single model |
-| Baseline (Raw Features) | 20.96% | 0.8528 | 2.93 | 4.63 | ~10s | No feature engineering |
-
-**Winner:** 3-Model Ensemble is **25% better** than single model, **33% better** than baseline! 🎯
 
 ---
 
-### ⭐ 3-Model Ensemble (LGBM + CatBoost + XGBoost) - RECOMMENDED
+## 🚀 Production Deployment
 
-```bash
-python models/scripts/train_ensemble_3model.py --data-source supabase
-```
+### Checklist
+- ✅ Models trained and saved (9 files)
+- ✅ Feature schema documented (78 features)
+- ✅ Inference pipeline tested (build_row → predict)
+- ✅ Streamlit app deployed
+- ✅ Fallbacks implemented (CSV if Supabase fails)
 
-**Specifications:**
-
-- **Type:** 3-Model Ensemble (LightGBM + CatBoost + XGBoost)
-- **Strategy:** 6-bucket stratification by price & property type
-- **Dataset:** 12,814 Supabase records
-- **Training data:** 8,345 properties (80% split)
-- **Test data:** 2,087 properties (20% split)
-- **Features:** 39+ engineered features
-- **Target:** Price in VND (log-transformed for training)
-- **Training Time:** ~100 seconds
-- **Improvements:** Early stopping + weighted averaging by validation performance
-- **Advantage over single-model:** +25% better MAPE (13.47% vs 18.01% XGBoost alone)
-
-**Performance Metrics (Optimized v2.1):**
-
-| Metric | Value | Status |
-| --- | --- | --- |
-| Global RMSE | 3.48 Billion VND | ⬇️ Improved |
-| Global MAE | 2.18 Billion VND | ⬇️ Improved |
-| Global R² | 0.9168 | ⬆️ Improved |
-| Global MAPE | **13.28%** | ⬇️ Improved |
-| RMSE(log) | 0.1755 | ⬇️ Improved |
-
-**Performance by Price Segment (Global Aggregation):**
-
-| Segment | Price Range | MAPE | Test Samples |
-| --- | --- | --- | --- |
-| Budget | 0-5B VND | **10.83%** ✅ | 232 |
-| Mid-range | 5-20B VND | 13.82% | 1,250 |
-| Premium | 20B+ VND | 13.76% | 603 |
-
-**⭐ Key Achievement:**
-
-- Optimized model MAPE: **13.28%** (down from initial 13.47%)
-- R² improved to **0.9168** (up from 0.9142)
-- Budget segment achieves **10.83%** (within 0.83% of <10% target)
-- Training time: 106s (includes all 3 tiers × 3 models)
-
-**Detailed Breakdown: Individual Bucket Performance (Price × Property Type)**
-
-The ensemble uses 6 specialized buckets. Here's the MAPE for each:
-
-| Price Tier | Property Type | Train | Test | MAPE | R² | MAE (B) | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Low (0-5B) | Nha Mat Tien | 68 | 16 | **7.43%** | -0.13 | 0.32 | 🏆 BEST |
-| Low (0-5B) | Nha Trong Hem | 856 | 216 | 11.09% | 0.39 | 0.43 | ✅ Good |
-| **Mid (5-20B)** | **Nha Mat Tien** | **1,457** | **359** | **17.53%** | 0.55 | 2.03 | ⚠️ WORST |
-| Mid (5-20B) | Nha Trong Hem | 3,612 | 891 | 12.32% | 0.78 | 1.22 | ✅ Good |
-| High (20B+) | Nha Mat Tien | 1,878 | 462 | 13.51% | 0.49 | 4.55 | ✅ Good |
-| High (20B+) | Nha Trong Hem | 465 | 141 | 14.56% | 0.45 | 4.30 | ✅ Good |
-
-#### Insights from Bucket Breakdown
-
-- 🏆 **Best:** Low + Nha Mat Tien (7.43% MAPE) — excellent but small segment (16 test samples)
-- ⚠️ **Worst:** Mid + Nha Mat Tien (17.53% MAPE) — significant size (359 test samples), needs improvement
-- 📊 **Pattern:** Nha Trong Hem consistently outperforms Nha Mat Tien across all price tiers
-- 💡 **Key Issue:** Mid-price "Nha Mat Tien" properties are hardest to predict (17.53% vs 7-14% elsewhere)
-
-### Model Optimization History
-
-**Version 1.0 (Initial):** 13.47% MAPE (6-bucket price×property type)
-
-**Version 2.0 (Simplified):** 13.38% MAPE (3-bucket price only)
-
-- Removed property type segmentation (marginal benefit)
-- 43% faster training (54.8s vs 95.2s)
-- Better R² (0.9164 vs 0.9142)
-
-**Version 2.1 (Optimized):** 13.28% MAPE ✅ **CURRENT**
-
-- Phase 1: Hyperparameter tuning applied
-  - LGBM: lr 0.03→0.05, n_est 1000
-  - XGBoost: n_est 1000→1500
-  - CatBoost: lr 0.03→0.05, depth 6→8, iter 1000→1500
-- Improvement: 0.10% MAPE reduction
-- Trade-off: Training time increased to 106s
-
-**Testing Results:**
-
-- Phase 2 (Stacking): 0.11% improvement (not worth complexity)
-- Phase 3 (Data Quality): No critical issues found
+### Monitoring
+- Track prediction errors vs actual prices
+- Monitor residuals for bias
+- Alert if MAPE drifts >15%
+- Retrain quarterly with fresh data
 
 ---
 
-### Segmentation Strategy Analysis
+## 📞 Support
 
-We tested three different segmentation approaches to understand which strategy provides the best performance-to-speed tradeoff:
+**Version**: v2.6 (Production)  
+**Last Updated**: 2026-07-21  
+**Data Source**: Supabase Raw_Features + Local CSV fallback  
+**Status**: ✅ Production Ready  
 
-| Strategy | Buckets | Models | MAPE | R² | Time | Status |
-| --- | --- | --- | --- | --- | --- | --- |
-| **No Segmentation (Global)** | 1 | 3 | 18.35% | 0.8661 | 21.2s | ❌ Worst |
-| **Price Only (3 buckets)** | 3 | 9 | 13.38% | 0.9164 | 54.8s | ⚡ Nearly ties |
-| **Price + Type (6 buckets)** 🏆 | 6 | 18 | 13.47% | 0.9142 | 95.2s | ✅ Current |
-
-**Key Finding:** Price-Only strategy is **nearly identical to current** (0.09% MAPE difference) but **43% faster** and simpler to maintain. Could be considered as an alternative for production if speed is critical.
+For issues, refer to `/docs/` or check the Streamlit app logs.
 
 ---
 
-### XGBoost Model (Single Model Alternative)
+## 📜 License
 
-```python
-import joblib
-model = joblib.load('models/saved_models/xgboost_cleaned_supabase.pkl')
-predictions = model.predict(X_test)
-```
-
-**Specifications:**
-
-- **Type:** XGBoost Regressor (single model)
-- **Dataset:** 12,814 Supabase records
-- **Training data:** 8,336 properties (80% split)
-- **Test data:** 2,085 properties (20% split)
-- **Features:** 93 engineered features
-- **Target:** Price in VND (log-transformed for training)
-
-**Performance Metrics:**
-
-| Metric | Value |
-| --- | --- |
-| Global RMSE | 4.44 Billion VND |
-| Global MAE | 2.72 Billion VND |
-| Global R² | 0.8645 |
-| Global MAPE | 18.16% |
-| RMSE(log) | 0.2446 |
-| Training Time | 12.7 seconds |
-
-**Performance by Price Segment:**
-
-| Segment | Price Range | MAPE | Test Samples |
-| --- | --- | --- | --- |
-| Budget | 0-5B VND | 29.86% | 232 |
-| Mid-range | 5-20B VND | 17.16% | 1,250 |
-| Premium | 20B+ VND | 15.73% | 603 |
-
-**Note:** Single model performs worse than ensemble on budget segment (29.86% vs 10.83%)
-
-### Baseline Model (Raw Features Only)
-
-**Purpose:** Establish a minimum performance baseline without feature engineering.
-
-**Specifications:**
-
-- **Type:** XGBoost Regressor (no feature engineering)
-- **Dataset:** 12,814 Supabase records
-- **Training data:** 8,336 properties (80% split)
-- **Test data:** 2,085 properties (20% split)
-- **Features:** 93 raw features only (no feature engineering)
-- **Target:** Price in VND
-
-**Performance Metrics:**
-
-| Metric | Value |
-| --- | --- |
-| Global RMSE | 4.63 Billion VND |
-| Global MAE | 2.93 Billion VND |
-| Global R² | 0.8528 |
-| Global MAPE | 20.96% |
-
-**Key Insight:** Shows that feature engineering is critical — ensemble achieves **35.7% improvement** over baseline (13.47% vs 20.96%).
-
-## Training Data
-
-**Where:** `data/processed/model_training_data.csv`
-
-**What:** All 8,345 training samples with 39+ preprocessed features + target price
-
-**Why saved:**
-
-- ✅ **Reproducibility** — exact data used to train the models
-- ✅ **Inspection** — validate feature engineering and preprocessing
-- ✅ **Analysis** — analyze model inputs and feature distributions
-- ✅ **Debugging** — trace any data issues back to source
-- ✅ **Comparison** — compare against test predictions
-
-**Note:** This is the 80% training split only. Test data (20%) is not saved since ground truth should stay separate from model validation.
-
-## Training Scripts
-
-### 🚀 Production Model (CURRENT)
-
-```bash
-python models/scripts/train_production.py --data-source supabase
-```
-
-**PRODUCTION-READY** — Price-Only Ensemble (3 price tiers × 3-model ensemble):
-
-- **Architecture:** LightGBM + CatBoost + XGBoost per price tier
-- **Strategy:** Simple price segmentation (Low/Mid/High) — no property type split
-- **Performance:** **13.38% MAPE**, 0.9164 R²
-- **Speed:** 54.8s training (43% faster than previous)
-- **Complexity:** Simple, maintainable, production-ready
-- **Data Balance:** No tiny segments (improves all models)
-- **Why Chosen:** Best R², faster training, balanced data quality
-
-### Archived Experimental Scripts
-
-See [DEPRECATED_SCRIPTS.md](models/scripts/DEPRECATED_SCRIPTS.md) for previous approaches tested:
-
-- Baseline (raw features): 20.96% MAPE
-- Single XGBoost: 18.16% MAPE
-- 6-bucket ensemble: 13.47% MAPE (more complex, similar performance)
-- Property-type only: 18.22% MAPE
-- Deep Learning: Not tested (requires TensorFlow/TabNet)
-
-## Feature Engineering Pipeline
-
-### Base Features
-
-- `num_floors`: Number of stories
-- `num_bedrooms`: Bedroom count
-- `area_m2`: Total area
-- `width_m`, `length_m`: Lot dimensions
-- Geographic: distance_to_center_km, nearest amenities
-- `locality`: Area/district information
-
-### Engineered Features (39+)
-
-- **Geometric:** perimeter, shape_ratio, area × floors, area × bedrooms
-- **Temporal:** post_day_year, post_day_month, post_day_day
-- **Location:** location_score, distance_vs_area
-- **Amenity:** amenity_score, nearby_amenities_count
-- **Text:** is_hem_xe_hoi, is_mat_tien, is_gap (from description)
-- **Log transforms:** log_area, log_distance
-- **Locality:** locality_price_median, price_per_sqm_market
-- **Categorical:** One-hot encoded for categorical variables
-
-## Training Details
-
-### Data Preparation
-
-1. Source: Supabase `Raw_Features` table (12,814 records)
-2. Preprocessing:
-   - Remove duplicates
-   - Filter outliers (2B-50B VND price range, 15-500 m² area)
-   - Drop rows with missing target
-3. Feature Engineering: 39+ engineered features
-4. Encoding: One-hot for categorical, log-transform for skewed features
-5. Output: `data/processed/model_training_data.csv`
-
-### Model Training
-
-**XGBoost Hyperparameters:**
-
-```yaml
-n_estimators: 1000
-max_depth: 8
-learning_rate: 0.03
-subsample: 0.8
-colsample_bytree: 0.8
-Target transform: log1p (log(1 + price))
-```
-
-**Train/Test Split:**
-
-- Train: 8,345 properties (80%)
-- Test: 2,087 properties (20%)
-- Random state: 42 (reproducible)
-
-## Data Output
-
-### Saved Artifacts
-
-- **Models:** `models/saved_models/xgboost_*.pkl`, `ensemble_*.pkl`
-- **Plots:** `models/saved_models/plots/`
-  - Feature importance charts
-  - Predicted vs actual scatter plots
-- **Data:** `data/processed/model_training_data.csv`
-
-## Notes
-
-- All models use Supabase as primary data source
-- Local CSV fallback available if Supabase connection fails
-- Predictions are in Vietnamese Dong (VND)
-- Feature order matters when using saved models
-- Models are stateless and can be parallelized
-
-## Troubleshooting
-
-**Model won't load:**
-
-```python
-import joblib
-model = joblib.load('models/saved_models/xgboost_cleaned_supabase.pkl')
-# Check: file exists, is readable, correct path
-```
-
-**Poor predictions:**
-
-- Verify all features are present
-- Check feature engineering matches training pipeline
-- Consider price range segmentation for outliers
-- Validate against `data/processed/model_training_data.csv`
+Internal use only. Real Estate Valuation Capstone Project.
