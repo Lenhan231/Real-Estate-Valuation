@@ -101,7 +101,8 @@ class GeoLookup:
         try:
             from supabase import create_client
             client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-            response = client.table(SUPABASE_TABLE).select("*").execute()
+            # Fetch all records (default limit is 1000, increase to 10000 to get all)
+            response = client.table(SUPABASE_TABLE).select("*").limit(10000).execute()
             if response.data:
                 df = pd.DataFrame(response.data)
                 print(f"✅ Loaded {len(df)} rows từ Supabase {SUPABASE_TABLE}")
