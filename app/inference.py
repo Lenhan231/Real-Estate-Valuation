@@ -38,12 +38,15 @@ def load_models():
     training_df = pd.read_csv(READY_CSV)
     feature_cols = [c for c in training_df.columns if c != 'price_vnd']
 
+    # Add 2 locality encoding features that are added at inference time
+    feature_cols_with_locality = feature_cols + ["locality_price_median", "price_per_sqm_market"]
+
     meta = {
         "version": "v2.6",
         "tiers": ["low", "mid", "high"],
         "models_per_tier": 3,
-        "n_features": len(feature_cols),
-        "feature_names": feature_cols
+        "n_features": len(feature_cols_with_locality),
+        "feature_names": feature_cols_with_locality
     }
 
     medians = training_df.median(numeric_only=True)
