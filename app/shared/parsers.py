@@ -18,6 +18,8 @@ def parse_listing(text: str) -> dict:
         "is_kinh_doanh": False,
         "is_no_hau": False,
         "legal_status": "unknown",
+        "street": "",
+        "locality": "",
     }
 
     text_lower = text.lower()
@@ -45,6 +47,16 @@ def parse_listing(text: str) -> dict:
         if any(pattern in text_lower for pattern in patterns):
             result["legal_status"] = status
             break
+
+    # Extract street and locality from "Địa chỉ:" section or address line
+    # Look for patterns like "Đường XXX" and "Phường YYY"
+    street_match = re.search(r'(?:đường|street)\s+([^,\n-]+)', text_lower)
+    if street_match:
+        result["street"] = street_match.group(1).strip().title()
+
+    locality_match = re.search(r'(?:phường|ward)\s+([^,\n]+)', text_lower)
+    if locality_match:
+        result["locality"] = locality_match.group(1).strip().title()
 
     return result
 

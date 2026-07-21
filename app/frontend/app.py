@@ -167,14 +167,18 @@ with tab_valuation:
 
                 st.divider()
                 if st.button("💰 Định giá", type="primary", use_container_width=True):
-                    if not street_input.strip():
+                    # Use parsed street/locality if available, else fall back to form inputs
+                    final_street = parsed.get("street", "") or street_input
+                    final_locality = parsed.get("locality", "") or matched_locality
+
+                    if not final_street.strip():
                         st.error("❌ Vui lòng nhập tên đường!")
                     else:
                         with st.spinner("Đang định giá..."):
                             row, info = build_row(
                                 meta, geo,
-                                street=street_input,
-                                locality=matched_locality,
+                                street=final_street,
+                                locality=final_locality,
                                 property_type=property_type, legal_status=legal_status, direction=direction,
                                 area_m2=area_m2, width_m=width_m, length_m=length_m,
                                 num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
