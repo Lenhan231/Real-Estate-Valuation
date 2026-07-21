@@ -1,4 +1,8 @@
-import wandb
+try:
+    import wandb
+    HAS_WANDB = True
+except ImportError:
+    HAS_WANDB = False
 
 
 def log_to_wandb(
@@ -10,6 +14,10 @@ def log_to_wandb(
     feature_importance_path: str = None,
 ):
     """Log training results to Weights & Biases."""
+    if not HAS_WANDB:
+        print("⚠️  wandb not installed. Skipping W&B logging.")
+        return
+
     run = wandb.init(
         project=project_name,
         name=run_name,
