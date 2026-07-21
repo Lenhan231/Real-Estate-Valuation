@@ -10,7 +10,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parent.parent
+# Load .env file
+try:
+    from dotenv import load_dotenv
+    ROOT = Path(__file__).resolve().parent.parent
+    load_dotenv(ROOT / ".env")
+except ImportError:
+    ROOT = Path(__file__).resolve().parent.parent
+
 RAW_CSV = ROOT / "data" / "cache" / "localities.csv"
 DENSITY_CSV = ROOT / "data" / "external" / "density_data.csv"
 
