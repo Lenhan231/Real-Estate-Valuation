@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
-RAW_CSV = ROOT / "data" / "processed" / "alonhadat_features.csv"
+RAW_CSV = ROOT / "data" / "cache" / "localities.csv"
 
 # Supabase config
 SUPABASE_URL = os.getenv("SUPABASE_URL")
