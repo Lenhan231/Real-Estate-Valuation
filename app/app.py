@@ -267,105 +267,105 @@ else:
     # Form chi tiết (cũ)
     col_loc, col_house = st.columns(2)
 
-with col_loc:
-    st.subheader("📍 Vị trí")
-    localities = geo.localities()
-    default_idx = localities.index("phường bình thạnh") if "phường bình thạnh" in localities else 0
-    locality = st.selectbox("Phường / Xã", localities, index=default_idx)
+    with col_loc:
+        st.subheader("📍 Vị trí")
+        localities = geo.localities()
+        default_idx = localities.index("phường bình thạnh") if "phường bình thạnh" in localities else 0
+        locality = st.selectbox("Phường / Xã", localities, index=default_idx)
 
-    streets = geo.streets_of(locality)
-    street_choice = st.selectbox("Đường", streets + ["✏️ Khác (nhập tay)"])
-    street = (st.text_input("Tên đường", placeholder="ví dụ: đường lê quang định")
-              if street_choice == "✏️ Khác (nhập tay)" else street_choice)
+        streets = geo.streets_of(locality)
+        street_choice = st.selectbox("Đường", streets + ["✏️ Khác (nhập tay)"])
+        street = (st.text_input("Tên đường", placeholder="ví dụ: đường lê quang định")
+                  if street_choice == "✏️ Khác (nhập tay)" else street_choice)
 
-    st.subheader("🏷️ Phân loại")
-    property_type = st.radio("Loại nhà", list(PROPERTY_TYPES),
-                              format_func=PROPERTY_TYPES.get, horizontal=True)
-    budget_range  = st.selectbox("Phân khúc giá (dùng để chọn model bucket)",
-                                  list(BUDGET_RANGES), format_func=BUDGET_RANGES.get)
-    legal_status  = st.selectbox("Pháp lý", list(LEGAL_STATUS), format_func=LEGAL_STATUS.get)
-    direction     = st.selectbox("Hướng nhà", list(DIRECTIONS), format_func=DIRECTIONS.get)
+        st.subheader("🏷️ Phân loại")
+        property_type = st.radio("Loại nhà", list(PROPERTY_TYPES),
+                                  format_func=PROPERTY_TYPES.get, horizontal=True)
+        budget_range  = st.selectbox("Phân khúc giá (dùng để chọn model bucket)",
+                                      list(BUDGET_RANGES), format_func=BUDGET_RANGES.get)
+        legal_status  = st.selectbox("Pháp lý", list(LEGAL_STATUS), format_func=LEGAL_STATUS.get)
+        direction     = st.selectbox("Hướng nhà", list(DIRECTIONS), format_func=DIRECTIONS.get)
 
-with col_house:
-    st.subheader("📐 Thông số")
-    c1, c2 = st.columns(2)
-    area_m2      = c1.number_input("Diện tích (m²)", 10.0, 1000.0, 80.0, step=5.0)
-    road_width_m = c2.number_input("Đường trước nhà (m)", 1.0, 60.0, 6.0, step=0.5)
-    width_unknown = c1.checkbox("Không rõ chiều ngang")
-    width_m  = c1.number_input("Chiều ngang (m)", 1.0, 50.0, 4.0, step=0.5, disabled=width_unknown)
-    length_unknown = c2.checkbox("Không rõ chiều dài")
-    length_m = c2.number_input("Chiều dài (m)", 1.0, 100.0, 20.0, step=0.5, disabled=length_unknown)
-    if width_unknown:  width_m  = None
-    if length_unknown: length_m = None
-    num_floors    = c1.number_input("Số tầng", 1, 15, 3)
-    num_bedrooms  = c2.number_input("Số phòng ngủ", 1, 20, 3)
+    with col_house:
+        st.subheader("📐 Thông số")
+        c1, c2 = st.columns(2)
+        area_m2      = c1.number_input("Diện tích (m²)", 10.0, 1000.0, 80.0, step=5.0)
+        road_width_m = c2.number_input("Đường trước nhà (m)", 1.0, 60.0, 6.0, step=0.5)
+        width_unknown = c1.checkbox("Không rõ chiều ngang")
+        width_m  = c1.number_input("Chiều ngang (m)", 1.0, 50.0, 4.0, step=0.5, disabled=width_unknown)
+        length_unknown = c2.checkbox("Không rõ chiều dài")
+        length_m = c2.number_input("Chiều dài (m)", 1.0, 100.0, 20.0, step=0.5, disabled=length_unknown)
+        if width_unknown:  width_m  = None
+        if length_unknown: length_m = None
+        num_floors    = c1.number_input("Số tầng", 1, 15, 3)
+        num_bedrooms  = c2.number_input("Số phòng ngủ", 1, 20, 3)
 
-    st.subheader("✨ Tiện ích & đặc điểm")
-    b1, b2, b3 = st.columns(3)
-    bin_flags = {
-        "kitchen_bin":    b1.checkbox("Nhà bếp", True),
-        "dining_room_bin": b2.checkbox("Phòng ăn", True),
-        "terrace_bin":    b3.checkbox("Sân thượng"),
-        "car_parking_bin": b1.checkbox("Chỗ để xe hơi"),
-    }
-    text_flags = {
-        "is_hem_xe_hoi": b2.checkbox("Hẻm xe hơi / ô tô vào"),
-        "is_no_hau":     b3.checkbox("Nở hậu"),
-        "has_noi_that":  b1.checkbox("Có nội thất"),
-        "is_gap":        b2.checkbox("Cần bán gấp"),
-        "is_kinh_doanh": b3.checkbox("Tiện kinh doanh"),
-    }
+        st.subheader("✨ Tiện ích & đặc điểm")
+        b1, b2, b3 = st.columns(3)
+        bin_flags = {
+            "kitchen_bin":    b1.checkbox("Nhà bếp", True),
+            "dining_room_bin": b2.checkbox("Phòng ăn", True),
+            "terrace_bin":    b3.checkbox("Sân thượng"),
+            "car_parking_bin": b1.checkbox("Chỗ để xe hơi"),
+        }
+        text_flags = {
+            "is_hem_xe_hoi": b2.checkbox("Hẻm xe hơi / ô tô vào"),
+            "is_no_hau":     b3.checkbox("Nở hậu"),
+            "has_noi_that":  b1.checkbox("Có nội thất"),
+            "is_gap":        b2.checkbox("Cần bán gấp"),
+            "is_kinh_doanh": b3.checkbox("Tiện kinh doanh"),
+        }
 
-st.divider()
+    st.divider()
 
-# ---------------------------------------------------------------------------
-# Predict
-# ---------------------------------------------------------------------------
-if st.button("💰 Định giá", type="primary", use_container_width=True):
-    with st.spinner("Đang tra cứu vị trí và tính feature địa lý..."):
-        row, info = build_row(
-            medians, geo,
-            street=street, locality=locality,
-            property_type=property_type, legal_status=legal_status, direction=direction,
-            area_m2=area_m2, width_m=width_m, length_m=length_m,
-            num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
-            bin_flags=bin_flags, text_flags=text_flags,
-        )
+    # ---------------------------------------------------------------------------
+    # Predict (Form chi tiết)
+    # ---------------------------------------------------------------------------
+    if st.button("💰 Định giá", type="primary", use_container_width=True):
+        with st.spinner("Đang tra cứu vị trí và tính feature địa lý..."):
+            row, info = build_row(
+                medians, geo,
+                street=street, locality=locality,
+                property_type=property_type, legal_status=legal_status, direction=direction,
+                area_m2=area_m2, width_m=width_m, length_m=length_m,
+                num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
+                bin_flags=bin_flags, text_flags=text_flags,
+            )
 
-    if row is None:
-        st.error("Không xác định được vị trí — kiểm tra lại tên đường / phường.")
-    else:
-        row = apply_locality_encoding(row, meta, locality)
-        # v2.4: Price-only model (no property_type segmentation)
-        price = predict_price(models, meta, row, budget_range)
-        mape_err = price * 0.1325  # v2.4 Global MAPE 13.25%
+        if row is None:
+            st.error("Không xác định được vị trí — kiểm tra lại tên đường / phường.")
+        else:
+            row = apply_locality_encoding(row, meta, locality)
+            # v2.4: Price-only model (no property_type segmentation)
+            price = predict_price(models, meta, row, budget_range)
+            mape_err = price * 0.1325  # v2.4 Global MAPE 13.25%
 
-        r1, r2, r3 = st.columns(3)
-        r1.metric("Giá dự đoán", f"{price:,.2f} tỷ VND")
-        r2.metric("Khoảng tham khảo (±MAPE)", f"{max(price - mape_err, 0):,.1f} – {price + mape_err:,.1f} tỷ")
-        r3.metric("Giá / m²", f"{price * 1000 / area_m2:,.0f} triệu/m²")
+            r1, r2, r3 = st.columns(3)
+            r1.metric("Giá dự đoán", f"{price:,.2f} tỷ VND")
+            r2.metric("Khoảng tham khảo (±MAPE)", f"{max(price - mape_err, 0):,.1f} – {price + mape_err:,.1f} tỷ")
+            r3.metric("Giá / m²", f"{price * 1000 / area_m2:,.0f} triệu/m²")
 
-        m_col, d_col = st.columns([1, 1])
-        with m_col:
-            st.map(pd.DataFrame({"lat": [info["lat"]], "lon": [info["lon"]]}), zoom=14)
-        with d_col:
-            bucket_label = f"{BUDGET_RANGES[budget_range]} / {PROPERTY_TYPES[property_type]}"
-            st.write(f"**Bucket đã dùng:** {bucket_label}")
-            st.write(f"**Nguồn tọa độ:** {info['source']}")
-            loc_price = row.get("locality_price_median", 0.0)
-            if loc_price > 0:
-                st.write(f"**Giá nền phường (train set):** {loc_price / 1e9:.2f} tỷ")
-            if info["poi_source"] == "overpass":
-                st.info("Vị trí nằm ngoài vùng đã crawl — feature địa lý tính qua Overpass API và lưu cache.")
-            elif info["cache_dist_km"] > 2:
-                st.warning(f"Feature địa lý lấy từ điểm crawl cách {info['cache_dist_km']:.1f} km — độ chính xác có thể giảm.")
-            with st.expander("Feature địa lý (từ pipeline ETL)"):
-                poi_df = pd.DataFrame(
-                    [(k, f"{round(v, 3):g}" if v is not None else "thiếu")
-                     for k, v in info["pois"].items()],
-                    columns=["feature", "giá trị"],
-                )
-                st.dataframe(poi_df, hide_index=True, use_container_width=True)
+            m_col, d_col = st.columns([1, 1])
+            with m_col:
+                st.map(pd.DataFrame({"lat": [info["lat"]], "lon": [info["lon"]]}), zoom=14)
+            with d_col:
+                bucket_label = f"{BUDGET_RANGES[budget_range]} / {PROPERTY_TYPES[property_type]}"
+                st.write(f"**Bucket đã dùng:** {bucket_label}")
+                st.write(f"**Nguồn tọa độ:** {info['source']}")
+                loc_price = row.get("locality_price_median", 0.0)
+                if loc_price > 0:
+                    st.write(f"**Giá nền phường (train set):** {loc_price / 1e9:.2f} tỷ")
+                if info["poi_source"] == "overpass":
+                    st.info("Vị trí nằm ngoài vùng đã crawl — feature địa lý tính qua Overpass API và lưu cache.")
+                elif info["cache_dist_km"] > 2:
+                    st.warning(f"Feature địa lý lấy từ điểm crawl cách {info['cache_dist_km']:.1f} km — độ chính xác có thể giảm.")
+                with st.expander("Feature địa lý (từ pipeline ETL)"):
+                    poi_df = pd.DataFrame(
+                        [(k, f"{round(v, 3):g}" if v is not None else "thiếu")
+                         for k, v in info["pois"].items()],
+                        columns=["feature", "giá trị"],
+                    )
+                    st.dataframe(poi_df, hide_index=True, use_container_width=True)
 
 st.divider()
 render_dashboard()
