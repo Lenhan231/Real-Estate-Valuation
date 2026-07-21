@@ -101,10 +101,24 @@ class GeoLookup:
         try:
             from supabase import create_client
             client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-            # Fetch all records (default limit is 1000, increase to 10000 to get all)
-            response = client.table(SUPABASE_TABLE).select("*").limit(10000).execute()
-            if response.data:
-                df = pd.DataFrame(response.data)
+
+            # Fetch all records using pagination (Supabase has 1000 row limit per request)
+            all_data = []
+            page_size = 1000
+            offset = 0
+
+            while True:
+                response = client.table(SUPABASE_TABLE).select("*").range(offset, offset + page_size - 1).execute()
+                if not response.data:
+                    break
+                all_data.extend(response.data)
+                print(f"  Fetching page {offset // page_size + 1}: {len(response.data)} rows")
+                if len(response.data) < page_size:
+                    break
+                offset += page_size
+
+            if all_data:
+                df = pd.DataFrame(all_data)
                 print(f"✅ Loaded {len(df)} rows từ Supabase {SUPABASE_TABLE}")
 
                 # Merge với density data để có locality_square & locality_population_density
