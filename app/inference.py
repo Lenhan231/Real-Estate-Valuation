@@ -5,7 +5,7 @@ Strategy: Price segmentation only (no property type split)
 Features: 78 optimized (64 base + 14 polynomial/interaction)
 Performance: 13.10% MAPE, 0.9200 R²
 
-Note: Features built via shared feature_builder.py (single source of truth)
+Note: Features built via shared preprocessing.py (single source of truth).
 """
 import pickle
 from pathlib import Path
@@ -13,9 +13,11 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent / "models" / "scripts"))
 
-from feature_builder import build_features_from_row, FEATURE_NAMES
 from geo import GeoLookup, POI_COLS
+from shared.preprocessing import preprocess
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_DIR = ROOT / "models" / "saved_models"  # v2.4 production models
@@ -25,8 +27,8 @@ READY_CSV = ROOT / "data" / "processed" / "model_training_data.csv"  # v2.4 trai
 def load_models():
     """Load v2.6 production models (9 models: 3-tier × 3-algorithm ensemble).
 
-    Feature names sourced from trained model (source of truth).
-    This auto-syncs when models are retrained - no manual list management needed.
+    Feature names sourced from trained model (single source of truth).
+    Locality encoding stats computed from training data (reused from preprocessing.py).
     """
     models = {}
     for path in MODEL_DIR.glob("*.pkl"):
@@ -39,7 +41,6 @@ def load_models():
         raise FileNotFoundError(f"No models in {MODEL_DIR} — ensure train_production.py has been run")
 
     # Get feature names from trained model (single source of truth!)
-    # All models trained with same features, so any model's feature_names_in_ is authoritative
     first_model = models[list(models.keys())[0]]
     try:
         feature_names = list(first_model.feature_names_in_)
@@ -49,27 +50,41 @@ def load_models():
         feature_names = [c for c in training_df.columns if c != 'price_vnd']
         feature_names += ["locality_price_median", "price_per_sqm_market"]
 
+    # Load training data to compute locality encoding stats (reuses preprocessing.py logic)
+    training_df = pd.read_csv(READY_CSV)
+
+    # Compute locality price/sqm stats from training data (same as add_locality_features)
+    locality_price_map = training_df.groupby('locality')['locality_price_median'].first().to_dict()
+    locality_sqm_map = training_df.groupby('locality')['price_per_sqm_market'].first().to_dict()
+    locality_price_global = training_df['locality_price_median'].median()
+    locality_sqm_global = training_df['price_per_sqm_market'].median()
+
     meta = {
         "version": "v2.6",
         "tiers": ["low", "mid", "high"],
         "models_per_tier": 3,
         "n_features": len(feature_names),
-        "feature_names": feature_names  # From model, auto-syncs on retrain
+        "feature_names": feature_names,
+        # Locality encoding (from training data, same as preprocessing.add_locality_features)
+        "locality_price_map": locality_price_map,
+        "locality_sqm_map": locality_sqm_map,
+        "locality_price_global": locality_price_global,
+        "locality_sqm_global": locality_sqm_global,
     }
 
-    medians = pd.read_csv(READY_CSV).median(numeric_only=True)
+    medians = training_df.median(numeric_only=True)
     return models, meta, medians
 
-
-# ---------------------------------------------------------------------------
-# Feature engineering — mirrors train_xgboost.py:preprocess() for one row
-# ---------------------------------------------------------------------------
 
 def build_row(medians, geo: GeoLookup, *,
               street, locality, property_type, legal_status, direction,
               area_m2, width_m, length_m, num_floors, num_bedrooms, road_width_m,
               bin_flags: dict, text_flags: dict):
-    """Build exact 78-feature row matching v2.6 training data. Return (row dict, info dict) or (None, None)."""
+    """Build exact 78-feature row matching v2.6 training data.
+
+    Reuses preprocessing.py for feature engineering (single source of truth).
+    Returns (row dict with 80 features, info dict) or (None, None).
+    """
     lat, lon, source = geo.geocode(street, locality)
     if lat is None:
         return None, None
@@ -77,7 +92,6 @@ def build_row(medians, geo: GeoLookup, *,
     dist_km = geo.distance_to_center(lat, lon)
 
     # Handle missing width/length
-    width_m_missing = int(width_m is None)
     if width_m is None:
         width_m = float(medians.get("width_m", 4.0))
     if length_m is None:
@@ -96,26 +110,20 @@ def build_row(medians, geo: GeoLookup, *,
     loc_sq = float(sq) if sq is not None else float(medians.get("locality_square", 0.0))
     loc_dens = float(dens) if dens is not None else float(medians.get("locality_population_density", 0.0))
 
-    # Derived features (exactly matching preprocessing.py)
-    perimeter_m = (width_m + length_m) * 2
-    shape_ratio = (width_m + 0.1) / (length_m + 0.1)
-    shape_ratio_missing = int(shape_ratio is None or np.isnan(shape_ratio))
-    road_width_m_missing = 0  # Always provided
-
-    nearby_amenities = sum(poi(c) for c in [
-        "school_count_3km", "hospital_count_5km", "marketplace_count_3km",
-        "supermarket_count_3km", "mall_count_3km", "bus_stop_count_1km", "metro_count_5km"
-    ])
-
-    # Build row - features in EXACT order from training CSV
-    # Order matters: must match model training data
-    row = {
+    # Build single-row DataFrame to pass through preprocessing.preprocess()
+    # This reuses the exact feature engineering logic from training
+    row_df = pd.DataFrame([{
+        "listing_id": 0,
+        "price_vnd": 1e9,  # Dummy price (not used, just for preprocessing)
+        "property_type": property_type,
+        "legal_status": legal_status,
+        "direction": direction,
+        "area_m2": float(area_m2),
         "num_floors": float(num_floors),
         "num_bedrooms": float(num_bedrooms),
         "road_width_m": float(road_width_m),
         "width_m": float(width_m),
         "length_m": float(length_m),
-        "area_m2": float(area_m2),
         "locality_square": float(loc_sq),
         "locality_population_density": float(loc_dens),
         "distance_to_center_km": float(dist_km),
@@ -133,64 +141,33 @@ def build_row(medians, geo: GeoLookup, *,
         "bus_stop_count_1km": float(poi("bus_stop_count_1km")),
         "nearest_metro_km": float(poi("nearest_metro_km")),
         "metro_count_5km": float(poi("metro_count_5km")),
-        "post_day_month": 0.0,
-        "post_day_day": 0.0,
-        "road_width_m_missing": float(road_width_m_missing),
-        "perimeter_m": float(perimeter_m),
-        "shape_ratio": float(shape_ratio),
-        "shape_ratio_missing": float(shape_ratio_missing),
-        "width_m_missing": float(width_m_missing),
-        "nearby_amenities": float(nearby_amenities),
-        "nearby_amenities_log": float(np.log1p(nearby_amenities)),
-        "nearest_metro_km_missing": 0.0,
-        "amenity_density": float(nearby_amenities / (area_m2 + 1)),
-        "is_hem_xe_hoi": float(text_flags.get("is_hem_xe_hoi", 0)),
-        "is_mat_tien": float(property_type == "nha_mat_tien"),
-        "is_no_hau": float(text_flags.get("is_no_hau", 0)),
-        "has_noi_that": float(text_flags.get("has_noi_that", 0)),
-        "is_gap": float(text_flags.get("is_gap", 0)),
-        "is_kinh_doanh": float(text_flags.get("is_kinh_doanh", 0)),
-        "area_x_floors": float(area_m2 * num_floors),
-        "area_x_bedrooms": float(area_m2 * num_bedrooms),
-        "area_per_bedroom": float(area_m2 / (num_bedrooms + 1)),
-        "distance_vs_area": float(dist_km / (area_m2 + 1)),
-        "log_area": float(np.log1p(area_m2)),
-        "log_distance_to_center": float(np.log1p(dist_km)),
-        "log_population_density": float(np.log1p(loc_dens)),
-        "frontage_ratio": float((width_m + 0.1) / (road_width_m + 0.1)),
-        "depth_ratio": float((length_m + 0.1) / (width_m + 0.1)),
-        "road_area_ratio": float(road_width_m / np.sqrt(area_m2 + 1)),
-        "area_m2_squared": float(area_m2 ** 2),
-        "area_m2_sqrt": float(np.sqrt(area_m2 + 0.1)),
-        "distance_squared": float(dist_km ** 2),
-        "road_width_squared": float(road_width_m ** 2),
-        "bedrooms_squared": float(num_bedrooms ** 2),
-        "floors_squared": float(num_floors ** 2),
-        "area_x_distance": float(area_m2 * dist_km),
-        "area_per_distance": float(area_m2 / (dist_km + 0.1)),
-        "bedrooms_x_distance": float(num_bedrooms * dist_km),
-        "floors_x_distance": float(num_floors * dist_km),
-        "area_x_road_width": float(area_m2 * road_width_m),
-        "width_x_length": float(width_m * length_m),
-        "density_x_area": float(loc_dens * area_m2),
-        "locality_sq_x_area": float(loc_sq * area_m2),
-        "direction_dong_bac": float(direction == "dong_bac"),
-        "direction_dong_nam": float(direction == "dong_nam"),
-        "direction_nam": float(direction == "nam"),
-        "direction_unknown": float(direction == "unknown"),
-        "property_type_nha_mat_tien": float(property_type == "nha_mat_tien"),
-        "property_type_nha_trong_hem": float(property_type == "nha_trong_hem"),
-        "legal_status_giay_to_hop_le": float(legal_status == "giay_to_hop_le"),
-        "legal_status_so_hong_so_do": float(legal_status == "so_hong_so_do"),
-        "legal_status_unknown": float(legal_status == "unknown"),
-        "dining_room_bin_False": float(bin_flags.get("dining_room_bin", 0) == 0),
-        "terrace_bin_False": float(bin_flags.get("terrace_bin", 0) == 0),
-        "terrace_bin_True": float(bin_flags.get("terrace_bin", 0) == 1),
-        "car_parking_bin_False": float(bin_flags.get("car_parking_bin", 0) == 0),
-        "car_parking_bin_True": float(bin_flags.get("car_parking_bin", 0) == 1),
-    }
+        "post_day_month": 0,
+        "post_day_day": 0,
+        # Text flags
+        "is_hem_xe_hoi": int(text_flags.get("is_hem_xe_hoi", 0)),
+        "is_mat_tien": int(text_flags.get("is_mat_tien", 0)),
+        "is_no_hau": int(text_flags.get("is_no_hau", 0)),
+        "has_noi_that": int(text_flags.get("has_noi_that", 0)),
+        "is_gap": int(text_flags.get("is_gap", 0)),
+        "is_kinh_doanh": int(text_flags.get("is_kinh_doanh", 0)),
+        # Bin flags
+        "dining_room_bin": int(bin_flags.get("dining_room_bin", 0)),
+        "terrace_bin": int(bin_flags.get("terrace_bin", 0)),
+        "car_parking_bin": int(bin_flags.get("car_parking_bin", 0)),
+    }])
 
-    # Add 2 locality encoding features (needed for model prediction)
+    # Run through preprocessing.preprocess() (single source of truth for 78 features)
+    try:
+        preprocessed, _, _ = preprocess(row_df)
+        if preprocessed.empty:
+            return None, None
+        row_dict = preprocessed.iloc[0].to_dict()
+        row = {k: float(v) for k, v in row_dict.items() if k != 'price_vnd'}
+    except Exception as e:
+        print(f"Error in preprocessing: {e}")
+        return None, None
+
+    # Add 2 locality encoding features (will be populated by apply_locality_encoding)
     row["locality_price_median"] = float(medians.get("locality_price_median", 0.0))
     row["price_per_sqm_market"] = float(medians.get("price_per_sqm_market", 0.0))
 
