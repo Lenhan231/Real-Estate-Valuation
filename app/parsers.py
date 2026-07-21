@@ -36,8 +36,11 @@ def parse_listing(text: str) -> dict:
     if bed_match:
         result["num_bedrooms"] = int(bed_match.group(1))
 
-    # Đường trước nhà: "5m", "6 mét"
-    road_match = re.search(r'(?:hẻm|đường)\s*(?:trước|rộng)?\s*(\d+)\s*m', text_lower)
+    # Đường trước nhà: "5m", "hẻm rộng 5m", "hẻm trước nhà rộng 5m"
+    road_match = re.search(
+        r'(?:hẻm|đường)(?:\s+\w+)*?\s*(?:trước|rộng)?\s*(?:\w+)?\s*(\d+)\s*m',
+        text_lower
+    )
     if road_match:
         result["road_width_m"] = float(road_match.group(1))
 
