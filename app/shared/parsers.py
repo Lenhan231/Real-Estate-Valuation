@@ -1,6 +1,6 @@
 """Listing parser - extract data from Vietnamese real estate listing text."""
 import re
-from constants import TEXT_FEATURE_PATTERNS, NUMERIC_PATTERNS, LEGAL_PATTERNS
+from .constants import TEXT_FEATURE_PATTERNS, NUMERIC_PATTERNS, LEGAL_PATTERNS
 
 
 def parse_listing(text: str) -> dict:

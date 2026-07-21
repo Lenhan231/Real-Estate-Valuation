@@ -13,10 +13,10 @@ import pandas as pd
 # Load .env file
 try:
     from dotenv import load_dotenv
-    ROOT = Path(__file__).resolve().parent.parent
+    ROOT = Path(__file__).resolve().parent.parent.parent  # project root
     load_dotenv(ROOT / ".env")
 except ImportError:
-    ROOT = Path(__file__).resolve().parent.parent
+    ROOT = Path(__file__).resolve().parent.parent.parent
 
 RAW_CSV = ROOT / "data" / "cache" / "localities.csv"
 DENSITY_CSV = ROOT / "data" / "external" / "density_data.csv"

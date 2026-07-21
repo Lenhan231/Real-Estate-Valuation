@@ -1,5 +1,5 @@
 """Định giá nhà TP.HCM — Valuation + Market Analysis
-Chạy: streamlit run app/app.py
+Chạy: streamlit run app/frontend/app.py
 """
 import sys
 from pathlib import Path
@@ -12,12 +12,14 @@ try:
 except Exception:
     pdk = None
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from geo import GeoLookup
-from inference import load_models, build_row, predict_price
-from parsers import parse_listing, extract_street_from_address
+# Add parent (app/) to path for imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-ROOT = Path(__file__).resolve().parent.parent
+from api.geo import GeoLookup
+from api.inference import load_models, build_row, predict_price
+from shared.parsers import parse_listing, extract_street_from_address
+
+ROOT = Path(__file__).resolve().parent.parent.parent  # project root
 BI_DATA_FILE = ROOT / "data" / "processed" / "model_training_data.csv"  # From Supabase via train_production.py
 
 st.set_page_config(

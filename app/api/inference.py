@@ -14,14 +14,14 @@ import joblib
 import numpy as np
 import pandas as pd
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "models" / "scripts"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "models" / "scripts"))
 
-from geo import GeoLookup, POI_COLS
+from .geo import GeoLookup, POI_COLS
 from shared.preprocessing import preprocess
 
-ROOT = Path(__file__).resolve().parent.parent
-MODEL_DIR = ROOT / "models" / "saved_models"  # v2.4 production models
-READY_CSV = ROOT / "data" / "processed" / "model_training_data.csv"  # v2.4 training data
+ROOT = Path(__file__).resolve().parent.parent.parent  # project root
+MODEL_DIR = ROOT / "models" / "saved_models"
+READY_CSV = ROOT / "data" / "processed" / "model_training_data.csv"
 
 
 def load_models():
