@@ -183,7 +183,9 @@ class GeoLookup:
         if len(sub):
             return float(sub['lat'].median()), float(sub['lon'].median()), 'cache pipeline (tâm phường)'
 
-        return None, None, None
+        # Fallback: use HCM center if location not found (for parser flow)
+        print(f"⚠️  Address not found in cache: {street}/{locality}, using HCM center")
+        return float(HCM_CENTER[0]), float(HCM_CENTER[1]), 'HCM center (fallback)'
 
     def poi_features(self, lat: float, lon: float, max_cache_km: float = 2.0, allow_live: bool = True):
         """Feature POI cho một vị trí. Trả về (dict feature, khoảng cách km tới
