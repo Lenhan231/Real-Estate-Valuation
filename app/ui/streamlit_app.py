@@ -490,30 +490,34 @@ with tab_valuation:
                                 submitted = st.form_submit_button("📤 Submit Feedback")
 
                             if submitted:
-                                from app.core.feedback import save_feedback_to_supabase
+                                try:
+                                    feedback_payload = {
+                                        "predicted_price_vnd": float(price),
+                                        "actual_price_vnd": float(actual_price * 1e9) if actual_price > 0 else None,
+                                        "rating": rating,
+                                        "bucket": xai_data.get("bucket", "mid") if xai_data else "mid",
+                                        "confidence": xai_data.get("confidence") if xai_data else 0,
+                                        "feature_version": FEATURE_VERSION,
+                                        "features_json": row,
+                                        "timestamp": pd.Timestamp.now().isoformat(),
+                                    }
 
-                                feedback_data = {
-                                    "predicted_price_vnd": float(price),
-                                    "actual_price_vnd": float(actual_price * 1e9) if actual_price > 0 else None,
-                                    "rating": rating,
-                                    "bucket": xai_data.get("bucket", "mid") if xai_data else "mid",
-                                    "confidence": xai_data.get("confidence") if xai_data else 0,
-                                    "feature_version": FEATURE_VERSION,
-                                    "timestamp": pd.Timestamp.now().isoformat(),
-                                }
+                                    # Call API endpoint
+                                    response = requests.post(
+                                        f"{API_BASE_URL}/api/feedback",
+                                        json=feedback_payload,
+                                        timeout=API_TIMEOUT
+                                    )
 
-                                # Debug
-                                print(f"[FEEDBACK] row dict keys: {list(row.keys()) if row else 'None'}")
-                                print(f"[FEEDBACK] feature_version: {FEATURE_VERSION}")
-                                print(f"[FEEDBACK] feedback_data: {feedback_data}")
-
-                                if save_feedback_to_supabase(feedback_data, row_dict=row):
-                                    st.success("✅ Feedback saved to Supabase!")
-                                    if actual_price > 0:
-                                        error_pct = abs((actual_price * 1e9 - price) / (actual_price * 1e9)) * 100
-                                        st.metric("Error", f"{error_pct:.1f}%")
-                                else:
-                                    st.error("❌ Failed to save feedback")
+                                    if response.status_code == 200:
+                                        st.success("✅ Feedback saved to Supabase!")
+                                        if actual_price > 0:
+                                            error_pct = abs((actual_price * 1e9 - price) / (actual_price * 1e9)) * 100
+                                            st.metric("Error", f"{error_pct:.1f}%")
+                                    else:
+                                        st.error(f"❌ Failed: {response.json().get('detail', 'Unknown error')}")
+                                except RequestException as e:
+                                    st.error(f"❌ API Error: {str(e)}")
             else:
                 st.warning("Không tìm thấy phường trong địa chỉ. Thử dùng Form chi tiết!")
 
@@ -692,30 +696,34 @@ with tab_valuation:
                     submitted = st.form_submit_button("📤 Submit Feedback")
 
                 if submitted:
-                    from app.core.feedback import save_feedback_to_supabase
+                    try:
+                        feedback_payload = {
+                            "predicted_price_vnd": float(price),
+                            "actual_price_vnd": float(actual_price * 1e9) if actual_price > 0 else None,
+                            "rating": rating,
+                            "bucket": xai_data.get("bucket", "mid") if xai_data else "mid",
+                            "confidence": xai_data.get("confidence") if xai_data else 0,
+                            "feature_version": FEATURE_VERSION,
+                            "features_json": row,
+                            "timestamp": pd.Timestamp.now().isoformat(),
+                        }
 
-                    feedback_data = {
-                        "predicted_price_vnd": float(price),
-                        "actual_price_vnd": float(actual_price * 1e9) if actual_price > 0 else None,
-                        "rating": rating,
-                        "bucket": xai_data.get("bucket", "mid") if xai_data else "mid",
-                        "confidence": xai_data.get("confidence") if xai_data else 0,
-                        "feature_version": FEATURE_VERSION,
-                        "timestamp": pd.Timestamp.now().isoformat(),
-                    }
+                        # Call API endpoint
+                        response = requests.post(
+                            f"{API_BASE_URL}/api/feedback",
+                            json=feedback_payload,
+                            timeout=API_TIMEOUT
+                        )
 
-                    # Debug
-                    print(f"[FEEDBACK FORM] row dict keys: {list(row.keys()) if row else 'None'}")
-                    print(f"[FEEDBACK FORM] feature_version: {FEATURE_VERSION}")
-                    print(f"[FEEDBACK FORM] feedback_data: {feedback_data}")
-
-                    if save_feedback_to_supabase(feedback_data, row_dict=row):
-                        st.success("✅ Feedback saved to Supabase!")
-                        if actual_price > 0:
-                            error_pct = abs((actual_price * 1e9 - price) / (actual_price * 1e9)) * 100
-                            st.metric("Error", f"{error_pct:.1f}%")
-                    else:
-                        st.error("❌ Failed to save feedback")
+                        if response.status_code == 200:
+                            st.success("✅ Feedback saved to Supabase!")
+                            if actual_price > 0:
+                                error_pct = abs((actual_price * 1e9 - price) / (actual_price * 1e9)) * 100
+                                st.metric("Error", f"{error_pct:.1f}%")
+                        else:
+                            st.error(f"❌ Failed: {response.json().get('detail', 'Unknown error')}")
+                    except RequestException as e:
+                        st.error(f"❌ API Error: {str(e)}")
 
 # =========================================================================
 # TAB 2: MARKET ANALYSIS
