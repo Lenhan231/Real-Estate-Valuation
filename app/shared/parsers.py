@@ -92,15 +92,17 @@ def parse_listing(text: str) -> dict:
     if all_phường_matches:
         # Go through matches and prioritize non-numeric ones
         for match in all_phường_matches:
-            locality_raw = match.strip().split()[0] if match.strip().split() else ""
+            locality_raw = match.strip()
             # Reject if it's just numbers like "24" or "14"
-            if locality_raw and not locality_raw.isdigit():
+            # Accept anything with at least one letter (e.g., "bình thạnh", "phú nhuận")
+            if locality_raw and not locality_raw.replace(" ", "").isdigit():
                 result["locality"] = f"phường {locality_raw.title()}"
                 break
 
         # If all matches were numeric, just use the first one (it'll be last resort)
         if not result["locality"] and all_phường_matches:
-            result["locality"] = f"phường {all_phường_matches[0].split()[0].title()}"
+            first_match = all_phường_matches[0].strip()
+            result["locality"] = f"phường {first_match.title()}"
 
     # Fallback: if still not found, try to infer from known names in text
     if not result["locality"]:
