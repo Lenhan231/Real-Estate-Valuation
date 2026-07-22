@@ -6,11 +6,66 @@ Predicts property prices using Machine Learning based on area, location, ameniti
 
 | Metric | Value |
 |--------|-------|
-| **Model** | XGBoost |
-| **MAPE** | 18.01% |
-| **R²** | 0.8663 |
+| **Model** | LightGBM + XGBoost + CatBoost (Ensemble) |
+| **MAPE** | 13.25% (v2.4) |
+| **R²** | 0.9187 |
 | **Dataset** | 10,432 properties |
-| **Features** | 166 engineered |
+| **Features** | 166 engineered + 70 dynamic |
+
+---
+
+## ✨ Latest Features (v2.4)
+
+### **📝 Feedback Collection System**
+- ✅ Persistent feedback form in Streamlit UI
+- ✅ Users rate predictions (Accurate/Not Sure/Not Accurate)
+- ✅ Optional actual price input for model learning
+- ✅ Feedback stored in Supabase with full feature context
+- ✅ Session state management to preserve form across reruns
+
+### **📈 Feedback Analytics Dashboard**
+- ✅ **Summary Metrics**: Total feedback, MAPE, Model Bias %, Rating Distribution
+- ✅ **Trends Over Time**: Daily feedback count & accuracy trends
+- ✅ **Segmentation Analysis**: Performance by price bucket, property type, top 10 localities
+- ✅ **Distribution Charts**: Rating breakdown, error distribution
+- ✅ **Best vs Worst Predictions**: Side-by-side comparison for learning
+
+**Dashboard Functions:**
+- `get_feedback_trends()` — Time series data
+- `get_feedback_by_segment()` — Grouped performance metrics
+- `get_feedback_distribution()` — Rating & error distribution
+- `get_best_predictions()` — Most accurate predictions
+
+### **🔄 Active Learning & Model Retraining**
+- ✅ **Auto Retraining**: Extract feedback data, rebuild ensemble
+- ✅ **Drift Detection**: Monitor performance degradation
+- ✅ **Admin Dashboard**: One-click retraining button
+- ✅ **Performance Comparison**: Old vs new model metrics
+- ✅ **Minimum 3 samples** required for retraining
+
+**Retraining Pipeline:**
+```
+Feedback Data (Supabase)
+    ↓ [extract features + actual prices]
+Retraining Dataset
+    ↓ [train LightGBM, XGBoost, CatBoost]
+New Ensemble Model
+    ↓ [compare MAPE/MAE vs old]
+Performance Report
+    ↓ [deploy if better]
+Updated Model
+```
+
+**New API Endpoints:**
+- `POST /api/admin/retrain` — Trigger retraining
+- `GET /api/admin/drift-status` — Check model drift
+- `GET /api/admin/model-comparison` — Get metrics
+
+**New Streamlit Tabs:**
+1. **💰 Định giá** — Price prediction (2 modes: paste description or detailed form)
+2. **📊 Phân tích thị trường** — Market analysis & heatmaps
+3. **📈 Feedback Analytics** — Dashboards with trends & segmentation
+4. **🔧 Model Management** — Retrain, drift detection, performance comparison
 
 ---
 
