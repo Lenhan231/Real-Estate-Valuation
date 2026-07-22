@@ -196,6 +196,7 @@ with tab_valuation:
                                 st.write(f"**Final locality:** {final_locality}")
 
                             try:
+                                st.write("🔧 **TEST: Code is running latest version**")
                                 row, info = build_row(
                                     meta, geo,
                                     street=final_street,
