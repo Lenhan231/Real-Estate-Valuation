@@ -125,9 +125,20 @@ with tab_valuation:
             if matched_locality:
                 st.success(f"✅ Tìm thấy: **{matched_locality}**")
                 parsed = parse_listing(address_text)
-                street_default = extract_street_from_address(address_text)
+                street_default = extract_street_from_address(address_text) or parsed.get("street", "")
 
                 st.subheader("🗺️ Xác nhận địa chỉ")
+                st.caption(f"💡 Tìm được đường: **{street_default}** (nếu trống = không có trong cache → dùng fallback)")
+
+                # Show available streets for this locality (optional - collapsible)
+                with st.expander("📍 Xem đường có sẵn trong cache"):
+                    available_streets = geo.streets_of(matched_locality)
+                    if available_streets:
+                        st.write(f"**{len(available_streets)} đường trong cache** cho {matched_locality}:")
+                        st.write(", ".join(available_streets[:15]))  # Show first 15
+                    else:
+                        st.write("(Không có đường nào trong cache)")
+
                 street_input = st.text_input("Đường/Phố (chỉnh sửa nếu cần)", value=street_default or "")
 
                 col_loc, col_house = st.columns(2)
@@ -176,6 +187,14 @@ with tab_valuation:
                         st.error("❌ Vui lòng nhập tên đường!")
                     else:
                         with st.spinner("Đang định giá..."):
+                            # Debug: show what we're using
+                            with st.expander("🔧 Debug Info"):
+                                st.write(f"**Parsed street:** {parsed.get('street', '')}")
+                                st.write(f"**Final street:** {final_street}")
+                                st.write(f"**Parsed locality:** {parsed.get('locality', '')}")
+                                st.write(f"**Matched locality:** {matched_locality}")
+                                st.write(f"**Final locality:** {final_locality}")
+
                             row, info = build_row(
                                 meta, geo,
                                 street=final_street,
@@ -187,7 +206,7 @@ with tab_valuation:
                             )
 
                         if row is None:
-                            st.error("Không geocode được địa chỉ")
+                            st.error("❌ Không geocode được địa chỉ. Thử dùng Form chi tiết hoặc chỉnh lại đường/phường.")
                         else:
                             price = predict_price(models, meta, row, budget_range)
                             mape_err = price * 0.1325

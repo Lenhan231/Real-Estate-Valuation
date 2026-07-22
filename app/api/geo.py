@@ -175,30 +175,39 @@ class GeoLookup:
         return sorted(sub['street_n'].dropna().unique())
 
     def geocode(self, street: str, locality: str):
-        """(street, locality) → (lat, lon, nguồn). Ưu tiên cache của pipeline,
-        đường lạ mới gọi Nominatim, cuối cùng rơi về tâm phường."""
+        """(street, locality) → (lat, lon, nguồn).
+        Strategy: 1) Exact match (street+locality) in cache
+                  2) Try Nominatim API for new addresses
+                  3) Fallback to locality center (tâm phường)
+                  4) Last resort: HCM city center
+        """
         street_n, locality_n = _norm(street), _norm(locality)
 
+        # 1. Try exact match in cache (street + locality)
         sub = self.df[(self.df['street_n'] == street_n) & (self.df['locality_n'] == locality_n)]
         if len(sub):
-            return float(sub['lat'].median()), float(sub['lon'].median()), 'cache pipeline (đúng đường)'
+            lat, lon = float(sub['lat'].median()), float(sub['lon'].median())
+            return lat, lon, 'cache (đúng đường)'
 
+        # 2. Try Nominatim for new streets not in cache
         if street_n:
             try:
                 from geopy.geocoders import Nominatim
-                loc = Nominatim(user_agent='hpp_app', timeout=5).geocode(
-                    f"{street_n}, {locality_n}, Hồ Chí Minh, Vietnam"
-                )
+                geocoder = Nominatim(user_agent='hpp_app', timeout=5)
+                loc = geocoder.geocode(f"{street_n}, {locality_n}, Hồ Chí Minh, Vietnam")
                 if loc:
                     return float(loc.latitude), float(loc.longitude), 'Nominatim API'
-            except Exception:
-                pass
+            except Exception as e:
+                pass  # Silently fail, try fallback
 
+        # 3. Fallback to locality center (tâm phường) - SHOULD ALWAYS WORK
         sub = self.df[self.df['locality_n'] == locality_n]
         if len(sub):
-            return float(sub['lat'].median()), float(sub['lon'].median()), 'cache pipeline (tâm phường)'
+            lat, lon = float(sub['lat'].median()), float(sub['lon'].median())
+            return lat, lon, f'cache (tâm {locality_n})'
 
-        return None, None, None
+        # 4. Last resort: return HCM city center (shouldn't happen)
+        return float(HCM_CENTER[0]), float(HCM_CENTER[1]), 'HCM center (fallback)'
 
     def poi_features(self, lat: float, lon: float, max_cache_km: float = 2.0, allow_live: bool = True):
         """Feature POI cho một vị trí. Trả về (dict feature, khoảng cách km tới
