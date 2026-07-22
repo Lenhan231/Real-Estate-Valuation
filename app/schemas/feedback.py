@@ -11,6 +11,7 @@ class FeedbackRequest(BaseModel):
     bucket: str
     confidence: float
     features_json: Optional[Dict[str, Any]] = None
+    feature_version: int = 1  # Current feature version
     timestamp: Optional[str] = None
 
 

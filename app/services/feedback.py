@@ -2,6 +2,7 @@
 from typing import Dict, Any, Optional
 
 from app.core.feedback import save_feedback_to_supabase, get_feedback_stats
+from app.core.constants import FEATURE_VERSION
 
 
 def submit_feedback(
@@ -11,6 +12,7 @@ def submit_feedback(
     bucket: str,
     confidence: float,
     features_json: Optional[Dict[str, Any]] = None,
+    feature_version: int = FEATURE_VERSION,
     timestamp: Optional[str] = None,
 ) -> bool:
     """Submit user feedback to Supabase."""
@@ -20,6 +22,7 @@ def submit_feedback(
         "rating": rating,
         "bucket": bucket,
         "confidence": confidence,
+        "feature_version": feature_version,
         "timestamp": timestamp,
     }
     return save_feedback_to_supabase(feedback_data, row_dict=features_json)

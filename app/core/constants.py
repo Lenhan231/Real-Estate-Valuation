@@ -23,3 +23,27 @@ LEGAL_PATTERNS = {
     "so_hong_so_do": ["sổ hồng", "sổ đỏ"],
     "giay_to_hop_le": ["giấy tờ"],
 }
+
+# ============================================================================
+# Feature versioning (for feedback tracking and model retraining)
+# ============================================================================
+
+# Current feature version (increment when features change)
+FEATURE_VERSION = 1
+
+# Expected number of features in this version
+EXPECTED_FEATURES = 80
+
+# Price buckets for model routing
+PRICE_BUCKETS = {
+    "low": (0, 5e9),           # 0-5 billion VND
+    "mid": (5e9, 20e9),        # 5-20 billion VND
+    "high": (20e9, float("inf")),  # 20B+ VND
+}
+
+# Rating value mapping (text → numeric)
+RATING_MAP = {
+    "👍 Accurate": 5,
+    "👎 Not accurate": 2,
+    "🤷 Not sure": 3,
+}

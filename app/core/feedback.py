@@ -48,6 +48,7 @@ def save_feedback_to_supabase(feedback_data: dict, row_dict: dict = None) -> boo
             "rating": rating_value,
             "bucket": feedback_data.get("bucket"),
             "confidence": feedback_data.get("confidence"),
+            "feature_version": feedback_data.get("feature_version", 1),
             "timestamp": feedback_data.get("timestamp", datetime.now().isoformat()),
             "features_json": row_dict if row_dict else {},
         }
@@ -74,11 +75,12 @@ def save_feedback_to_supabase(feedback_data: dict, row_dict: dict = None) -> boo
         return False
 
 
-def get_feedback_for_retraining(bucket=None):
+def get_feedback_for_retraining(bucket=None, feature_version=None):
     """Extract feedback data for model retraining.
 
     Args:
         bucket: Filter by price tier ('low', 'mid', 'high') or None for all
+        feature_version: Filter by feature version or None for current version
 
     Returns:
         DataFrame with features + actual_price_vnd for retraining, or None if no data
@@ -94,14 +96,19 @@ def get_feedback_for_retraining(bucket=None):
 
         client = create_client(url, key)
 
-        # Fetch feedback with features
+        # Fetch feedback with features and actual prices
         query = client.table("feedback").select("*").neq("features_json", "{}")
+
         if bucket:
             query = query.eq("bucket", bucket)
+
+        if feature_version is not None:
+            query = query.eq("feature_version", feature_version)
 
         response = query.execute()
 
         if not response.data:
+            print(f"No feedback found (bucket={bucket}, feature_version={feature_version})")
             return None
 
         # Reconstruct training dataframe
@@ -117,6 +124,7 @@ def get_feedback_for_retraining(bucket=None):
             return None
 
         df = pd.DataFrame(records)
+        print(f"Loaded {len(df)} feedback samples for retraining (v{feature_version})")
         return df
 
     except Exception as e:

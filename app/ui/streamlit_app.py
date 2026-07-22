@@ -21,6 +21,7 @@ except Exception:
 
 # Import from consolidated app.core module
 from app.core.geo import GeoLookup
+from app.core.constants import FEATURE_VERSION
 
 # API Configuration
 API_BASE_URL = "http://localhost:8000"
@@ -495,11 +496,13 @@ with tab_valuation:
                                     "rating": rating,
                                     "bucket": xai_data.get("bucket", "mid") if xai_data else "mid",
                                     "confidence": xai_data.get("confidence") if xai_data else 0,
+                                    "feature_version": FEATURE_VERSION,
                                     "timestamp": pd.Timestamp.now().isoformat(),
                                 }
 
                                 # Debug
                                 print(f"[FEEDBACK] row dict keys: {list(row.keys()) if row else 'None'}")
+                                print(f"[FEEDBACK] feature_version: {FEATURE_VERSION}")
                                 print(f"[FEEDBACK] feedback_data: {feedback_data}")
 
                                 if save_feedback_to_supabase(feedback_data, row_dict=row):
@@ -695,11 +698,13 @@ with tab_valuation:
                         "rating": rating,
                         "bucket": xai_data.get("bucket", "mid") if xai_data else "mid",
                         "confidence": xai_data.get("confidence") if xai_data else 0,
+                        "feature_version": FEATURE_VERSION,
                         "timestamp": pd.Timestamp.now().isoformat(),
                     }
 
                     # Debug
                     print(f"[FEEDBACK FORM] row dict keys: {list(row.keys()) if row else 'None'}")
+                    print(f"[FEEDBACK FORM] feature_version: {FEATURE_VERSION}")
                     print(f"[FEEDBACK FORM] feedback_data: {feedback_data}")
 
                     if save_feedback_to_supabase(feedback_data, row_dict=row):
