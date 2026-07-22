@@ -100,11 +100,19 @@ Weights computed as inverse of validation RMSE (better models get higher weight)
 - Encoded: legal_status, location_type, property_type
 - Geospatial: nearby_schools, distance_to_metro, district_population_density
 
-**Interaction Features (10):**
-- area × floors (structural density)
-- area × road_width (accessibility)
-- floor_area × distance_to_center (size-location synergy)
-- ... (10 total)
+**Interaction Features (12):**
+1. `area_x_floors` — structural density (size × building height)
+2. `area_x_bedrooms` — unit density (size × room count)
+3. `area_x_distance` — size-location tradeoff
+4. `area_x_road_width` — accessibility × property size
+5. `area_per_distance` — size efficiency per distance (ratio)
+6. `area_per_bedroom` — area per room (ratio)
+7. `bedrooms_x_distance` — room count × distance tradeoff
+8. `floors_x_distance` — height × distance from center
+9. `width_x_length` — plot shape (alternative to area)
+10. `density_x_area` — population density × property size
+11. `locality_sq_x_area` — locality prestige × size
+12. `distance_vs_area` — distance relative to property size
 
 **Polynomial Features (4):**
 - area² (non-linear scaling)

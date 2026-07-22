@@ -88,8 +88,29 @@ Real estate valuation traditionally relies on manual appraisals, creating bottle
 
 ### 4.4 Feature Engineering
 - **Base Features (64):** area, floors, bedrooms, age, legal_status, distance_to_landmarks, neighborhood_encoded
-- **Interaction Features (10):** area × floors, area × road_width, floor_area × distance_to_center
-- **Polynomial Features (4):** area², floors², age², proximity_to_river²
+
+- **Interaction Features (12):**
+  1. area_x_floors (structural density)
+  2. area_x_bedrooms (unit density)
+  3. area_x_distance (size-location tradeoff)
+  4. area_x_road_width (accessibility × size)
+  5. area_per_distance (size efficiency per km)
+  6. area_per_bedroom (area per room)
+  7. bedrooms_x_distance (rooms × distance)
+  8. floors_x_distance (height × distance)
+  9. width_x_length (plot shape)
+  10. density_x_area (population × size)
+  11. locality_sq_x_area (prestige × size)
+  12. distance_vs_area (distance relative to size)
+
+- **Polynomial Features (6):**
+  1. area_m2_squared (non-linear area scaling)
+  2. area_m2_sqrt (concave scaling)
+  3. distance_squared (non-linear distance)
+  4. road_width_squared (street width effect)
+  5. bedrooms_squared (unit density scaling)
+  6. floors_squared (building height effect)
+
 - **Locality Features (added post-split):** district_median_price, nearby_schools_density, proximity_to_metro
 
 ### 4.5 Optimization & Hyperparameter Selection
