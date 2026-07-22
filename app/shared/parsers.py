@@ -77,25 +77,41 @@ def parse_listing(text: str) -> dict:
 
     # ===== ADDRESS EXTRACTION (from description) =====
     # Extract street: look for "Đường XXX" or just the first street-like phrase
-    street_match = re.search(r'(?:đường|street|đ\.?)\s+([^,\n]+?)(?:,|\s+phường|\s+quận|$)', text_lower)
+    street_match = re.search(r'(?:đường|street|đ\.?)\s+([^,\n]+?)(?:,|\s+phường|\s+xã|\s+quận|$)', text_lower)
     if street_match:
         street_raw = street_match.group(1).strip()
         # Clean up: remove "số" prefix if present
         street_clean = re.sub(r'^(?:số\s*\d+[a-z]?\s+)?', '', street_raw).strip()
         result["street"] = street_clean.title() if street_clean else ""
 
-    # Extract locality (phường/xã): prioritize "Phường XXX" or "Xã XXX" pattern
-    # First try explicit "phường" pattern
-    locality_match = re.search(r'(?:phường|xã|ward)\s+([^,\n]+?)(?:,|\s+quận|$)', text_lower)
+    # Extract locality (phường/xã): PRIORITIZE actual locality names over ward numbers!
+    # Strategy: 1) Look for "Phường/Xã + real name" patterns (avoid ward numbers like "Phường 24")
+    #          2) Skip "Phường/Xã + digits" (old format ward numbers)
+    #          3) Fallback to known ward names
+
+    # First, try to find "Phường XXX" where XXX is a real name (not just digits)
+    # Look for pattern like "Phường Bình Thạnh" (not "Phường 24")
+    locality_match = re.search(r'(?:phường|xã)\s+([a-zÀ-ÿ\s]+?)(?:,|\s+quận|\s+huyện|hồ chí minh|\s*mới|$)', text_lower)
     if locality_match:
         locality_raw = locality_match.group(1).strip()
-        result["locality"] = f"phường {locality_raw.title()}" if locality_raw else ""
+        # Only accept if it's not just numbers (avoid "Phường 24")
+        if not locality_raw.replace(" ", "").isdigit():
+            result["locality"] = f"phường {locality_raw.title()}"
 
-    # If not found, try to infer from project name or context
-    # e.g., "Vlasta Premier Phú Thuận" → locality might be "Phú Thuận"
+    # If we only found "Phường 24" type, look for named phường nearby in the text
+    if not result["locality"] or re.match(r'phường\s+\d+$', result["locality"].lower()):
+        # Look for locality mentioned in different part (e.g., after "mới")
+        # Like "Phường Bình Thạnh, Hồ Chí Minh mới"
+        alt_match = re.search(r'phường\s+([a-zÀ-ÿ]+)', text_lower)
+        if alt_match:
+            locality_name = alt_match.group(1).strip()
+            if not locality_name.isdigit():
+                result["locality"] = f"phường {locality_name.title()}"
+
+    # Ultimate fallback: if still not found, try to infer from known names
     if not result["locality"]:
-        # Look for known ward names (this is a fallback)
-        known_wards = ["phú thuận", "bình thạnh", "tân bình", "tân phú", "quận 1", "quận 3"]
+        known_wards = ["phú thuận", "bình thạnh", "tân bình", "tân phú", "bến thành",
+                      "quận 1", "quận 3", "quận 4", "phú nhuận", "gò vấp"]
         for ward in known_wards:
             if ward in text_lower:
                 result["locality"] = f"phường {ward.split()[-1].title()}"
