@@ -213,20 +213,29 @@ def build_row(meta, geo: GeoLookup, *,
         return None, "\n".join(error_log)
 
     # Add 2 locality encoding features from training data (in meta)
-    locality_price_map = meta.get("locality_price_map", {})
-    locality_sqm_map = meta.get("locality_sqm_map", {})
-    row["locality_price_median"] = float(
-        locality_price_map.get(locality, meta.get("locality_price_global", 0.0))
-    )
-    row["price_per_sqm_market"] = float(
-        locality_sqm_map.get(locality, meta.get("locality_sqm_global", 0.0))
-    )
+    try:
+        locality_price_map = meta.get("locality_price_map", {})
+        locality_sqm_map = meta.get("locality_sqm_map", {})
+        row["locality_price_median"] = float(
+            locality_price_map.get(locality, meta.get("locality_price_global", 0.0))
+        )
+        row["price_per_sqm_market"] = float(
+            locality_sqm_map.get(locality, meta.get("locality_sqm_global", 0.0))
+        )
 
-    info = {
-        "lat": lat, "lon": lon, "source": source,
-        "pois": pois, "cache_dist_km": cache_dist, "poi_source": poi_source,
-    }
-    return row, info
+        info = {
+            "lat": lat, "lon": lon, "source": source,
+            "pois": pois, "cache_dist_km": cache_dist, "poi_source": poi_source,
+        }
+        return row, info
+    except Exception as e:
+        error_msg = f"Locality encoding error: {str(e)}"
+        error_log.append(error_msg)
+        print(f"❌ {error_msg}")
+        import traceback
+        tb = traceback.format_exc()
+        error_log.append(tb)
+        return None, "\n".join(error_log)
 
 
 def predict_price(models, meta, row, price_tier) -> float:
