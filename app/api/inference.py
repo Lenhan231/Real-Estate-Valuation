@@ -97,6 +97,7 @@ def build_row(meta, geo: GeoLookup, *,
     Returns (row dict with 80 features, info dict) or (None, error_msg).
     """
     error_log = []
+    print(f"✅ [BUILD_ROW] Called with street='{street}', locality='{locality}'")
     try:
         lat, lon, source = geo.geocode(street, locality)
         if lat is None:
@@ -227,6 +228,7 @@ def build_row(meta, geo: GeoLookup, *,
             "lat": lat, "lon": lon, "source": source,
             "pois": pois, "cache_dist_km": cache_dist, "poi_source": poi_source,
         }
+        print(f"✅ [BUILD_ROW] SUCCESS! Returning row with {len(row)} features")
         return row, info
     except Exception as e:
         error_msg = f"Locality encoding error: {str(e)}"
