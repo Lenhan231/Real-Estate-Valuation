@@ -195,15 +195,21 @@ with tab_valuation:
                                 st.write(f"**Matched locality:** {matched_locality}")
                                 st.write(f"**Final locality:** {final_locality}")
 
-                            row, info = build_row(
-                                meta, geo,
-                                street=final_street,
-                                locality=final_locality,
-                                property_type=property_type, legal_status=legal_status, direction=direction,
-                                area_m2=area_m2, width_m=width_m, length_m=length_m,
-                                num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
-                                bin_flags=bin_flags, text_flags=text_flags,
-                            )
+                            try:
+                                row, info = build_row(
+                                    meta, geo,
+                                    street=final_street,
+                                    locality=final_locality,
+                                    property_type=property_type, legal_status=legal_status, direction=direction,
+                                    area_m2=area_m2, width_m=width_m, length_m=length_m,
+                                    num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
+                                    bin_flags=bin_flags, text_flags=text_flags,
+                                )
+                            except Exception as e:
+                                import traceback
+                                error_details = traceback.format_exc()
+                                st.error(f"❌ Exception in build_row:\n\n{error_details}")
+                                st.stop()
 
                         if row is None:
                             st.error(f"❌ Lỗi xây dựng feature row:\n\n{info if info else 'Unknown error'}")
