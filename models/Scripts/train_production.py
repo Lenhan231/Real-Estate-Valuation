@@ -283,11 +283,10 @@ def main():
     if args.wandb and WANDB_AVAILABLE:
         try:
             wandb.log({
-                "MAPE": mape,
-                "R2": r2,
-                "MAE_billion_vnd": mae/1e9,
-                "RMSE_billion_vnd": rmse/1e9,
-                "samples_test": len(global_y_test),
+                "mape": mape,
+                "mae": mae/1e9,
+                "r2": r2,
+                "rmse": rmse/1e9,
             })
         except Exception as e:
             print(f"⚠️  W&B logging failed: {e}")
