@@ -284,9 +284,9 @@ def main():
         try:
             wandb.log({
                 "mape": mape,
-                "mae": mae/1e9,
+                "mae": mae,
                 "r2": r2,
-                "rmse": rmse/1e9,
+                "rmse": rmse,
             })
         except Exception as e:
             print(f"⚠️  W&B logging failed: {e}")
