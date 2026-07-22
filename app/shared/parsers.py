@@ -28,6 +28,9 @@ def parse_listing(text: str) -> dict:
     }
 
     text_lower = text.lower()
+    print(f"\n🔍 [PARSER] Input text length: {len(text)} chars")
+    print(f"🔍 [PARSER] Contains 'phường': {('phường' in text_lower)}")
+    print(f"🔍 [PARSER] Contains 'đường': {('đường' in text_lower)}")
 
     # ===== NUMERIC FEATURES =====
     # Try all numeric patterns in shared constants
@@ -83,11 +86,15 @@ def parse_listing(text: str) -> dict:
         # Clean up: remove "số" prefix if present
         street_clean = re.sub(r'^(?:số\s*\d+[a-z]?\s+)?', '', street_raw).strip()
         result["street"] = street_clean.title() if street_clean else ""
+        print(f"✅ [PARSER] Street found: {result['street']}")
+    else:
+        print(f"❌ [PARSER] No street match found")
 
     # Extract locality (phường/xã): PRIORITIZE actual locality names over ward numbers!
     # Find all "phường/xã XXX" patterns, prefer ones with real names over numbers
 
     all_phường_matches = re.findall(r'(?:phường|xã)\s+([^\n,]+?)(?:,|$)', text_lower)
+    print(f"🔍 [PARSER] Phường matches found: {all_phường_matches}")
 
     if all_phường_matches:
         # Go through matches and prioritize non-numeric ones
@@ -113,7 +120,13 @@ def parse_listing(text: str) -> dict:
             if ward in text_lower:
                 ward_name = ward.split()[-1].replace("quận", "").strip()
                 result["locality"] = f"phường {ward_name.title()}"
+                print(f"✅ [PARSER] Locality found (fallback): {result['locality']}")
                 break
+
+    if result["locality"]:
+        print(f"✅ [PARSER] Final locality: {result['locality']}")
+    else:
+        print(f"❌ [PARSER] No locality found!")
 
     return result
 
