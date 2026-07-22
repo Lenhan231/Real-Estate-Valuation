@@ -5,11 +5,14 @@ import sys
 from pathlib import Path
 
 # Setup path from PROJECT_ROOT only (before any module imports)
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# __file__ = app/ui/streamlit_app.py, so go up 3 levels to project root
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import pandas as pd
 import streamlit as st
+import requests
+from requests.exceptions import RequestException
 
 try:
     import pydeck as pdk
@@ -18,11 +21,13 @@ except Exception:
 
 # Import from consolidated app.core module
 from app.core.geo import GeoLookup
-from app.core.inference import load_models, build_row, predict_price
-from app.core.parsers import parse_listing, extract_street_from_address
+
+# API Configuration
+API_BASE_URL = "http://localhost:8000"
+API_TIMEOUT = 30
 
 ROOT = PROJECT_ROOT
-BI_DATA_FILE = ROOT / "data" / "processed" / "model_training_data.csv"  # From Supabase via train_production.py
+BI_DATA_FILE = ROOT / "data" / "processed" / "model_training_data.csv"
 
 st.set_page_config(
     page_title="Định giá & Phân tích BĐS TP.HCM",
@@ -31,12 +36,73 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Load assets
+# API Helper Functions
+# ---------------------------------------------------------------------------
+def api_predict(street, locality, property_type, legal_status, direction,
+                 area_m2, width_m, length_m, num_floors, num_bedrooms, road_width_m,
+                 bin_flags, text_flags):
+    """Call /api/predict endpoint."""
+    try:
+        payload = {
+            "street": street,
+            "locality": locality,
+            "property_type": property_type,
+            "legal_status": legal_status,
+            "direction": direction,
+            "area_m2": area_m2,
+            "width_m": width_m,
+            "length_m": length_m,
+            "num_floors": num_floors,
+            "num_bedrooms": num_bedrooms,
+            "road_width_m": road_width_m,
+            "bin_flags": bin_flags,
+            "text_flags": text_flags,
+        }
+        response = requests.post(
+            f"{API_BASE_URL}/api/predict",
+            json=payload,
+            timeout=API_TIMEOUT
+        )
+        response.raise_for_status()
+        return response.json()
+    except RequestException as e:
+        return {"error": f"API error: {str(e)}"}
+
+
+def api_parse(text):
+    """Call /api/parse endpoint."""
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/api/parse",
+            json={"text": text},
+            timeout=API_TIMEOUT
+        )
+        response.raise_for_status()
+        return response.json()["properties"]
+    except RequestException as e:
+        return {"error": str(e)}
+
+
+def api_localities():
+    """Call /api/localities endpoint."""
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/api/localities",
+            timeout=API_TIMEOUT
+        )
+        response.raise_for_status()
+        return response.json()["localities"]
+    except RequestException as e:
+        st.error(f"Failed to load localities: {e}")
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Load assets (Geo only, models are on API)
 # ---------------------------------------------------------------------------
 @st.cache_resource
-def load_assets():
-    models, meta, medians = load_models()
-    return models, meta, medians, GeoLookup()
+def load_geo():
+    return GeoLookup()
 
 @st.cache_data(show_spinner=False)
 def load_bi_data():
@@ -85,64 +151,48 @@ def load_bi_data():
         print(f"Error loading BI data: {e}")
         return pd.DataFrame()
 
-models, meta, medians, geo = load_assets()
+geo = load_geo()
 
 # ---------------------------------------------------------------------------
 # Helper function for valuation
 # ---------------------------------------------------------------------------
-def do_valuation(meta, geo, street, locality, property_type, legal_status, direction,
+def do_valuation(street, locality, property_type, legal_status, direction,
                  area_m2, width_m, length_m, num_floors, num_bedrooms, road_width_m,
-                 bin_flags, text_flags, budget_range):
-    """Run valuation with comprehensive XAI."""
-    row, info = build_row(
-        meta, geo,
-        street=street, locality=locality,
-        property_type=property_type, legal_status=legal_status, direction=direction,
-        area_m2=area_m2, width_m=width_m, length_m=length_m,
-        num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
-        bin_flags=bin_flags, text_flags=text_flags,
+                 bin_flags, text_flags):
+    """Run valuation via API."""
+    result = api_predict(
+        street=street,
+        locality=locality,
+        property_type=property_type,
+        legal_status=legal_status,
+        direction=direction,
+        area_m2=area_m2,
+        width_m=width_m,
+        length_m=length_m,
+        num_floors=num_floors,
+        num_bedrooms=num_bedrooms,
+        road_width_m=road_width_m,
+        bin_flags=bin_flags,
+        text_flags=text_flags,
     )
 
-    if row is None:
-        return None, info, None, None, None, None
+    if "error" in result:
+        return None, result["error"], None, None
 
-    price = predict_price(models, meta, row, budget_range)
-
-    # Get feature importance
-    try:
-        from app.core.explainability import (
-            get_feature_importance_from_model,
-            get_model_predictions,
-            calculate_confidence_score,
-            get_feature_contributions,
-        )
-        importance = get_feature_importance_from_model(models, meta)
-
-        # Get predictions from individual models (pass row dict directly)
-        model_preds = get_model_predictions(models, meta, row, budget_range)
-
-        # Calculate confidence
-        confidence = calculate_confidence_score(model_preds)
-
-        # Get feature contributions
-        contributions = get_feature_contributions(row, importance)
-
-    except Exception as e:
-        print(f"XAI error: {e}")
-        importance = None
-        model_preds = {}
-        confidence = 0.0
-        contributions = []
+    # Extract from API response
+    price_vnd = result["price_vnd"]
+    bucket = result["bucket"]
+    row = result["row"]
+    info = result["info"]
 
     xai_data = {
-        "importance": importance,
-        "model_predictions": model_preds,
-        "confidence": confidence,
-        "contributions": contributions,
-        "bucket": budget_range,
+        "importance": result["xai"].get("feature_importance", {}),
+        "model_predictions": result["xai"].get("models", {}),
+        "confidence": result["xai"].get("confidence", 0),
+        "bucket": bucket,
     }
 
-    return price, info, row, xai_data
+    return price_vnd, info, row, xai_data
 
 # ---------------------------------------------------------------------------
 # Lookup tables
@@ -205,15 +255,15 @@ with tab_valuation:
         if address_text.strip():
             address_lower = address_text.lower()
             matched_locality = None
-            for locality in geo.localities():
+            for locality in api_localities():
                 if locality.replace("phường ", "").replace("xã ", "").replace("tp ", "") in address_lower:
                     matched_locality = locality
                     break
 
             if matched_locality:
                 st.success(f"✅ Tìm thấy: **{matched_locality}**")
-                parsed = parse_listing(address_text)
-                street_default = extract_street_from_address(address_text) or parsed.get("street", "")
+                parsed = api_parse(address_text)
+                street_default = parsed.get("street", "") if "error" not in parsed else ""
 
                 st.subheader("🗺️ Xác nhận địa chỉ")
                 st.caption(f"💡 Tìm được đường: **{street_default}** (nếu trống = không có trong cache → dùng fallback)")
@@ -297,16 +347,14 @@ with tab_valuation:
                                 st.write(f"**Final locality:** {final_locality}")
 
                             try:
-                                st.write("🔧 **TEST: Code is running latest version**")
+                                st.write("🔧 **Calling API for prediction...**")
                                 price, info, row, xai_data = do_valuation(
-                                    meta, geo,
                                     street=final_street,
                                     locality=final_locality,
                                     property_type=property_type, legal_status=legal_status, direction=direction,
                                     area_m2=area_m2, width_m=width_m, length_m=length_m,
                                     num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
                                     bin_flags=bin_flags, text_flags=text_flags,
-                                    budget_range=budget_range,
                                 )
                             except Exception as e:
                                 import traceback
@@ -425,30 +473,34 @@ with tab_valuation:
                             st.divider()
                             st.markdown("### 📝 Feedback & Learning")
 
-                            feedback_col1, feedback_col2 = st.columns(2)
-                            with feedback_col1:
-                                st.markdown("**Rate this prediction:**")
-                                rating = st.radio("Is this price accurate?", ["👍 Accurate", "👎 Not accurate", "🤷 Not sure"], horizontal=True, key=f"rating_{hash(str(row))}")
+                            with st.form(key=f"feedback_form_{hash(str(row))}"):
+                                feedback_col1, feedback_col2 = st.columns(2)
+                                with feedback_col1:
+                                    st.markdown("**Rate this prediction:**")
+                                    rating = st.radio("Is this price accurate?", ["👍 Accurate", "👎 Not accurate", "🤷 Not sure"], horizontal=True, key=f"rating_{hash(str(row))}")
 
-                            with feedback_col2:
-                                st.markdown("**Actual price (if known):**")
-                                actual_price = st.number_input("Thực tế giá là bao nhiêu (tỷ VND)?",
-                                                              min_value=0.0, step=0.5, key=f"actual_{hash(str(row))}")
+                                with feedback_col2:
+                                    st.markdown("**Actual price (if known):**")
+                                    actual_price = st.number_input("Thực tế giá là bao nhiêu (tỷ VND)?",
+                                                                  min_value=0.0, step=0.5, key=f"actual_{hash(str(row))}")
 
-                            if st.button("📤 Submit Feedback", key=f"feedback_{hash(str(row))}"):
+                                submitted = st.form_submit_button("📤 Submit Feedback")
+
+                            if submitted:
                                 from app.core.feedback import save_feedback_to_supabase
 
                                 feedback_data = {
                                     "predicted_price_vnd": float(price),
                                     "actual_price_vnd": float(actual_price * 1e9) if actual_price > 0 else None,
                                     "rating": rating,
-                                    "street": final_street,
-                                    "locality": final_locality,
-                                    "area_m2": float(area_m2),
-                                    "bucket": budget_range,
+                                    "bucket": xai_data.get("bucket", "mid") if xai_data else "mid",
                                     "confidence": xai_data.get("confidence") if xai_data else 0,
                                     "timestamp": pd.Timestamp.now().isoformat(),
                                 }
+
+                                # Debug
+                                print(f"[FEEDBACK] row dict keys: {list(row.keys()) if row else 'None'}")
+                                print(f"[FEEDBACK] feedback_data: {feedback_data}")
 
                                 if save_feedback_to_supabase(feedback_data, row_dict=row):
                                     st.success("✅ Feedback saved to Supabase!")
@@ -466,7 +518,7 @@ with tab_valuation:
 
         with col_loc:
             st.subheader("📍 Vị trí")
-            localities = geo.localities()
+            localities = api_localities()
             default_idx = localities.index("phường bình thạnh") if "phường bình thạnh" in localities else 0
             locality = st.selectbox("Phường / Xã", localities, index=default_idx)
 
@@ -515,15 +567,13 @@ with tab_valuation:
 
         st.divider()
         if st.button("💰 Định giá", type="primary", use_container_width=True):
-            with st.spinner("Đang tra cứu vị trí và tính feature địa lý..."):
+            with st.spinner("Đang gọi API để dự đoán giá..."):
                 price, info, row, xai_data = do_valuation(
-                    meta, geo,
                     street=street, locality=locality,
                     property_type=property_type, legal_status=legal_status, direction=direction,
                     area_m2=area_m2, width_m=width_m, length_m=length_m,
                     num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
                     bin_flags=bin_flags, text_flags=text_flags,
-                    budget_range=budget_range,
                 )
 
             if price is None:
@@ -623,30 +673,34 @@ with tab_valuation:
                 st.divider()
                 st.markdown("### 📝 Feedback & Learning")
 
-                feedback_col1, feedback_col2 = st.columns(2)
-                with feedback_col1:
-                    st.markdown("**Rate this prediction:**")
-                    rating = st.radio("Is this price accurate?", ["👍 Accurate", "👎 Not accurate", "🤷 Not sure"], horizontal=True, key=f"rating_form_{street}{locality}")
+                with st.form(key=f"feedback_form_detail_{street}{locality}"):
+                    feedback_col1, feedback_col2 = st.columns(2)
+                    with feedback_col1:
+                        st.markdown("**Rate this prediction:**")
+                        rating = st.radio("Is this price accurate?", ["👍 Accurate", "👎 Not accurate", "🤷 Not sure"], horizontal=True, key=f"rating_form_{street}{locality}")
 
-                with feedback_col2:
-                    st.markdown("**Actual price (if known):**")
-                    actual_price = st.number_input("Thực tế giá là bao nhiêu (tỷ VND)?",
-                                                  min_value=0.0, step=0.5, key=f"actual_form_{street}{locality}")
+                    with feedback_col2:
+                        st.markdown("**Actual price (if known):**")
+                        actual_price = st.number_input("Thực tế giá là bao nhiêu (tỷ VND)?",
+                                                      min_value=0.0, step=0.5, key=f"actual_form_{street}{locality}")
 
-                if st.button("📤 Submit Feedback", key=f"feedback_form_{street}{locality}"):
+                    submitted = st.form_submit_button("📤 Submit Feedback")
+
+                if submitted:
                     from app.core.feedback import save_feedback_to_supabase
 
                     feedback_data = {
                         "predicted_price_vnd": float(price),
                         "actual_price_vnd": float(actual_price * 1e9) if actual_price > 0 else None,
                         "rating": rating,
-                        "street": street,
-                        "locality": locality,
-                        "area_m2": float(area_m2),
-                        "bucket": budget_range,
+                        "bucket": xai_data.get("bucket", "mid") if xai_data else "mid",
                         "confidence": xai_data.get("confidence") if xai_data else 0,
                         "timestamp": pd.Timestamp.now().isoformat(),
                     }
+
+                    # Debug
+                    print(f"[FEEDBACK FORM] row dict keys: {list(row.keys()) if row else 'None'}")
+                    print(f"[FEEDBACK FORM] feedback_data: {feedback_data}")
 
                     if save_feedback_to_supabase(feedback_data, row_dict=row):
                         st.success("✅ Feedback saved to Supabase!")

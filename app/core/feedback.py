@@ -16,42 +16,61 @@ def save_feedback_to_supabase(feedback_data: dict, row_dict: dict = None) -> boo
     """
     try:
         from supabase import create_client
+        import traceback
 
         url = os.getenv("SUPABASE_URL")
         key = os.getenv("SUPABASE_SERVICE_KEY")
+
+        print(f"[DEBUG] SUPABASE_URL set: {bool(url)}")
+        print(f"[DEBUG] SUPABASE_SERVICE_KEY set: {bool(key)}")
 
         if not url or not key:
             print("❌ Supabase credentials not set")
             return False
 
+        print(f"[DEBUG] Creating Supabase client...")
         client = create_client(url, key)
 
-        # Prepare feedback record
+        # Convert text rating to numeric
+        rating_text = feedback_data.get("rating", "")
+        rating_map = {
+            "👍 Accurate": 5,
+            "👎 Not accurate": 2,
+            "🤷 Not sure": 3,
+        }
+        rating_value = rating_map.get(rating_text, 3)
+        print(f"[DEBUG] Rating converted: '{rating_text}' -> {rating_value}")
+
+        # Prepare feedback record (features_json contains all details)
         record = {
             "predicted_price_vnd": feedback_data.get("predicted_price_vnd"),
             "actual_price_vnd": feedback_data.get("actual_price_vnd"),
-            "rating": feedback_data.get("rating"),
-            "street": feedback_data.get("street"),
-            "locality": feedback_data.get("locality"),
-            "area_m2": feedback_data.get("area_m2"),
+            "rating": rating_value,
             "bucket": feedback_data.get("bucket"),
             "confidence": feedback_data.get("confidence"),
             "timestamp": feedback_data.get("timestamp", datetime.now().isoformat()),
             "features_json": row_dict if row_dict else {},
         }
 
+        print(f"[DEBUG] Inserting record: predicted={record['predicted_price_vnd']}, actual={record['actual_price_vnd']}, bucket={record['bucket']}")
+
         # Insert into Supabase
         response = client.table("feedback").insert(record).execute()
 
+        print(f"[DEBUG] Response data: {response.data}")
+        print(f"[DEBUG] Response error: {response.error if hasattr(response, 'error') else 'None'}")
+
         if response.data:
-            print(f"✅ Feedback saved to Supabase")
+            print(f"✅ Feedback saved to Supabase: ID {response.data[0].get('id')}")
             return True
         else:
-            print(f"❌ Failed to save feedback: {response}")
+            error_msg = str(response) if response else "Unknown error"
+            print(f"❌ Failed to save feedback: {error_msg}")
             return False
 
     except Exception as e:
         print(f"❌ Error saving feedback: {e}")
+        traceback.print_exc()
         return False
 
 
@@ -136,15 +155,26 @@ def get_feedback_stats():
         df["error_pct"] = (df["error_vnd"] / df["actual_price_vnd"]) * 100
         df["abs_error_pct"] = df["error_pct"].abs()
 
+        # Extract street/locality from features_json for worst predictions
+        worst_df = df.nlargest(5, "abs_error_pct").copy()
+        worst_records = []
+        for _, row in worst_df.iterrows():
+            features = row.get("features_json", {}) if isinstance(row.get("features_json"), dict) else {}
+            worst_records.append({
+                "street": features.get("street", "N/A"),
+                "locality": features.get("locality", "N/A"),
+                "predicted_price_vnd": row["predicted_price_vnd"],
+                "actual_price_vnd": row["actual_price_vnd"],
+                "abs_error_pct": row["abs_error_pct"],
+            })
+
         stats = {
             "total_feedback": len(response.data),
             "feedback_with_prices": len(df),
             "mean_error_pct": float(df["error_pct"].mean()),
             "mae_pct": float(df["abs_error_pct"].mean()),  # Mean Absolute Error %
             "mape_pct": float(df["abs_error_pct"].mean()),  # MAPE
-            "worst_predictions": df.nlargest(5, "abs_error_pct")[
-                ["street", "locality", "predicted_price_vnd", "actual_price_vnd", "abs_error_pct"]
-            ].to_dict("records"),
+            "worst_predictions": worst_records,
         }
 
         return stats
