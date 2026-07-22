@@ -206,7 +206,8 @@ with tab_valuation:
                             )
 
                         if row is None:
-                            st.error("❌ Không geocode được địa chỉ. Thử dùng Form chi tiết hoặc chỉnh lại đường/phường.")
+                            st.error("❌ Không xây dựng được feature row. Kiểm tra console để xem lỗi chi tiết.")
+                            st.info("💡 Thử dùng **Form chi tiết** (tab ✍️) để nhập thủ công thay vì paste")
                         else:
                             price = predict_price(models, meta, row, budget_range)
                             mape_err = price * 0.1325

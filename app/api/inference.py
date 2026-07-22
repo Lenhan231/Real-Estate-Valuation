@@ -189,11 +189,15 @@ def build_row(meta, geo: GeoLookup, *,
     try:
         preprocessed, _, _ = preprocess(row_df)
         if preprocessed.empty:
+            print(f"❌ [BUILD_ROW] Preprocessing returned empty dataframe")
             return None, None
         row_dict = preprocessed.iloc[0].to_dict()
         row = {k: float(v) for k, v in row_dict.items() if k != 'price_vnd'}
+        print(f"✅ [BUILD_ROW] Preprocessing complete: {len(row)} features")
     except Exception as e:
-        print(f"Error in preprocessing: {e}")
+        print(f"❌ [BUILD_ROW] Preprocessing error: {e}")
+        import traceback
+        traceback.print_exc()
         return None, None
 
     # Add 2 locality encoding features from training data (in meta)
