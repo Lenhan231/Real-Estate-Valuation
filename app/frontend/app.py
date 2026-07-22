@@ -103,14 +103,15 @@ tab_valuation, tab_analysis = st.tabs(["💰 Định giá", "📊 Phân tích th
 # TAB 1: VALUATION
 # =========================================================================
 with tab_valuation:
-    mode = st.radio("📝 Cách nhập", ["Paste địa chỉ nhanh", "Form chi tiết"], horizontal=True)
+    mode = st.radio("📝 Cách nhập", ["📋 Paste mô tả", "✍️ Form chi tiết"], horizontal=True)
 
-    if mode == "Paste địa chỉ nhanh":
-        st.subheader("📍 Dán địa chỉ đầy đủ")
+    if mode == "📋 Paste mô tả":
+        st.subheader("📍 Dán Mô Tả Bài Đăng")
+        st.caption("Paste toàn bộ mô tả bài đăng BĐS (địa chỉ + thông số)")
         address_text = st.text_area(
-            "Ví dụ: Vlasta Premier Phú Thuận, Đường Đào Trí, Phường Phú Thuận, Quận 7, Hồ Chí Minh",
-            placeholder="Paste địa chỉ tại đây...",
-            height=80
+            "Ví dụ: Vlasta Premier Phú Thuận, Đường Đào Trí, Phường Phú Thuận, Quận 7, Hồ Chí Minh. 80m2, 3 tầng, 3 phòng ngủ, hẻm xe hơi, nội thất, sổ hồng.",
+            placeholder="Paste mô tả bài đăng đầy đủ từ Alonhadat/Batdongsan...",
+            height=100
         )
 
         if address_text.strip():

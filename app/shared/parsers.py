@@ -4,7 +4,12 @@ from .constants import TEXT_FEATURE_PATTERNS, NUMERIC_PATTERNS, LEGAL_PATTERNS
 
 
 def parse_listing(text: str) -> dict:
-    """Parse Vietnamese listing text → extract property data."""
+    """Parse Vietnamese real estate listing DESCRIPTION → extract property data.
+
+    Handles full listing text like:
+    "Vlasta Premier Phú Thuận, Đường Đào Trí, Phường Phú Thuận, Quận 7, HCM
+     80m2, 3 tầng, 3 phòng ngủ, rộng 5m, nội thất, sổ hồng"
+    """
     result = {
         "area_m2": 80.0,
         "num_floors": 3,
@@ -24,7 +29,8 @@ def parse_listing(text: str) -> dict:
 
     text_lower = text.lower()
 
-    # Numeric features using shared patterns
+    # ===== NUMERIC FEATURES =====
+    # Try all numeric patterns in shared constants
     for key, pattern in NUMERIC_PATTERNS.items():
         match = re.search(pattern, text_lower)
         if match:
@@ -37,26 +43,63 @@ def parse_listing(text: str) -> dict:
             except (ValueError, IndexError):
                 pass
 
-    # Text-based flags using shared patterns
+    # Additional area patterns (alternatives if standard fails)
+    if result["area_m2"] == 80.0:
+        # Try "diện tích XXm2" pattern
+        area_match = re.search(r'diện tích\s*(\d+(?:[.,]\d+)?)\s*m[²2²]', text_lower)
+        if area_match:
+            result["area_m2"] = float(area_match.group(1).replace(",", "."))
+
+    # Additional floor patterns
+    if result["num_floors"] == 3:
+        floor_match = re.search(r'(?:^|\s)(\d+)\s*lầu', text_lower)  # "4 lầu" (colloquial)
+        if floor_match:
+            result["num_floors"] = int(floor_match.group(1))
+
+    # Additional bedroom patterns
+    if result["num_bedrooms"] == 3:
+        bed_match = re.search(r'(\d+)\s*(?:bedroom|phòng)', text_lower)
+        if bed_match:
+            result["num_bedrooms"] = int(bed_match.group(1))
+
+    # ===== TEXT-BASED FLAGS =====
+    # Check all text feature patterns from constants
     for flag_name, patterns in TEXT_FEATURE_PATTERNS.items():
         if any(pattern in text_lower for pattern in patterns):
             result[flag_name] = True
 
-    # Legal status using shared patterns
+    # ===== LEGAL STATUS =====
+    # Check legal status patterns
     for status, patterns in LEGAL_PATTERNS.items():
         if any(pattern in text_lower for pattern in patterns):
             result["legal_status"] = status
             break
 
-    # Extract street and locality from "Địa chỉ:" section or address line
-    # Look for patterns like "Đường XXX" and "Phường YYY"
-    street_match = re.search(r'(?:đường|street)\s+([^,\n-]+)', text_lower)
+    # ===== ADDRESS EXTRACTION (from description) =====
+    # Extract street: look for "Đường XXX" or just the first street-like phrase
+    street_match = re.search(r'(?:đường|street|đ\.?)\s+([^,\n]+?)(?:,|\s+phường|\s+quận|$)', text_lower)
     if street_match:
-        result["street"] = street_match.group(1).strip().title()
+        street_raw = street_match.group(1).strip()
+        # Clean up: remove "số" prefix if present
+        street_clean = re.sub(r'^(?:số\s*\d+[a-z]?\s+)?', '', street_raw).strip()
+        result["street"] = street_clean.title() if street_clean else ""
 
-    locality_match = re.search(r'(?:phường|ward)\s+([^,\n]+)', text_lower)
+    # Extract locality (phường/xã): prioritize "Phường XXX" or "Xã XXX" pattern
+    # First try explicit "phường" pattern
+    locality_match = re.search(r'(?:phường|xã|ward)\s+([^,\n]+?)(?:,|\s+quận|$)', text_lower)
     if locality_match:
-        result["locality"] = locality_match.group(1).strip().title()
+        locality_raw = locality_match.group(1).strip()
+        result["locality"] = f"phường {locality_raw.title()}" if locality_raw else ""
+
+    # If not found, try to infer from project name or context
+    # e.g., "Vlasta Premier Phú Thuận" → locality might be "Phú Thuận"
+    if not result["locality"]:
+        # Look for known ward names (this is a fallback)
+        known_wards = ["phú thuận", "bình thạnh", "tân bình", "tân phú", "quận 1", "quận 3"]
+        for ward in known_wards:
+            if ward in text_lower:
+                result["locality"] = f"phường {ward.split()[-1].title()}"
+                break
 
     return result
 
