@@ -98,27 +98,43 @@ def build_row(meta, geo: GeoLookup, *,
     """
     try:
         lat, lon, source = geo.geocode(street, locality)
+        print(f"✅ [BUILD_ROW] Geocode success: lat={lat:.4f}, lon={lon:.4f}, source={source}")
         if lat is None:
             print(f"⚠️  Geocode returned None for street='{street}', locality='{locality}'")
             return None, None
     except Exception as e:
-        print(f"❌ Geocode error for street='{street}', locality='{locality}': {e}")
+        print(f"❌ [BUILD_ROW] Geocode error for street='{street}', locality='{locality}': {e}")
         import traceback
         traceback.print_exc()
         return None, None
 
-    dist_km = geo.distance_to_center(lat, lon)
+    try:
+        dist_km = geo.distance_to_center(lat, lon)
+        print(f"✅ [BUILD_ROW] Distance calculated: {dist_km:.2f} km")
+    except Exception as e:
+        print(f"❌ [BUILD_ROW] Distance error: {e}")
+        return None, None
 
     # POI features (geo lookup - may return None)
-    poi_result = geo.poi_features(lat, lon)
-    pois, cache_dist, poi_source = poi_result if len(poi_result) == 3 else (*poi_result, "cache")
+    try:
+        poi_result = geo.poi_features(lat, lon)
+        pois, cache_dist, poi_source = poi_result if len(poi_result) == 3 else (*poi_result, "cache")
+        print(f"✅ [BUILD_ROW] POI features loaded: source={poi_source}")
 
-    def poi(col):
-        v = pois.get(col) if pois else None
-        return v  # Pass None, let preprocessing handle imputation
+        def poi(col):
+            v = pois.get(col) if pois else None
+            return v  # Pass None, let preprocessing handle imputation
+    except Exception as e:
+        print(f"❌ [BUILD_ROW] POI features error: {e}")
+        return None, None
 
     # Locality stats (geo lookup - may return None)
-    sq, dens = geo.locality_stats(locality)
+    try:
+        sq, dens = geo.locality_stats(locality)
+        print(f"✅ [BUILD_ROW] Locality stats: sq={sq}, dens={dens}")
+    except Exception as e:
+        print(f"❌ [BUILD_ROW] Locality stats error: {e}")
+        sq, dens = None, None
     loc_sq = sq  # Pass None, let preprocessing handle imputation
     loc_dens = dens
 
