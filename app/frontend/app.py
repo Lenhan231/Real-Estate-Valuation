@@ -206,7 +206,7 @@ with tab_valuation:
                             )
 
                         if row is None:
-                            st.error("❌ Không xây dựng được feature row. Kiểm tra console để xem lỗi chi tiết.")
+                            st.error(f"❌ Lỗi xây dựng feature row:\n\n{info if info else 'Unknown error'}")
                             st.info("💡 Thử dùng **Form chi tiết** (tab ✍️) để nhập thủ công thay vì paste")
                         else:
                             price = predict_price(models, meta, row, budget_range)

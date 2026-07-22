@@ -94,19 +94,23 @@ def build_row(meta, geo: GeoLookup, *,
 
     Reuses preprocessing.py for feature engineering (single source of truth).
     Applies locality encoding from training data (meta dict).
-    Returns (row dict with 80 features, info dict) or (None, None).
+    Returns (row dict with 80 features, info dict) or (None, error_msg).
     """
+    error_log = []
     try:
         lat, lon, source = geo.geocode(street, locality)
-        print(f"✅ [BUILD_ROW] Geocode success: lat={lat:.4f}, lon={lon:.4f}, source={source}")
         if lat is None:
-            print(f"⚠️  Geocode returned None for street='{street}', locality='{locality}'")
-            return None, None
+            error_msg = f"Geocode returned None for street='{street}', locality='{locality}'"
+            error_log.append(error_msg)
+            print(f"❌ {error_msg}")
+            return None, "\n".join(error_log)
     except Exception as e:
-        print(f"❌ [BUILD_ROW] Geocode error for street='{street}', locality='{locality}': {e}")
+        error_msg = f"Geocode error: {str(e)}"
+        error_log.append(error_msg)
+        print(f"❌ [BUILD_ROW] {error_msg}")
         import traceback
         traceback.print_exc()
-        return None, None
+        return None, "\n".join(error_log)
 
     try:
         dist_km = geo.distance_to_center(lat, lon)
@@ -189,16 +193,20 @@ def build_row(meta, geo: GeoLookup, *,
     try:
         preprocessed, _, _ = preprocess(row_df)
         if preprocessed.empty:
-            print(f"❌ [BUILD_ROW] Preprocessing returned empty dataframe")
-            return None, None
+            error_msg = "Preprocessing returned empty dataframe"
+            error_log.append(error_msg)
+            print(f"❌ {error_msg}")
+            return None, "\n".join(error_log)
         row_dict = preprocessed.iloc[0].to_dict()
         row = {k: float(v) for k, v in row_dict.items() if k != 'price_vnd'}
-        print(f"✅ [BUILD_ROW] Preprocessing complete: {len(row)} features")
     except Exception as e:
-        print(f"❌ [BUILD_ROW] Preprocessing error: {e}")
+        error_msg = f"Preprocessing error: {str(e)}"
+        error_log.append(error_msg)
+        print(f"❌ {error_msg}")
         import traceback
-        traceback.print_exc()
-        return None, None
+        tb = traceback.format_exc()
+        error_log.append(tb)
+        return None, "\n".join(error_log)
 
     # Add 2 locality encoding features from training data (in meta)
     locality_price_map = meta.get("locality_price_map", {})
