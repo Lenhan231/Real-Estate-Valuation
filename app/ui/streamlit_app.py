@@ -38,6 +38,12 @@ st.set_page_config(
     layout="wide",
 )
 
+# Initialize session state for feedback
+if "feedback_status" not in st.session_state:
+    st.session_state.feedback_status = None
+if "feedback_message" not in st.session_state:
+    st.session_state.feedback_message = None
+
 # ---------------------------------------------------------------------------
 # API Helper Functions
 # ---------------------------------------------------------------------------
