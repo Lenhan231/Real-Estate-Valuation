@@ -515,16 +515,22 @@ with tab_valuation:
                                     )
 
                                     print(f"[STREAMLIT-FEEDBACK] Response: {response.status_code}")
+                                    print(f"[STREAMLIT-FEEDBACK] Response text: {response.text}")
 
-                                    if response.status_code == 200:
+                                    # Check for success (200 or 201)
+                                    if response.status_code in [200, 201]:
                                         st.success("✅ Feedback saved to Supabase!")
+                                        print("[STREAMLIT-FEEDBACK] Success message shown")
                                         if actual_price > 0:
                                             error_pct = abs((actual_price * 1e9 - price) / (actual_price * 1e9)) * 100
                                             st.metric("Error", f"{error_pct:.1f}%")
                                     else:
-                                        error_detail = response.json().get('detail', 'Unknown error') if response.headers.get('content-type') == 'application/json' else response.text
+                                        try:
+                                            error_detail = response.json().get('detail', response.text)
+                                        except:
+                                            error_detail = response.text
                                         print(f"[STREAMLIT-FEEDBACK] Error: {error_detail}")
-                                        st.error(f"❌ Failed: {error_detail}")
+                                        st.error(f"❌ Failed ({response.status_code}): {error_detail}")
                                 except Exception as e:
                                     print(f"[STREAMLIT-FEEDBACK] Exception: {e}")
                                     import traceback
@@ -733,16 +739,22 @@ with tab_valuation:
                         )
 
                         print(f"[STREAMLIT-FEEDBACK-FORM] Response: {response.status_code}")
+                        print(f"[STREAMLIT-FEEDBACK-FORM] Response text: {response.text}")
 
-                        if response.status_code == 200:
+                        # Check for success (200 or 201)
+                        if response.status_code in [200, 201]:
                             st.success("✅ Feedback saved to Supabase!")
+                            print("[STREAMLIT-FEEDBACK-FORM] Success message shown")
                             if actual_price > 0:
                                 error_pct = abs((actual_price * 1e9 - price) / (actual_price * 1e9)) * 100
                                 st.metric("Error", f"{error_pct:.1f}%")
                         else:
-                            error_detail = response.json().get('detail', 'Unknown error') if response.headers.get('content-type') == 'application/json' else response.text
+                            try:
+                                error_detail = response.json().get('detail', response.text)
+                            except:
+                                error_detail = response.text
                             print(f"[STREAMLIT-FEEDBACK-FORM] Error: {error_detail}")
-                            st.error(f"❌ Failed: {error_detail}")
+                            st.error(f"❌ Failed ({response.status_code}): {error_detail}")
                     except Exception as e:
                         print(f"[STREAMLIT-FEEDBACK-FORM] Exception: {e}")
                         import traceback
