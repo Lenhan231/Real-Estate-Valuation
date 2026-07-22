@@ -491,6 +491,9 @@ with tab_valuation:
 
                             if submitted:
                                 try:
+                                    # Convert row dict to ensure all values are JSON-serializable
+                                    features_dict = {k: float(v) if isinstance(v, (int, float)) else str(v) for k, v in row.items()} if row else {}
+
                                     feedback_payload = {
                                         "predicted_price_vnd": float(price),
                                         "actual_price_vnd": float(actual_price * 1e9) if actual_price > 0 else None,
@@ -498,9 +501,11 @@ with tab_valuation:
                                         "bucket": xai_data.get("bucket", "mid") if xai_data else "mid",
                                         "confidence": xai_data.get("confidence") if xai_data else 0,
                                         "feature_version": FEATURE_VERSION,
-                                        "features_json": row,
+                                        "features_json": features_dict,
                                         "timestamp": pd.Timestamp.now().isoformat(),
                                     }
+
+                                    print(f"[STREAMLIT-FEEDBACK] Sending: {len(features_dict)} features")
 
                                     # Call API endpoint
                                     response = requests.post(
@@ -509,15 +514,22 @@ with tab_valuation:
                                         timeout=API_TIMEOUT
                                     )
 
+                                    print(f"[STREAMLIT-FEEDBACK] Response: {response.status_code}")
+
                                     if response.status_code == 200:
                                         st.success("✅ Feedback saved to Supabase!")
                                         if actual_price > 0:
                                             error_pct = abs((actual_price * 1e9 - price) / (actual_price * 1e9)) * 100
                                             st.metric("Error", f"{error_pct:.1f}%")
                                     else:
-                                        st.error(f"❌ Failed: {response.json().get('detail', 'Unknown error')}")
-                                except RequestException as e:
-                                    st.error(f"❌ API Error: {str(e)}")
+                                        error_detail = response.json().get('detail', 'Unknown error') if response.headers.get('content-type') == 'application/json' else response.text
+                                        print(f"[STREAMLIT-FEEDBACK] Error: {error_detail}")
+                                        st.error(f"❌ Failed: {error_detail}")
+                                except Exception as e:
+                                    print(f"[STREAMLIT-FEEDBACK] Exception: {e}")
+                                    import traceback
+                                    traceback.print_exc()
+                                    st.error(f"❌ Error: {str(e)}")
             else:
                 st.warning("Không tìm thấy phường trong địa chỉ. Thử dùng Form chi tiết!")
 
@@ -697,6 +709,9 @@ with tab_valuation:
 
                 if submitted:
                     try:
+                        # Convert row dict to ensure all values are JSON-serializable
+                        features_dict = {k: float(v) if isinstance(v, (int, float)) else str(v) for k, v in row.items()} if row else {}
+
                         feedback_payload = {
                             "predicted_price_vnd": float(price),
                             "actual_price_vnd": float(actual_price * 1e9) if actual_price > 0 else None,
@@ -704,9 +719,11 @@ with tab_valuation:
                             "bucket": xai_data.get("bucket", "mid") if xai_data else "mid",
                             "confidence": xai_data.get("confidence") if xai_data else 0,
                             "feature_version": FEATURE_VERSION,
-                            "features_json": row,
+                            "features_json": features_dict,
                             "timestamp": pd.Timestamp.now().isoformat(),
                         }
+
+                        print(f"[STREAMLIT-FEEDBACK-FORM] Sending: {len(features_dict)} features")
 
                         # Call API endpoint
                         response = requests.post(
@@ -715,15 +732,22 @@ with tab_valuation:
                             timeout=API_TIMEOUT
                         )
 
+                        print(f"[STREAMLIT-FEEDBACK-FORM] Response: {response.status_code}")
+
                         if response.status_code == 200:
                             st.success("✅ Feedback saved to Supabase!")
                             if actual_price > 0:
                                 error_pct = abs((actual_price * 1e9 - price) / (actual_price * 1e9)) * 100
                                 st.metric("Error", f"{error_pct:.1f}%")
                         else:
-                            st.error(f"❌ Failed: {response.json().get('detail', 'Unknown error')}")
-                    except RequestException as e:
-                        st.error(f"❌ API Error: {str(e)}")
+                            error_detail = response.json().get('detail', 'Unknown error') if response.headers.get('content-type') == 'application/json' else response.text
+                            print(f"[STREAMLIT-FEEDBACK-FORM] Error: {error_detail}")
+                            st.error(f"❌ Failed: {error_detail}")
+                    except Exception as e:
+                        print(f"[STREAMLIT-FEEDBACK-FORM] Exception: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        st.error(f"❌ Error: {str(e)}")
 
 # =========================================================================
 # TAB 2: MARKET ANALYSIS
