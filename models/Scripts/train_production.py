@@ -140,17 +140,24 @@ def main():
     args = parser.parse_args()
 
     # Initialize W&B (optional, for experiment tracking)
-    if args.wandb and WANDB_AVAILABLE:
-        wandb.init(
-            project="real-estate-valuation",
-            name="v2.6-production",
-            config={
-                "model_type": "3-tier ensemble",
-                "features": 78,
-                "tiers": ["low (0-5B)", "mid (5-20B)", "high (20B+)"],
-                "algorithms": ["LightGBM", "XGBoost", "CatBoost"],
-            }
-        )
+    if args.wandb:
+        if WANDB_AVAILABLE:
+            try:
+                wandb.init(
+                    project="real-estate-valuation",
+                    name="v2.6-production",
+                    config={
+                        "model_type": "3-tier ensemble",
+                        "features": 78,
+                        "tiers": ["low (0-5B)", "mid (5-20B)", "high (20B+)"],
+                        "algorithms": ["LightGBM", "XGBoost", "CatBoost"],
+                    }
+                )
+                print("✓ W&B logging enabled")
+            except Exception as e:
+                print(f"⚠️  W&B init failed: {e}")
+        else:
+            print("⚠️  wandb not installed. Install with: pip install wandb")
 
     print("=" * 70)
     print("PRODUCTION MODEL: Price-Only Ensemble (3 Tiers × 3 Models)")
@@ -274,13 +281,16 @@ def main():
 
     # Log to W&B
     if args.wandb and WANDB_AVAILABLE:
-        wandb.log({
-            "MAPE": mape,
-            "R2": r2,
-            "MAE_billion_vnd": mae/1e9,
-            "RMSE_billion_vnd": rmse/1e9,
-            "samples_test": len(global_y_test),
-        })
+        try:
+            wandb.log({
+                "MAPE": mape,
+                "R2": r2,
+                "MAE_billion_vnd": mae/1e9,
+                "RMSE_billion_vnd": rmse/1e9,
+                "samples_test": len(global_y_test),
+            })
+        except Exception as e:
+            print(f"⚠️  W&B logging failed: {e}")
 
     PLOT_DIR.mkdir(parents=True, exist_ok=True)
 

@@ -19,3 +19,4 @@ plotly
 flask
 fastparquet
 pyarrow
+wandb
