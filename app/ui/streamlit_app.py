@@ -21,11 +21,13 @@ except Exception:
 
 # Import from consolidated app.core module
 from app.core.geo import GeoLookup
-from app.core.constants import FEATURE_VERSION
 
 # API Configuration
 API_BASE_URL = "http://localhost:8000"
 API_TIMEOUT = 30
+
+# Feature version (same as app/core/constants.py)
+FEATURE_VERSION = 1
 
 ROOT = PROJECT_ROOT
 BI_DATA_FILE = ROOT / "data" / "processed" / "model_training_data.csv"
