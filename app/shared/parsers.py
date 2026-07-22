@@ -85,36 +85,32 @@ def parse_listing(text: str) -> dict:
         result["street"] = street_clean.title() if street_clean else ""
 
     # Extract locality (phường/xã): PRIORITIZE actual locality names over ward numbers!
-    # Strategy: 1) Look for "Phường/Xã + real name" patterns (avoid ward numbers like "Phường 24")
-    #          2) Skip "Phường/Xã + digits" (old format ward numbers)
-    #          3) Fallback to known ward names
+    # Find all "phường/xã XXX" patterns, prefer ones with real names over numbers
 
-    # First, try to find "Phường XXX" where XXX is a real name (not just digits)
-    # Look for pattern like "Phường Bình Thạnh" (not "Phường 24")
-    locality_match = re.search(r'(?:phường|xã)\s+([a-zÀ-ÿ\s]+?)(?:,|\s+quận|\s+huyện|hồ chí minh|\s*mới|$)', text_lower)
-    if locality_match:
-        locality_raw = locality_match.group(1).strip()
-        # Only accept if it's not just numbers (avoid "Phường 24")
-        if not locality_raw.replace(" ", "").isdigit():
-            result["locality"] = f"phường {locality_raw.title()}"
+    all_phường_matches = re.findall(r'(?:phường|xã)\s+([^\n,]+?)(?:,|$)', text_lower)
 
-    # If we only found "Phường 24" type, look for named phường nearby in the text
-    if not result["locality"] or re.match(r'phường\s+\d+$', result["locality"].lower()):
-        # Look for locality mentioned in different part (e.g., after "mới")
-        # Like "Phường Bình Thạnh, Hồ Chí Minh mới"
-        alt_match = re.search(r'phường\s+([a-zÀ-ÿ]+)', text_lower)
-        if alt_match:
-            locality_name = alt_match.group(1).strip()
-            if not locality_name.isdigit():
-                result["locality"] = f"phường {locality_name.title()}"
+    if all_phường_matches:
+        # Go through matches and prioritize non-numeric ones
+        for match in all_phường_matches:
+            locality_raw = match.strip().split()[0] if match.strip().split() else ""
+            # Reject if it's just numbers like "24" or "14"
+            if locality_raw and not locality_raw.isdigit():
+                result["locality"] = f"phường {locality_raw.title()}"
+                break
 
-    # Ultimate fallback: if still not found, try to infer from known names
+        # If all matches were numeric, just use the first one (it'll be last resort)
+        if not result["locality"] and all_phường_matches:
+            result["locality"] = f"phường {all_phường_matches[0].split()[0].title()}"
+
+    # Fallback: if still not found, try to infer from known names in text
     if not result["locality"]:
         known_wards = ["phú thuận", "bình thạnh", "tân bình", "tân phú", "bến thành",
-                      "quận 1", "quận 3", "quận 4", "phú nhuận", "gò vấp"]
+                      "quận 1", "quận 3", "quận 4", "phú nhuận", "gò vấp", "bình tân",
+                      "thủ đức", "gò vấp", "tân phú"]
         for ward in known_wards:
             if ward in text_lower:
-                result["locality"] = f"phường {ward.split()[-1].title()}"
+                ward_name = ward.split()[-1].replace("quận", "").strip()
+                result["locality"] = f"phường {ward_name.title()}"
                 break
 
     return result

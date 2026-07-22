@@ -96,8 +96,15 @@ def build_row(meta, geo: GeoLookup, *,
     Applies locality encoding from training data (meta dict).
     Returns (row dict with 80 features, info dict) or (None, None).
     """
-    lat, lon, source = geo.geocode(street, locality)
-    if lat is None:
+    try:
+        lat, lon, source = geo.geocode(street, locality)
+        if lat is None:
+            print(f"⚠️  Geocode returned None for street='{street}', locality='{locality}'")
+            return None, None
+    except Exception as e:
+        print(f"❌ Geocode error for street='{street}', locality='{locality}': {e}")
+        import traceback
+        traceback.print_exc()
         return None, None
 
     dist_km = geo.distance_to_center(lat, lon)
