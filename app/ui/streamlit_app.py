@@ -836,46 +836,137 @@ with tab_feedback:
     st.subheader("📈 Feedback Analytics Dashboard")
     st.caption("Track prediction accuracy and model performance from user feedback.")
 
-    from app.core.feedback import get_feedback_stats
+    from app.core.feedback import (
+        get_feedback_stats, get_feedback_trends, get_feedback_by_segment,
+        get_feedback_distribution, get_best_predictions
+    )
 
-    # Load feedback statistics
+    # Load all feedback data
     stats = get_feedback_stats()
 
     if stats is None or stats.get("feedback_with_prices", 0) == 0:
         st.info("📭 No feedback data collected yet. Start making predictions and submit feedback!")
     else:
-        # Summary metrics
-        col1, col2, col3, col4 = st.columns(4)
+        # ===== SECTION 1: Summary Metrics =====
+        st.markdown("### 📊 Summary Metrics")
+
+        col1, col2, col3, col4, col5 = st.columns(5)
 
         with col1:
             st.metric("Total Feedback", stats["total_feedback"])
-
         with col2:
-            st.metric("With Actual Prices", stats["feedback_with_prices"])
-
+            st.metric("With Prices", stats["feedback_with_prices"])
         with col3:
             mean_error = stats["mean_error_pct"]
             st.metric("Mean Error %", f"{mean_error:.2f}%",
                      delta=f"{'Under' if mean_error < 0 else 'Over'} predicted")
-
         with col4:
-            st.metric("MAPE %", f"{stats['mape_pct']:.2f}%",
-                     delta="Model accuracy vs feedback")
+            st.metric("MAPE %", f"{stats['mape_pct']:.2f}%")
+        with col5:
+            bias = stats["model_bias_pct"]
+            st.metric("Model Bias %", f"{bias:.1f}%",
+                     delta=f"{'Over' if bias > 0 else 'Under'} predicting")
 
         st.divider()
 
-        # Worst predictions (for active learning)
-        st.markdown("#### ⚠️ Worst Predictions (Active Learning Targets)")
-        st.caption("These properties had the largest prediction errors — good candidates for model retraining.")
+        # ===== SECTION 2: Rating Distribution =====
+        st.markdown("### 👍 Rating Distribution")
+        rating_dist = stats.get("rating_distribution", {})
+        if rating_dist:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                accurate = rating_dist.get("Accurate (5)", 0)
+                st.metric("👍 Accurate", accurate)
+            with col2:
+                not_sure = rating_dist.get("Not sure (3)", 0)
+                st.metric("🤷 Not Sure", not_sure)
+            with col3:
+                not_accurate = rating_dist.get("Not accurate (2)", 0)
+                st.metric("👎 Not Accurate", not_accurate)
 
-        worst = stats.get("worst_predictions", [])
-        if worst:
-            worst_df = pd.DataFrame(worst)
-            worst_df["predicted_billion_vnd"] = (worst_df["predicted_price_vnd"] / 1e9).round(2)
-            worst_df["actual_billion_vnd"] = (worst_df["actual_price_vnd"] / 1e9).round(2)
-            worst_df["error_%"] = worst_df["abs_error_pct"].round(2)
+            # Pie chart
+            if sum(rating_dist.values()) > 0:
+                st.bar_chart(pd.Series(rating_dist))
 
-            display_cols = ["street", "locality", "predicted_billion_vnd", "actual_billion_vnd", "error_%"]
-            st.dataframe(worst_df[display_cols], hide_index=True, use_container_width=True)
-        else:
-            st.info("No worst predictions yet — all predictions are accurate!")
+        st.divider()
+
+        # ===== SECTION 3: Trends Over Time =====
+        st.markdown("### 📈 Trends Over Time")
+        trends = get_feedback_trends()
+        if trends:
+            trends_df = pd.DataFrame(trends)
+            if not trends_df.empty:
+                trend_col1, trend_col2 = st.columns(2)
+                with trend_col1:
+                    st.markdown("**Feedback Count per Day**")
+                    st.bar_chart(trends_df.set_index("date")["feedback_count"])
+                with trend_col2:
+                    st.markdown("**Daily MAPE Trend**")
+                    st.line_chart(trends_df.set_index("date")["daily_mape"])
+
+        st.divider()
+
+        # ===== SECTION 4: Segmentation Analysis =====
+        st.markdown("### 🎯 Performance by Segment")
+        segments = get_feedback_by_segment()
+
+        if segments:
+            seg_col1, seg_col2, seg_col3 = st.columns(3)
+
+            # By bucket
+            with seg_col1:
+                st.markdown("**By Price Bucket**")
+                by_bucket = pd.DataFrame(segments["by_bucket"])
+                if not by_bucket.empty:
+                    by_bucket_display = by_bucket[["bucket", "count", "mape"]].round(2)
+                    st.dataframe(by_bucket_display, hide_index=True, use_container_width=True)
+                    st.bar_chart(by_bucket.set_index("bucket")["mape"])
+
+            # By property type
+            with seg_col2:
+                st.markdown("**By Property Type**")
+                by_type = pd.DataFrame(segments["by_type"])
+                if not by_type.empty:
+                    by_type_display = by_type[["property_type", "count", "mape"]].round(2)
+                    st.dataframe(by_type_display, hide_index=True, use_container_width=True)
+
+            # Top localities
+            with seg_col3:
+                st.markdown("**Top 10 Localities**")
+                by_locality = pd.DataFrame(segments["by_locality"])
+                if not by_locality.empty:
+                    by_locality_display = by_locality[["locality", "count", "mape"]].round(2)
+                    st.dataframe(by_locality_display, hide_index=True, use_container_width=True)
+
+        st.divider()
+
+        # ===== SECTION 5: Best vs Worst Predictions =====
+        col_best, col_worst = st.columns(2)
+
+        # Best predictions
+        with col_best:
+            st.markdown("#### ✅ Best Predictions (Most Accurate)")
+            best = get_best_predictions()
+            if best:
+                best_df = pd.DataFrame(best)
+                best_df["predicted_billion_vnd"] = (best_df["predicted_price_vnd"] / 1e9).round(2)
+                best_df["actual_billion_vnd"] = (best_df["actual_price_vnd"] / 1e9).round(2)
+                best_df["error_%"] = best_df["abs_error_pct"].round(2)
+                display_cols = ["street", "locality", "predicted_billion_vnd", "actual_billion_vnd", "error_%"]
+                st.dataframe(best_df[display_cols], hide_index=True, use_container_width=True)
+            else:
+                st.info("No best predictions yet.")
+
+        # Worst predictions
+        with col_worst:
+            st.markdown("#### ⚠️ Worst Predictions (Largest Errors)")
+            worst = stats.get("worst_predictions", [])
+            if worst:
+                worst_df = pd.DataFrame(worst)
+                worst_df["predicted_billion_vnd"] = (worst_df["predicted_price_vnd"] / 1e9).round(2)
+                worst_df["actual_billion_vnd"] = (worst_df["actual_price_vnd"] / 1e9).round(2)
+                worst_df["error_%"] = worst_df["abs_error_pct"].round(2)
+                display_cols = ["street", "locality", "predicted_billion_vnd", "actual_billion_vnd", "error_%"]
+                st.dataframe(worst_df[display_cols], hide_index=True, use_container_width=True)
+            else:
+                st.info("No worst predictions yet — all accurate!")

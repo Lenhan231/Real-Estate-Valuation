@@ -179,12 +179,26 @@ def get_feedback_stats():
                 "abs_error_pct": row["abs_error_pct"],
             })
 
+        # Rating distribution
+        rating_counts = {
+            "Accurate (5)": len(df[df["rating"] == 5]),
+            "Not sure (3)": len(df[df["rating"] == 3]),
+            "Not accurate (2)": len(df[df["rating"] == 2]),
+        }
+
+        # Model bias (over/under prediction)
+        avg_predicted = df["predicted_price_vnd"].mean()
+        avg_actual = df["actual_price_vnd"].mean()
+        model_bias_pct = ((avg_predicted - avg_actual) / avg_actual) * 100
+
         stats = {
             "total_feedback": len(response.data),
             "feedback_with_prices": len(df),
             "mean_error_pct": float(df["error_pct"].mean()),
-            "mae_pct": float(df["abs_error_pct"].mean()),  # Mean Absolute Error %
-            "mape_pct": float(df["abs_error_pct"].mean()),  # MAPE
+            "mae_pct": float(df["abs_error_pct"].mean()),
+            "mape_pct": float(df["abs_error_pct"].mean()),
+            "model_bias_pct": float(model_bias_pct),
+            "rating_distribution": rating_counts,
             "worst_predictions": worst_records,
         }
 
@@ -192,4 +206,211 @@ def get_feedback_stats():
 
     except Exception as e:
         print(f"Error getting feedback stats: {e}")
+        return None
+
+
+def get_feedback_trends():
+    """Get feedback trends over time for dashboard charts."""
+    try:
+        from supabase import create_client
+
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_KEY")
+
+        if not url or not key:
+            return None
+
+        client = create_client(url, key)
+        response = client.table("feedback").select("*").execute()
+
+        if not response.data:
+            return None
+
+        df = pd.DataFrame(response.data)
+        df["created_at"] = pd.to_datetime(df["created_at"])
+        df = df.dropna(subset=["predicted_price_vnd", "actual_price_vnd"])
+
+        if df.empty:
+            return None
+
+        # Calculate daily metrics
+        df["error_pct"] = ((df["actual_price_vnd"] - df["predicted_price_vnd"]) / df["actual_price_vnd"]) * 100
+        df["abs_error_pct"] = df["error_pct"].abs()
+
+        daily_stats = df.groupby(df["created_at"].dt.date).agg({
+            "id": "count",
+            "abs_error_pct": "mean",
+        }).reset_index()
+        daily_stats.columns = ["date", "feedback_count", "daily_mape"]
+
+        return daily_stats.to_dict("records")
+
+    except Exception as e:
+        print(f"Error getting feedback trends: {e}")
+        return None
+
+
+def get_feedback_by_segment():
+    """Get feedback segmented by bucket, property_type, locality."""
+    try:
+        from supabase import create_client
+
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_KEY")
+
+        if not url or not key:
+            return None
+
+        client = create_client(url, key)
+        response = client.table("feedback").select("*").execute()
+
+        if not response.data:
+            return None
+
+        df = pd.DataFrame(response.data)
+        df = df.dropna(subset=["predicted_price_vnd", "actual_price_vnd"])
+
+        if df.empty:
+            return None
+
+        df["abs_error_pct"] = (abs(df["actual_price_vnd"] - df["predicted_price_vnd"]) / df["actual_price_vnd"]) * 100
+
+        # By bucket
+        by_bucket = df.groupby("bucket").agg({
+            "id": "count",
+            "abs_error_pct": "mean",
+            "rating": "mean",
+        }).reset_index()
+        by_bucket.columns = ["bucket", "count", "mape", "avg_rating"]
+
+        # By property type (extracted from features_json)
+        property_types = []
+        for idx, row in df.iterrows():
+            features = row.get("features_json", {}) if isinstance(row.get("features_json"), dict) else {}
+            prop_type = "mặt tiền" if features.get("property_type_nha_mat_tien") == 1.0 else "trong hẻm"
+            property_types.append(prop_type)
+
+        df["property_type"] = property_types
+        by_type = df.groupby("property_type").agg({
+            "id": "count",
+            "abs_error_pct": "mean",
+        }).reset_index()
+        by_type.columns = ["property_type", "count", "mape"]
+
+        # Top 10 localities
+        localities = []
+        for idx, row in df.iterrows():
+            features = row.get("features_json", {}) if isinstance(row.get("features_json"), dict) else {}
+            locality = features.get("locality", "Unknown")
+            localities.append(locality)
+
+        df["locality"] = localities
+        by_locality = df.groupby("locality").agg({
+            "id": "count",
+            "abs_error_pct": "mean",
+        }).reset_index()
+        by_locality.columns = ["locality", "count", "mape"]
+        by_locality = by_locality.nlargest(10, "count")
+
+        return {
+            "by_bucket": by_bucket.to_dict("records"),
+            "by_type": by_type.to_dict("records"),
+            "by_locality": by_locality.to_dict("records"),
+        }
+
+    except Exception as e:
+        print(f"Error getting feedback segments: {e}")
+        return None
+
+
+def get_feedback_distribution():
+    """Get rating and error distribution."""
+    try:
+        from supabase import create_client
+
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_KEY")
+
+        if not url or not key:
+            return None
+
+        client = create_client(url, key)
+        response = client.table("feedback").select("*").execute()
+
+        if not response.data:
+            return None
+
+        df = pd.DataFrame(response.data)
+        df = df.dropna(subset=["predicted_price_vnd", "actual_price_vnd"])
+
+        if df.empty:
+            return None
+
+        df["error_pct"] = ((df["actual_price_vnd"] - df["predicted_price_vnd"]) / df["actual_price_vnd"]) * 100
+        df["abs_error_pct"] = df["error_pct"].abs()
+
+        # Rating distribution
+        rating_dist = df["rating"].value_counts().sort_index().to_dict()
+
+        # Error distribution (binned)
+        error_bins = [0, 5, 10, 15, 20, 50, 100]
+        error_labels = ["0-5%", "5-10%", "10-15%", "15-20%", "20-50%", "50%+"]
+        df["error_bin"] = pd.cut(df["abs_error_pct"], bins=error_bins, labels=error_labels)
+        error_dist = df["error_bin"].value_counts().sort_index().to_dict()
+
+        return {
+            "rating_distribution": rating_dist,
+            "error_distribution": error_dist,
+        }
+
+    except Exception as e:
+        print(f"Error getting feedback distribution: {e}")
+        return None
+
+
+def get_best_predictions():
+    """Get best predictions (opposite of worst)."""
+    try:
+        from supabase import create_client
+
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_KEY")
+
+        if not url or not key:
+            return None
+
+        client = create_client(url, key)
+        response = client.table("feedback").select("*").execute()
+
+        if not response.data:
+            return None
+
+        df = pd.DataFrame(response.data)
+        df = df.dropna(subset=["predicted_price_vnd", "actual_price_vnd"])
+
+        if df.empty:
+            return None
+
+        df["error_vnd"] = df["actual_price_vnd"] - df["predicted_price_vnd"]
+        df["error_pct"] = (df["error_vnd"] / df["actual_price_vnd"]) * 100
+        df["abs_error_pct"] = df["error_pct"].abs()
+
+        # Best predictions (smallest absolute error)
+        best_df = df.nsmallest(5, "abs_error_pct").copy()
+        best_records = []
+        for _, row in best_df.iterrows():
+            features = row.get("features_json", {}) if isinstance(row.get("features_json"), dict) else {}
+            best_records.append({
+                "street": features.get("street", "N/A"),
+                "locality": features.get("locality", "N/A"),
+                "predicted_price_vnd": row["predicted_price_vnd"],
+                "actual_price_vnd": row["actual_price_vnd"],
+                "abs_error_pct": row["abs_error_pct"],
+                "rating": row["rating"],
+            })
+
+        return best_records
+
+    except Exception as e:
+        print(f"Error getting best predictions: {e}")
         return None
