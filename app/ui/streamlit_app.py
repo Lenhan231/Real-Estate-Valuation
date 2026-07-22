@@ -267,7 +267,7 @@ with col_status:
 # ---------------------------------------------------------------------------
 # Tabs
 # ---------------------------------------------------------------------------
-tab_valuation, tab_analysis, tab_feedback = st.tabs(["💰 Định giá", "📊 Phân tích thị trường", "📈 Feedback Analytics"])
+tab_valuation, tab_analysis, tab_feedback, tab_models = st.tabs(["💰 Định giá", "📊 Phân tích thị trường", "📈 Feedback Analytics", "🔧 Model Management"])
 
 # =========================================================================
 # TAB 1: VALUATION
@@ -970,3 +970,142 @@ with tab_feedback:
                 st.dataframe(worst_df[display_cols], hide_index=True, use_container_width=True)
             else:
                 st.info("No worst predictions yet — all accurate!")
+
+# =========================================================================
+# TAB 4: MODEL MANAGEMENT
+# =========================================================================
+with tab_models:
+    st.subheader("🔧 Model Management & Retraining")
+    st.caption("Monitor model drift, retrain models using feedback, and compare performance.")
+
+    col1, col2 = st.columns(2)
+
+    # ===== Drift Detection =====
+    with col1:
+        st.markdown("### 📊 Model Drift Status")
+
+        if st.button("🔍 Check Drift Now", use_container_width=True):
+            with st.spinner("Analyzing model drift..."):
+                try:
+                    response = requests.get(f"{API_BASE_URL}/api/admin/drift-status", timeout=30)
+                    if response.status_code == 200:
+                        drift_data = response.json()
+
+                        if drift_data["status"] == "no_data":
+                            st.warning("⚠️ No feedback data available yet for drift detection")
+                        else:
+                            # Show status
+                            status_color = "🟢" if not drift_data["drift_detected"] else "🔴"
+                            st.metric("Drift Status", status_color + ("No Drift" if not drift_data["drift_detected"] else "DRIFT DETECTED"))
+                            st.metric("Overall MAPE", f"{drift_data['overall_mape']:.2f}%")
+                            st.metric("Samples Analyzed", drift_data['samples'])
+
+                            # By bucket
+                            if drift_data["by_bucket"]:
+                                st.markdown("**By Bucket:**")
+                                for bucket, mape in drift_data["by_bucket"].items():
+                                    st.metric(f"  {bucket.upper()}", f"{mape:.2f}%")
+                    else:
+                        st.error(f"❌ Error: {response.status_code}")
+                except Exception as e:
+                    st.error(f"❌ Connection error: {str(e)}")
+
+    # ===== Model Retraining =====
+    with col2:
+        st.markdown("### 🔄 Retrain Models")
+        st.info("Use feedback data to retrain LightGBM, XGBoost, CatBoost ensemble")
+
+        if st.button("🚀 START RETRAINING", use_container_width=True, type="primary"):
+            with st.spinner("🔄 Retraining models... this may take a minute..."):
+                try:
+                    response = requests.post(f"{API_BASE_URL}/api/admin/retrain", timeout=120)
+
+                    if response.status_code == 200:
+                        result = response.json()["data"]
+
+                        st.success("✅ Retraining completed!")
+
+                        col_samples, col_models = st.columns(2)
+                        with col_samples:
+                            st.metric("Training Samples", result["samples_used"])
+                            st.metric("Validation Samples", result["val_samples"])
+
+                        with col_models:
+                            st.metric("Timestamp", result["timestamp"][:10])
+
+                        # Model performance
+                        st.markdown("**New Model Performance:**")
+                        perf = result["model_performance"]
+                        perf_col1, perf_col2, perf_col3, perf_col4 = st.columns(4)
+
+                        with perf_col1:
+                            st.metric("LightGBM", f"{perf['lightgbm_mape']:.2f}%")
+                        with perf_col2:
+                            st.metric("XGBoost", f"{perf['xgboost_mape']:.2f}%")
+                        with perf_col3:
+                            st.metric("CatBoost", f"{perf['catboost_mape']:.2f}%")
+                        with perf_col4:
+                            st.metric("Ensemble", f"{perf['ensemble_mape']:.2f}%")
+
+                        # Drift analysis
+                        if result.get("drift_analysis"):
+                            st.markdown("**Drift Analysis:**")
+                            drift = result["drift_analysis"]
+                            st.metric("Overall MAPE", f"{drift['overall_mape']:.2f}%")
+
+                    else:
+                        try:
+                            error = response.json()["detail"]
+                        except:
+                            error = response.text
+                        st.error(f"❌ Retraining failed: {error}")
+                except Exception as e:
+                    st.error(f"❌ Connection error: {str(e)}")
+
+    st.divider()
+
+    # ===== Model Comparison =====
+    st.markdown("### 📈 Model Performance Comparison")
+
+    if st.button("📊 Get Performance Metrics", use_container_width=True):
+        with st.spinner("Fetching model metrics..."):
+            try:
+                response = requests.get(f"{API_BASE_URL}/api/admin/model-comparison", timeout=30)
+
+                if response.status_code == 200:
+                    comparison_data = response.json()
+
+                    if comparison_data["status"] == "no_data":
+                        st.warning("⚠️ No feedback data for comparison yet")
+                    else:
+                        metrics = comparison_data["metrics"]
+                        samples = comparison_data["samples_evaluated"]
+
+                        st.info(f"Evaluated on {samples} feedback samples")
+
+                        # Create comparison dataframe
+                        comparison_df = pd.DataFrame([
+                            {
+                                "Model": model,
+                                "MAPE (%)": f"{data['mape']:.2f}",
+                                "MAE (B VND)": f"{data['mae']:.2f}",
+                            }
+                            for model, data in metrics.items()
+                        ])
+
+                        col_table, col_chart = st.columns([1, 1])
+
+                        with col_table:
+                            st.dataframe(comparison_df, hide_index=True, use_container_width=True)
+
+                        with col_chart:
+                            chart_data = pd.DataFrame([
+                                {"Model": model, "MAPE": data["mape"]}
+                                for model, data in metrics.items()
+                            ])
+                            st.bar_chart(chart_data.set_index("Model"))
+
+                else:
+                    st.error(f"❌ Error: {response.status_code}")
+            except Exception as e:
+                st.error(f"❌ Connection error: {str(e)}")

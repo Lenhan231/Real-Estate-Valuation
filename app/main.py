@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import predict, feedback
+from app.routers import predict, feedback, admin
 
 # Create FastAPI app
 app = FastAPI(
@@ -31,6 +31,7 @@ app.add_middleware(
 # Include routers
 app.include_router(predict.router)
 app.include_router(feedback.router)
+app.include_router(admin.router)
 
 
 @app.get("/")
