@@ -79,7 +79,56 @@ app/
 
 ---
 
-## 🚀 How to Use
+## 🚀 Quick Start
+
+**Start both API and Streamlit UI with one command:**
+
+**Windows (PowerShell):**
+```bash
+.\run.ps1
+```
+
+**Linux/Mac (Bash):**
+```bash
+bash run.sh
+```
+
+Then open:
+- 📡 **API Docs**: http://localhost:8000/docs (Swagger)
+- 🎨 **Web UI**: http://localhost:8500 (Streamlit)
+
+**Or run manually (2 terminals):**
+
+Terminal 1:
+```bash
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Terminal 2:
+```bash
+streamlit run app/ui/streamlit_app.py --server.port 8500
+```
+
+---
+
+## 🏗️ Project Architecture
+
+```
+FastAPI Backend (app/main.py)
+    ├── routers/      (API endpoints)
+    ├── services/     (Business logic)
+    ├── schemas/      (Pydantic models)
+    └── core/         (ML models, config)
+         
+Streamlit Frontend (app/ui/streamlit_app.py)
+    └── Calls API endpoints via requests
+```
+
+See [app/README.md](app/README.md) for detailed architecture documentation.
+
+---
+
+## 📚 How to Use
 
 ### 1. Run Exploratory Data Analysis
 ```bash
