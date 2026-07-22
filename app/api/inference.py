@@ -116,8 +116,10 @@ def build_row(meta, geo: GeoLookup, *,
         dist_km = geo.distance_to_center(lat, lon)
         print(f"✅ [BUILD_ROW] Distance calculated: {dist_km:.2f} km")
     except Exception as e:
-        print(f"❌ [BUILD_ROW] Distance error: {e}")
-        return None, None
+        error_msg = f"Distance error: {str(e)}"
+        error_log.append(error_msg)
+        print(f"❌ {error_msg}")
+        return None, "\n".join(error_log)
 
     # POI features (geo lookup - may return None)
     try:
@@ -129,8 +131,10 @@ def build_row(meta, geo: GeoLookup, *,
             v = pois.get(col) if pois else None
             return v  # Pass None, let preprocessing handle imputation
     except Exception as e:
-        print(f"❌ [BUILD_ROW] POI features error: {e}")
-        return None, None
+        error_msg = f"POI features error: {str(e)}"
+        error_log.append(error_msg)
+        print(f"❌ {error_msg}")
+        return None, "\n".join(error_log)
 
     # Locality stats (geo lookup - may return None)
     try:
