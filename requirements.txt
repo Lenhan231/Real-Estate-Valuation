@@ -20,3 +20,4 @@ flask
 fastparquet
 pyarrow
 wandb
+fastapi

@@ -61,11 +61,14 @@ def save_feedback_to_supabase(feedback_data: dict, row_dict: dict = None) -> boo
         print(f"[DEBUG] Response data: {response.data}")
         print(f"[DEBUG] Response error: {response.error if hasattr(response, 'error') else 'None'}")
 
-        if response.data:
-            print(f"✅ Feedback saved to Supabase: ID {response.data[0].get('id')}")
+        # Check if insert was successful - response.data should be a list with the inserted row(s)
+        if response.data and isinstance(response.data, list) and len(response.data) > 0:
+            record_id = response.data[0].get('id')
+            print(f"✅ Feedback saved to Supabase: ID {record_id}")
             return True
         else:
-            error_msg = str(response) if response else "Unknown error"
+            # Check for error attribute (Supabase Python client may return error differently)
+            error_msg = response.error if hasattr(response, 'error') and response.error else str(response)
             print(f"❌ Failed to save feedback: {error_msg}")
             return False
 

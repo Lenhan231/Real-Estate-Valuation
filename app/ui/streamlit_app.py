@@ -3,16 +3,27 @@ Chạy: streamlit run app/app.py
 """
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Setup path from PROJECT_ROOT only (before any module imports)
 # __file__ = app/ui/streamlit_app.py, so go up 3 levels to project root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Load environment variables
+try:
+    load_dotenv(PROJECT_ROOT / ".env")
+    print("[STREAMLIT-STARTUP] ✓ .env loaded successfully")
+except Exception as e:
+    print(f"[STREAMLIT-STARTUP] ✗ Error loading .env: {e}")
+
 import pandas as pd
 import streamlit as st
 import requests
 from requests.exceptions import RequestException
+
+# Verify API connection
+print("[STREAMLIT-STARTUP] Verifying API connection...")
 
 try:
     import pydeck as pdk
@@ -38,11 +49,23 @@ st.set_page_config(
     layout="wide",
 )
 
-# Initialize session state for feedback
+# Initialize session state for valuation & feedback
 if "feedback_status" not in st.session_state:
     st.session_state.feedback_status = None
 if "feedback_message" not in st.session_state:
     st.session_state.feedback_message = None
+if "valuation_result" not in st.session_state:
+    st.session_state.valuation_result = None
+if "show_feedback" not in st.session_state:
+    st.session_state.show_feedback = False
+if "last_price" not in st.session_state:
+    st.session_state.last_price = None
+if "last_info" not in st.session_state:
+    st.session_state.last_info = None
+if "last_row" not in st.session_state:
+    st.session_state.last_row = None
+if "last_xai_data" not in st.session_state:
+    st.session_state.last_xai_data = None
 
 # ---------------------------------------------------------------------------
 # API Helper Functions
@@ -346,6 +369,7 @@ with tab_valuation:
                     if not final_street.strip():
                         st.error("❌ Vui lòng nhập tên đường!")
                     else:
+                        st.session_state.show_feedback = True
                         with st.spinner("Đang định giá..."):
                             # Debug: show what we're using
                             with st.expander("🔧 Debug Info"):
@@ -365,6 +389,11 @@ with tab_valuation:
                                     num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
                                     bin_flags=bin_flags, text_flags=text_flags,
                                 )
+                                # Store in session state for persistent feedback form
+                                st.session_state.last_price = price
+                                st.session_state.last_info = info
+                                st.session_state.last_row = row
+                                st.session_state.last_xai_data = xai_data
                             except Exception as e:
                                 import traceback
                                 error_details = traceback.format_exc()
@@ -477,71 +506,6 @@ with tab_valuation:
                                         st.metric("Spread", f"±{spread_pct/2:.1f}%")
                             else:
                                 st.info("XAI data not available")
-
-                            # Feedback section
-                            st.divider()
-                            st.markdown("### 📝 Feedback & Learning")
-
-                            with st.form(key=f"feedback_form_{hash(str(row))}"):
-                                feedback_col1, feedback_col2 = st.columns(2)
-                                with feedback_col1:
-                                    st.markdown("**Rate this prediction:**")
-                                    rating = st.radio("Is this price accurate?", ["👍 Accurate", "👎 Not accurate", "🤷 Not sure"], horizontal=True, key=f"rating_{hash(str(row))}")
-
-                                with feedback_col2:
-                                    st.markdown("**Actual price (if known):**")
-                                    actual_price = st.number_input("Thực tế giá là bao nhiêu (tỷ VND)?",
-                                                                  min_value=0.0, step=0.5, key=f"actual_{hash(str(row))}")
-
-                                submitted = st.form_submit_button("📤 Submit Feedback")
-
-                            if submitted:
-                                try:
-                                    # Convert row dict to ensure all values are JSON-serializable
-                                    features_dict = {k: float(v) if isinstance(v, (int, float)) else str(v) for k, v in row.items()} if row else {}
-
-                                    feedback_payload = {
-                                        "predicted_price_vnd": float(price),
-                                        "actual_price_vnd": float(actual_price * 1e9) if actual_price > 0 else None,
-                                        "rating": rating,
-                                        "bucket": xai_data.get("bucket", "mid") if xai_data else "mid",
-                                        "confidence": xai_data.get("confidence") if xai_data else 0,
-                                        "feature_version": FEATURE_VERSION,
-                                        "features_json": features_dict,
-                                        "timestamp": pd.Timestamp.now().isoformat(),
-                                    }
-
-                                    print(f"[STREAMLIT-FEEDBACK] Sending: {len(features_dict)} features")
-
-                                    # Call API endpoint
-                                    response = requests.post(
-                                        f"{API_BASE_URL}/api/feedback",
-                                        json=feedback_payload,
-                                        timeout=API_TIMEOUT
-                                    )
-
-                                    print(f"[STREAMLIT-FEEDBACK] Response: {response.status_code}")
-                                    print(f"[STREAMLIT-FEEDBACK] Response text: {response.text}")
-
-                                    # Check for success (200 or 201)
-                                    if response.status_code in [200, 201]:
-                                        st.success("✅ Feedback saved to Supabase!")
-                                        print("[STREAMLIT-FEEDBACK] Success message shown")
-                                        if actual_price > 0:
-                                            error_pct = abs((actual_price * 1e9 - price) / (actual_price * 1e9)) * 100
-                                            st.metric("Error", f"{error_pct:.1f}%")
-                                    else:
-                                        try:
-                                            error_detail = response.json().get('detail', response.text)
-                                        except:
-                                            error_detail = response.text
-                                        print(f"[STREAMLIT-FEEDBACK] Error: {error_detail}")
-                                        st.error(f"❌ Failed ({response.status_code}): {error_detail}")
-                                except Exception as e:
-                                    print(f"[STREAMLIT-FEEDBACK] Exception: {e}")
-                                    import traceback
-                                    traceback.print_exc()
-                                    st.error(f"❌ Error: {str(e)}")
             else:
                 st.warning("Không tìm thấy phường trong địa chỉ. Thử dùng Form chi tiết!")
 
@@ -600,6 +564,7 @@ with tab_valuation:
 
         st.divider()
         if st.button("💰 Định giá", type="primary", use_container_width=True):
+            st.session_state.show_feedback = True
             with st.spinner("Đang gọi API để dự đoán giá..."):
                 price, info, row, xai_data = do_valuation(
                     street=street, locality=locality,
@@ -608,6 +573,11 @@ with tab_valuation:
                     num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
                     bin_flags=bin_flags, text_flags=text_flags,
                 )
+                # Store in session state so it persists after form submission
+                st.session_state.last_price = price
+                st.session_state.last_info = info
+                st.session_state.last_row = row
+                st.session_state.last_xai_data = xai_data
 
             if price is None:
                 st.error("Không xác định được vị trí — kiểm tra lại tên đường / phường.")
@@ -702,70 +672,79 @@ with tab_valuation:
                 else:
                     st.info("XAI data not available")
 
-                # Feedback section
-                st.divider()
-                st.markdown("### 📝 Feedback & Learning")
+    # Show persistent feedback form for BOTH modes (after form submission rerun)
+    if st.session_state.show_feedback and st.session_state.last_price is not None:
+        price = st.session_state.last_price
+        info = st.session_state.last_info
+        row = st.session_state.last_row
+        xai_data = st.session_state.last_xai_data
 
-                with st.form(key=f"feedback_form_detail_{street}{locality}"):
-                    feedback_col1, feedback_col2 = st.columns(2)
-                    with feedback_col1:
-                        st.markdown("**Rate this prediction:**")
-                        rating = st.radio("Is this price accurate?", ["👍 Accurate", "👎 Not accurate", "🤷 Not sure"], horizontal=True, key=f"rating_form_{street}{locality}")
+        st.divider()
+        st.markdown("### 📝 Feedback & Learning (Persistent)")
 
-                    with feedback_col2:
-                        st.markdown("**Actual price (if known):**")
-                        actual_price = st.number_input("Thực tế giá là bao nhiêu (tỷ VND)?",
-                                                      min_value=0.0, step=0.5, key=f"actual_form_{street}{locality}")
+        with st.form(key="feedback_form_persistent"):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Đánh giá dự đoán:**")
+                rating = st.radio("Dự đoán này chính xác không?",
+                                ["👍 Accurate", "👎 Not accurate", "🤷 Not sure"],
+                                horizontal=True, key="rating_persistent")
+            with col2:
+                st.markdown("**Giá thực tế (nếu biết):**")
+                actual_price = st.number_input("Giá thực tế (tỷ VND)?", min_value=0.0, step=0.1, key="actual_persistent")
 
-                    submitted = st.form_submit_button("📤 Submit Feedback")
+                submitted = st.form_submit_button("📤 Submit Feedback", use_container_width=True)
 
-                if submitted:
+        if submitted:
+            print("\n" + "="*80)
+            print(f"✅ FEEDBACK PERSISTENT FORM SUBMITTED! Rating={rating}, ActualPrice={actual_price}B")
+            print("="*80)
+            st.info("⏳ Đang gửi feedback...")
+
+            try:
+                features_dict = {k: float(v) if isinstance(v, (int, float)) else str(v) for k, v in row.items()} if row else {}
+
+                feedback_payload = {
+                    "predicted_price_vnd": float(price),
+                    "actual_price_vnd": float(actual_price * 1e9) if actual_price > 0 else None,
+                    "rating": rating,
+                    "bucket": xai_data.get("bucket", "mid") if xai_data else "mid",
+                    "confidence": xai_data.get("confidence") if xai_data else 0,
+                    "feature_version": FEATURE_VERSION,
+                    "features_json": features_dict,
+                    "timestamp": pd.Timestamp.now().isoformat(),
+                }
+
+                print(f"[PERSISTENT-FEEDBACK] Sending: {len(features_dict)} features")
+
+                response = requests.post(
+                    f"{API_BASE_URL}/api/feedback",
+                    json=feedback_payload,
+                    timeout=API_TIMEOUT
+                )
+
+                print(f"[PERSISTENT-FEEDBACK] Response status: {response.status_code}")
+                print(f"[PERSISTENT-FEEDBACK] Response text: {response.text}")
+
+                if response.status_code in [200, 201]:
+                    st.success("✅ Feedback saved to Supabase!")
+                    print("[PERSISTENT-FEEDBACK] Success!")
+                    st.session_state.show_feedback = False
+                    if actual_price > 0:
+                        error_pct = abs((actual_price * 1e9 - price) / (actual_price * 1e9)) * 100
+                        st.metric("Sai số", f"{error_pct:.1f}%")
+                else:
                     try:
-                        # Convert row dict to ensure all values are JSON-serializable
-                        features_dict = {k: float(v) if isinstance(v, (int, float)) else str(v) for k, v in row.items()} if row else {}
-
-                        feedback_payload = {
-                            "predicted_price_vnd": float(price),
-                            "actual_price_vnd": float(actual_price * 1e9) if actual_price > 0 else None,
-                            "rating": rating,
-                            "bucket": xai_data.get("bucket", "mid") if xai_data else "mid",
-                            "confidence": xai_data.get("confidence") if xai_data else 0,
-                            "feature_version": FEATURE_VERSION,
-                            "features_json": features_dict,
-                            "timestamp": pd.Timestamp.now().isoformat(),
-                        }
-
-                        print(f"[STREAMLIT-FEEDBACK-FORM] Sending: {len(features_dict)} features")
-
-                        # Call API endpoint
-                        response = requests.post(
-                            f"{API_BASE_URL}/api/feedback",
-                            json=feedback_payload,
-                            timeout=API_TIMEOUT
-                        )
-
-                        print(f"[STREAMLIT-FEEDBACK-FORM] Response: {response.status_code}")
-                        print(f"[STREAMLIT-FEEDBACK-FORM] Response text: {response.text}")
-
-                        # Check for success (200 or 201)
-                        if response.status_code in [200, 201]:
-                            st.success("✅ Feedback saved to Supabase!")
-                            print("[STREAMLIT-FEEDBACK-FORM] Success message shown")
-                            if actual_price > 0:
-                                error_pct = abs((actual_price * 1e9 - price) / (actual_price * 1e9)) * 100
-                                st.metric("Error", f"{error_pct:.1f}%")
-                        else:
-                            try:
-                                error_detail = response.json().get('detail', response.text)
-                            except:
-                                error_detail = response.text
-                            print(f"[STREAMLIT-FEEDBACK-FORM] Error: {error_detail}")
-                            st.error(f"❌ Failed ({response.status_code}): {error_detail}")
-                    except Exception as e:
-                        print(f"[STREAMLIT-FEEDBACK-FORM] Exception: {e}")
-                        import traceback
-                        traceback.print_exc()
-                        st.error(f"❌ Error: {str(e)}")
+                        error_detail = response.json().get('detail', response.text)
+                    except:
+                        error_detail = response.text
+                    print(f"[PERSISTENT-FEEDBACK] Error: {error_detail}")
+                    st.error(f"❌ Failed ({response.status_code}): {error_detail}")
+            except Exception as e:
+                print(f"[PERSISTENT-FEEDBACK] Exception: {e}")
+                import traceback
+                traceback.print_exc()
+                st.error(f"❌ Error: {str(e)}")
 
 # =========================================================================
 # TAB 2: MARKET ANALYSIS

@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api", tags=["feedback"])
 async def submit_user_feedback(request: FeedbackRequest):
     """Submit user feedback for model improvement."""
     try:
-        print(f"[FEEDBACK] Received feedback: rating={request.rating}, bucket={request.bucket}")
+        print(f"[FEEDBACK] Received feedback: rating={request.rating}, bucket={request.bucket}, actual_price={request.actual_price_vnd}")
 
         success = submit_feedback(
             predicted_price_vnd=request.predicted_price_vnd,
@@ -29,11 +29,12 @@ async def submit_user_feedback(request: FeedbackRequest):
         if success:
             return FeedbackResponse(
                 success=True,
-                message="✅ Feedback saved to Supabase",
-                id=1,
+                message="✅ Feedback saved to Supabase successfully",
+                id=None,
             )
         else:
-            raise HTTPException(status_code=400, detail="Failed to save feedback to Supabase")
+            print(f"[FEEDBACK] Failed to save feedback")
+            raise HTTPException(status_code=500, detail="Failed to save feedback to Supabase - check logs")
 
     except HTTPException as e:
         print(f"[FEEDBACK] HTTP Exception: {e.detail}")
