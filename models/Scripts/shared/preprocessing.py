@@ -269,6 +269,8 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
     # Rationale: Polynomial features (area², distance²) capture non-linearity → better MAPE
     # Result: 64 base + 14 polynomial/interaction = ~78 features
     # Performance: 13.10% MAPE, 0.9200 R² (BEST)
+    # Note: v2.7 test removed 24 "low-impact" features → MAPE worsened to 13.20%
+    #       Decision: Those features provide subtle signal in ensemble; keep all 78
 
     low_impact_features = [
         'kitchen_bin_False', 'dining_room_bin_True', 'perimeter_m_missing',

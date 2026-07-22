@@ -1,12 +1,13 @@
 """
 PRODUCTION MODEL: Price-Only Ensemble (3 Price Tiers × 3 Models)
 =========================================================================
-Final production-ready training script.
+Final production-ready training script (v2.6 - LOCKED).
 - Strategy: Price segmentation only (Low/Mid/High)
 - Models: LightGBM + XGBoost + CatBoost per tier
-- Performance: 13.25% MAPE, 0.9164 R²
-- Training time: ~55 seconds
-- Complexity: Simple, maintainable, fast
+- Features: 78 (64 base + 14 polynomial/interaction)
+- Performance: 13.10% MAPE, 0.9200 R² (original hyperparameters)
+- Training time: ~127 seconds (efficient)
+- Status: Production LOCKED - Optimization ended (v2.7 test failed)
 """
 
 import argparse
@@ -26,6 +27,13 @@ from xgboost import XGBRegressor
 import joblib
 import time
 
+# W&B for experiment tracking (optional)
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+
 from shared import preprocess, add_locality_features, mean_absolute_percentage_error
 from shared import plot_feature_importance, plot_pred_vs_actual
 
@@ -44,20 +52,22 @@ def train_ensemble_3models(X_train, y_train, X_test, y_test, price_tier):
     models_dict = {}
     val_errors = {}
 
-    # Hyperparameters optimized via Phase 1 tuning (2026-07-21)
+    # Hyperparameters - Original v2.6 (stable, well-tuned, no per-tier variation)
+    # Tested: Per-tier tuning, weighted loss → both hurt performance
+    # Decision: Keep unified hyperparameters (13.10% MAPE optimal)
     lgb_params = {
-        "n_estimators": 1000, "max_depth": 8, "learning_rate": 0.05,  # ↑ LR from 0.03
+        "n_estimators": 1000, "max_depth": 8, "learning_rate": 0.05,
         "subsample": 0.8, "colsample_bytree": 0.8, "reg_alpha": 0.1,
         "reg_lambda": 1.0, "random_state": 42, "n_jobs": -1, "verbose": -1,
     }
 
     xgb_params = {
-        "n_estimators": 1500, "max_depth": 8, "learning_rate": 0.03,  # ↑ N_est from 1000
+        "n_estimators": 1500, "max_depth": 8, "learning_rate": 0.03,
         "subsample": 0.8, "colsample_bytree": 0.8, "random_state": 42, "n_jobs": -1,
     }
 
     cb_params = {
-        "iterations": 1500, "depth": 8, "learning_rate": 0.05, "loss_function": "RMSE",  # ↑ All three
+        "iterations": 1500, "depth": 8, "learning_rate": 0.05, "loss_function": "RMSE",
         "verbose": 0, "random_seed": 42, "early_stopping_rounds": 50,
     }
 
@@ -126,7 +136,21 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, default="production", help="Dataset name")
     parser.add_argument("--data-source", type=str, choices=["supabase", "local"], default="supabase")
+    parser.add_argument("--wandb", action="store_true", help="Log to Weights & Biases")
     args = parser.parse_args()
+
+    # Initialize W&B (optional, for experiment tracking)
+    if args.wandb and WANDB_AVAILABLE:
+        wandb.init(
+            project="real-estate-valuation",
+            name="v2.6-production",
+            config={
+                "model_type": "3-tier ensemble",
+                "features": 78,
+                "tiers": ["low (0-5B)", "mid (5-20B)", "high (20B+)"],
+                "algorithms": ["LightGBM", "XGBoost", "CatBoost"],
+            }
+        )
 
     print("=" * 70)
     print("PRODUCTION MODEL: Price-Only Ensemble (3 Tiers × 3 Models)")
@@ -247,6 +271,16 @@ def main():
     print(f"Global MAE:   {mae/1e9:.2f} Billion VND")
     print(f"Global RMSE:  {rmse/1e9:.2f} Billion VND")
     print("=" * 70)
+
+    # Log to W&B
+    if args.wandb and WANDB_AVAILABLE:
+        wandb.log({
+            "MAPE": mape,
+            "R2": r2,
+            "MAE_billion_vnd": mae/1e9,
+            "RMSE_billion_vnd": rmse/1e9,
+            "samples_test": len(global_y_test),
+        })
 
     PLOT_DIR.mkdir(parents=True, exist_ok=True)
 
