@@ -4,6 +4,19 @@
 Write-Host "🚀 Starting Real Estate Valuation App..." -ForegroundColor Green
 Write-Host ""
 
+# Load environment variables from .env file
+if (Test-Path ".env") {
+    Write-Host "📋 Loading .env file..." -ForegroundColor Cyan
+    Get-Content ".env" | ForEach-Object {
+        if ($_ -match "^\s*([^=]+)=(.*)$") {
+            $name = $matches[1].Trim()
+            $value = $matches[2].Trim()
+            [Environment]::SetEnvironmentVariable($name, $value)
+            Write-Host "  ✓ $name" -ForegroundColor Gray
+        }
+    }
+}
+
 # Check Python
 python --version | Out-Null
 if ($LASTEXITCODE -ne 0) {

@@ -6,6 +6,12 @@
 echo "🚀 Starting Real Estate Valuation App..."
 echo ""
 
+# Load environment variables from .env file
+if [ -f ".env" ]; then
+    echo "📋 Loading .env file..."
+    export $(cat .env | grep -v '^#' | xargs)
+fi
+
 # Check Python
 if ! command -v python &> /dev/null; then
     echo "❌ Python not found"
