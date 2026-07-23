@@ -311,7 +311,7 @@ Routine team meetings will use Meet, Discord and Zalo to ensure alignment on res
 
 ### **2.1 WBS**
 
-**Data Acquisition:** Approximately 11,000 raw listing links were initially collected. After detail extraction, deduplication, cleaning, geospatial matching, and model-specific filtering, 10,421 records were used for model training and evaluation.
+**Data Acquisition:** 12,832 raw listing records were collected from Realtor.com via automated scraping. After UI validation and deduplication, 12,794 records were retained in the Supabase database. Following preprocessing pipeline (6 phases: outlier detection → temporal engineering → numeric imputation → dimensional features → amenity aggregation → text extraction), a final set of 10,421 records met quality thresholds (price bounds 2.0B-50.0B VND, area bounds 15-500m²) and were used for model training/evaluation. The 38-record gap (12,794 → 10,421) resulted from NULL values in critical structural columns during numeric imputation phase.
 
 **Preprocessing & Feature Engineering:** Performed data cleaning, normalization, missing value handling, and outlier filtering. Engineered spatial and structural features such as distance to city center, property dimensions, population density, and binary amenity indicators to support predictive modeling.
 
@@ -1685,20 +1685,20 @@ While the project achieved a highly accurate and deployable system, several prac
 
 ### **3.1 For Further Research**
 
-* **Reintegrate TabPFN into the segmented architecture.** Since TabPFN outperformed XGBoost on every tested split (Table 11), a natural next step is training TabPFN per-bucket within the 9-model (3-tier × 3-algorithm) router.  
-* **Expand longitudinal data coverage.** Collecting listing dates over multiple scraping cycles would allow the system to model actual market trend analysis.  
-* **Tighten leakage safeguards on target-encoded features.** Formalize GroupKFold-by-locality (or per-listing spatial blocking) as a mandatory step before computing any target-encoded feature such as locality\_cv\_target\_median, and re-validate the final 9-model (3-tier × 3-algorithm) model's reported R²/MAPE under this stricter protocol to confirm the numbers are leakage-free.
+* **Improve high-price-tier accuracy.** The high-price segment (>20B VND) achieves MAPE of 16.45%, significantly higher than low-tier (10.48%) and mid-tier (12.80%). Root causes include higher intrinsic heterogeneity, sparse samples, and reliance on engineered features (area, POI) rather than missing structural attributes (materials, age, condition). Recommendation: acquire additional high-end property data, engineer custom amenity indices for luxury markets, or explore alternative architectures (neural networks, SHAP-based local models) for this segment.
+* **Expand longitudinal and geographic coverage.** Current dataset is HCMC-only with limited date-range variation. Collecting property listings over 12+ months and from Hanoi/Da Nang would enable true market-trend forecasting and improve geographic generalization. This directly supports the long-term vision of a national real estate valuation platform.
+* **Formalize leakage-safeguard protocol.** Target-encoded features (locality\_cv\_target\_median, property\_type\_cv\_target\_median) require per-locality GroupKFold validation during retraining. Recommend documenting and automating this in the training pipeline (models/scripts/train_ensemble.py) to ensure reproducibility.
 
 ### **3.2 For System Improvements**
 
-* **Consolidate model architectures into a single documented pipeline.** Clearly archive the earlier ensemble-plus-meta-learner and legacy Flask/dashboard workflows, and designate the final 9-model (3-tier × 3-algorithm) Streamlit prototype as the primary reference architecture.  
-* **Grow and diversify the dataset.** Extend scraping to additional portals and other major cities (Hanoi, Da Nang) to improve generalization and give the mid/high-price buckets enough samples to train reliably.  
-* **Add automated retraining/monitoring.** Given the acknowledged risk of market volatility (Section I.6), schedule periodic retraining and track live prediction error against newly scraped listings to detect drift early.
+* **Implement SHAP for local explainability.** Current system provides top-10 feature importance, but lacks per-prediction explanation (waterfall plots, force plots). SHAP integration would make predictions actionable for brokers and buyers: "This price is high because area is 100m² (+1.5B VND) and proximity to District 1 (+0.8B VND)."  
+* **Add automated model retraining and monitoring.** Schedule monthly retraining on newly scraped data, maintain in-memory performance metrics (MAPE, R² by tier), and generate drift alerts if any tier's MAPE drifts >2 percentage points. Integrate with W&B for experiment versioning.  
+* **Expand data collection pipeline.** Current scraping is reactive; implement a scheduled daily/weekly harvest from multiple real estate portals (Realtor.com, BatDongSan, etc.) to diversify source bias and increase mid/high-tier sample size.
 
 ### **3.3 For Practical Applications**
 
-* The existing Streamlit web app (app/app.py) and BI dashboard (app/dashboard.py) are well positioned to be piloted with real estate brokers or buyers for feedback on prediction usability and interpretability.  
-* The segmented-router design is directly reusable as a lightweight backend for property-listing platforms or bank/mortgage appraisal tools that need fast, explainable, segment-aware valuations rather than a single opaque global score.
+* **Pilot with real estate stakeholders.** Deploy the Streamlit web app to brokers, appraisers, and bank loan teams for feedback on usability, fairness, and prediction acceptance. This could inform future API-first architecture or mobile app development.  
+* **Package as a lightweight valuation microservice.** The current 9-model ensemble and price-tier router can be containerized (Docker) and deployed as an inference API for integration with property-listing platforms, CRM systems, or bank appraisal workflows. This positions the work for commercial deployment.
 
 # 
 
