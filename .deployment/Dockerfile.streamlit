@@ -27,5 +27,5 @@ COPY . .
 # Expose Streamlit port
 EXPOSE 8501
 
-# Run Streamlit with environment variable support
-CMD sh -c 'streamlit run app/ui/streamlit_app.py --server.port=${PORT:-8501} --server.address=0.0.0.0 --server.headless=true --logger.level=debug'
+# Run minimal test app first to verify Streamlit works
+CMD sh -c 'streamlit run app/ui/test_app.py --server.port=${PORT:-8501} --server.address=0.0.0.0 --server.headless=true --logger.level=debug'
