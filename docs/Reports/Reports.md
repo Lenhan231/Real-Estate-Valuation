@@ -103,9 +103,9 @@
 
 [3\. Limitations and Future Work	36](#3.-limitations-and-future-work)
 
-[**VIII. References	38**](#viii.-references)
+[**VIII. Appendices	39**](#viii.-appendices)
 
-[**IX. Appendices	39**](#ix.-appendices)
+[**IX. References	48**](#ix.-references)
 
 [Appendix A — Core Processed Dataset Fields	39](#appendix-a-—-core-processed-dataset-fields)
 
@@ -179,7 +179,7 @@
 
 *Figure 1\. End-to-End Data Pipeline Architecture*
 
-*Figure 2\. Top 20 LightGBM Feature Importances for the Mid-Price Alley-House Bucket*
+*Figure 2\. Top 20 LightGBM Feature Importances for the Mid-Price Tier*
 
 # **I. Project Introduction** {#i.-project-introduction}
 
@@ -308,7 +308,7 @@ Routine team meetings will use Meet, Discord and Zalo to ensure alignment on res
 
 ### **2.1 WBS**
 
-**Data Acquisition:** Approximately 11,000 raw listing links were initially collected. After detail extraction, deduplication, cleaning, geospatial matching, and model-specific filtering, 3,202 records were retained for the final evaluation.
+**Data Acquisition:** Approximately 11,000 raw listing links were initially collected. After detail extraction, deduplication, cleaning, geospatial matching, and model-specific filtering, 10,421 records were used for model training and evaluation.
 
 **Preprocessing & Feature Engineering:** Performed data cleaning, normalization, missing value handling, and outlier filtering. Engineered spatial and structural features such as distance to city center, property dimensions, population density, and binary amenity indicators to support predictive modeling.
 
@@ -515,7 +515,7 @@ Mục tiêu trọng tâm của dự án là phát triển một hệ thống đ�
 
 ### **2.1 Data collection**
 
-Approximately 11,000 raw listing links were initially collected. After detail extraction, deduplication, cleaning, geospatial matching, and model-specific filtering, 3,202 records were retained for the final evaluation.
+Approximately 11,000 raw listing links were initially collected. After detail extraction, deduplication, cleaning, geospatial matching, and model-specific filtering, 10,421 records were used for model training and evaluation.
 
 #### ***Two-Stage Data Collection Pipeline***
 
@@ -755,7 +755,7 @@ Model performance is assessed on the held-out 20% test set using the following m
 
 ### **5.1 Evaluation Protocol and Interpretation**
 
-The reported global MAPE of 13.47% represents bucket-aware evaluation conditional on correct price-tier assignment. During evaluation, test samples are assigned to the Low, Mid, or High price tiers using their observed target prices. Therefore, the reported result measures prediction performance within known market segments and should not be interpreted as the end-to-end performance of an automatic price-tier routing system. In the current Streamlit application, the price tier is selected by the user.
+The reported global MAPE of 13.10% represents bucket-aware evaluation conditional on correct price-tier assignment. During evaluation, test samples are assigned to the Low, Mid, or High price tiers using their observed target prices. Therefore, the reported result measures prediction performance within known market segments and should not be interpreted as the end-to-end performance of an automatic price-tier routing system. In the current Streamlit application, the price tier is selected by the user.
 
 ## **6\. Implementation Plan** {#6.-implementation-plan}
 
@@ -785,7 +785,7 @@ main.py orchestrates the end-to-end ETL flow:
 
 * scripts/train\_ensemble.py: 6-Bucket LightGBM \+ CatBoost ensemble training with W\&B logging. Produces 12 .pkl model artefacts under models/.
 
-* scripts/train\_tabpfn.py: Historical TabPFN segmented experiment using its own preprocessing and routing configuration. Its results are reported separately and are not directly comparable with the final six-bucket LightGBM-CatBoost evaluation.
+* scripts/train\_tabpfn.py: Historical TabPFN segmented experiment using its own preprocessing and routing configuration. Its results are reported separately and are not directly comparable with the final 9-model (3-tier × 3-algorithm) ensemble evaluation.
 
 ### **6.4 Inference and Serving Layer**
 
@@ -813,7 +813,7 @@ The locality\_price\_median encoding is computed strictly from the training set 
 
 ### **7.3 Model Transparency and Limitations**
 
-* The model is presented as a reference price estimate, not a legally binding appraisal. The application explicitly communicates an indicative MAPE-based error range (currently ±13.47%) alongside each prediction. This range is not a statistically calibrated confidence interval.
+* The model is presented as a reference price estimate, not a legally binding appraisal. The application explicitly communicates an indicative MAPE-based error range (currently ±13.10%) alongside each prediction. This range is not a statistically calibrated confidence interval.
 
 * A Top 20 LightGBM feature-importance plot is generated for a representative mid-price alley-house bucket and logged to Weights & Biases.
 
@@ -989,7 +989,7 @@ The geocoding and POI lookup pipeline uses a **two-tier cache strategy**:
 - Version history documented in LATEST_UPDATE.md
 
 **Version tracking (sample):**
-- v2.6: LightGBM + CatBoost ensemble (MAPE 13.47%, R² 0.9138) — Current production
+- v2.6: LightGBM + CatBoost ensemble (MAPE 13.10%, R² 0.9200) — Current production
 - v2.5: Historical TabPFN experiments (MAPE 24.22%) — Archived
 - v2.0-v2.4: Earlier XGBoost/ensemble iterations — Archived
 
@@ -1060,11 +1060,11 @@ Despite TabPFN's isolated accuracy, the final prototype architecture utilized a 
 
 ### **1.3 Feature Importance and Model Interpretability**
 
-To improve model transparency, global feature-importance analysis was conducted on a representative tree-based model within the six-bucket ensemble. The relative contribution of each feature to the model's predictive accuracy is visualized in the figure below.
+To improve model transparency, global feature-importance analysis was conducted on a representative tree-based model within the 9-model ensemble. The relative contribution of each feature to the model's predictive accuracy is visualized in the figure below.
 
 **![][image3]**
 
-*Figure 2\. Top 20 LightGBM Feature Importances for the Mid-Price Alley-House Bucket*
+*Figure 2\. Top 20 LightGBM Feature Importances for the Mid-Price Tier*
 
 **Interpretation**:
 
@@ -1088,15 +1088,15 @@ The POI features therefore act as proxy indicators of neighbourhood accessibilit
 
 This hypothesis received substantial support from the experimental results. The Vietnamese real estate market is highly heterogeneous, and historical experiments showed that frontage-house predictions were particularly sensitive to extreme luxury listings. In one earlier frontage-specific experiment, tighter IQR-based outlier filtering reduced MAPE from approximately 107% to 26.6%.
 
-The final approach divided the data into six segments based on property type and price tier and trained separate LightGBM-CatBoost ensembles for each segment. Under the bucket-aware evaluation protocol, the final architecture achieved an R² of 0.9138 and a global MAPE of 13.47%, while the low-price segment achieved a MAPE of 10.48%, approaching the target of below 10%.
+The final approach divided the data into three price tiers and trained separate 3-algorithm ensembles (LightGBM, XGBoost, CatBoost) for each segment. Under the bucket-aware evaluation protocol, the final architecture achieved an R² of 0.9200 and a global MAPE of 13.10%, while the low-price segment achieved a MAPE of 10.48%, approaching the target of below 10%.
 
-Because the historical frontage experiment and the final six-bucket evaluation used different model configurations and evaluation settings, the values of 107% and 13.47% should not be interpreted as a direct before-and-after comparison. Nevertheless, the findings suggest that market segmentation and domain-aware outlier handling were important contributors to improved predictive performance.
+Because the historical frontage experiment and the final six-bucket evaluation used different model configurations and evaluation settings, the values of 107% and 13.10% should not be interpreted as a direct before-and-after comparison. Nevertheless, the findings suggest that market segmentation and domain-aware outlier handling were important contributors to improved predictive performance.
 
 **RQ3: Historical TabPFN-XGBoost Comparison and Final Model Selection**
 
-Historical experiments showed that TabPFN achieved lower MAPE than XGBoost across the evaluated property-type splits. However, these experiments were conducted using an earlier preprocessing and segmentation configuration and are therefore not directly comparable with the final six-bucket LightGBM-CatBoost result.
+Historical experiments showed that TabPFN achieved lower MAPE than XGBoost across the evaluated property-type splits. However, these experiments were conducted using an earlier preprocessing and segmentation configuration and are therefore not directly comparable with the final 9-model (3-tier × 3-algorithm) ensemble result.
 
-The LightGBM-CatBoost ensemble was selected for the final application because it offered lower inference cost, straightforward model serialization, and easier integration with the user-assisted six-bucket routing architecture. Therefore, the results should not be interpreted as evidence that the final ensemble was more accurate than TabPFN under identical experimental conditions. Instead, they illustrate the trade-off between historical benchmark accuracy and deployment practicality.
+The LightGBM-CatBoost ensemble was selected for the final application because it offered lower inference cost, straightforward model serialization, and easier integration with the 3-tier price-based routing architecture. Therefore, the results should not be interpreted as evidence that the final ensemble was more accurate than TabPFN under identical experimental conditions. Instead, they illustrate the trade-off between historical benchmark accuracy and deployment practicality.
 
 ### **2.2 Alignment with Related Work**
 
@@ -1108,7 +1108,7 @@ The LightGBM-CatBoost ensemble was selected for the final application because it
 
 While the project achieved a highly accurate and deployable system, several practical limitations were encountered:
 
-1. **Small, Geographically Narrow Dataset**: The final cleaned dataset contains only 3,202 listings concentrated exclusively in Ho Chi Minh City. This limits the system's ability to generalize to other major cities (like Hanoi or Da Nang) and thins the sample sizes in the high-price tier buckets.  
+1. **Small, Geographically Narrow Dataset**: The final cleaned dataset contains only 10,421 properties concentrated exclusively in Ho Chi Minh City. This limits the system's ability to generalize to other major cities (like Hanoi or Da Nang) and thins the sample sizes in the high-price tier buckets.  
 2. **Web Scraping Fragility**: As anticipated in the risk register, anti-bot measures and CAPTCHAs on the source website constrained the volume of data that could be collected in a given run, directly limiting the final dataset size.  
 3. **Limited longitudinal coverage**: Listing dates are available, but the collected observation period is not sufficiently long and consistent to support reliable longitudinal market-trend forecasting. Consequently, the model excels at cross-sectional valuation but cannot yet perform genuine longitudinal market trend forecasting.
 
@@ -1151,7 +1151,7 @@ Overall, the project delivered a working end-to-end pipeline (scraping → geosp
 
 ### **2.1 Contribution**
 
-The project provides evidence that market segmentation and domain-aware outlier handling can substantially improve valuation performance on heterogeneous Vietnamese real estate data. Historical frontage-specific experiments showed an improvement from approximately 107% to 26.6% MAPE, while the separately evaluated final six-bucket ensemble achieved a global MAPE of 13.47%. The project also contributes a reusable geospatial feature pipeline that supplements, but does not fully replace, missing structural information in scraped property listings.
+The project provides evidence that market segmentation and domain-aware outlier handling can substantially improve valuation performance on heterogeneous Vietnamese real estate data. Historical frontage-specific experiments showed an improvement from approximately 107% to 26.6% MAPE, while the separately evaluated final 9-model ensemble achieved a global MAPE of 13.10%. The project also contributes a reusable geospatial feature pipeline that supplements, but does not fully replace, missing structural information in scraped property listings.
 
 The resulting web app and dashboard are usable artifacts, not just a benchmark.
 
@@ -1175,7 +1175,7 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 ### **3.1 Limitations**
 
-* **Data scope:** The final dataset (3,202 listings, HCMC only) is small and geographically narrow, limiting generalization to other cities and thinning sample sizes in the mid/high-price buckets of the segmented router.
+* **Data scope:** The final dataset (10,421 properties, HCMC only) is small and geographically narrow, limiting generalization to other cities and thinning sample sizes in the mid/high-price tiers of the 3-tier ensemble.
 
 * **Limited structural and longitudinal coverage:** House age and property condition are unavailable, while direction information is sparsely observed. Listing dates are available, but the collection period is insufficient for reliable trend forecasting. These limitations constrain the model’s explanatory power and preclude robust longitudinal market analysis.
 
@@ -1201,7 +1201,7 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 # 
 
-# **VIII. References** {#viii.-references}
+# **IX. References** {#ix.-references}
 
 1. Chen, T., & Guestrin, C. (2016). *XGBoost: A scalable tree boosting system*. In *Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining* (pp. 785–794). ACM. [https://arxiv.org/abs/1603.02754](https://arxiv.org/abs/1603.02754)  
 2. Ha, M.-T., Nguyen, T.-C., Pham, T.-H., & Nguyen, V.-H. (2025). Using machine learning regression algorithms to predict house prices in Vietnam. *International Real Estate Review, 28*(4), 505–527. [https://doi.org/10.53383/100412](https://doi.org/10.53383/100412)  
@@ -1215,7 +1215,7 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 # 
 
-# **IX. Appendices** {#ix.-appendices}
+# **VIII. Appendices** {#viii.-appendices}
 
 ## **Appendix A — Core Processed Dataset Fields** {#appendix-a-—-core-processed-dataset-fields}
 
@@ -1241,20 +1241,22 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 ## 
 
-## **Appendix B — Final Model Hyperparameters (6-Bucket Ensemble)**  {#appendix-b-—-final-model-hyperparameters-(9-model (3-tier × 3-algorithm)-ensemble)}
+## **Appendix B — Final Model Hyperparameters (9-Model 3-Tier Ensemble)**  {#appendix-b-—-final-model-hyperparameters-(9-model-3-tier-ensemble)}
 
-| Parameter | LightGBM | CatBoost |
-| ----- | ----- | ----- |
-| n\_estimators / iterations | 1000 | 1000 |
-| max\_depth / depth | 8 | 6 |
-| learning\_rate | 0.03 | 0.03 |
-| subsample | 0.8 | — |
-| colsample\_bytree | 0.8 | — |
-| reg\_alpha / reg\_lambda | 0.1 / 1.0 | — |
-| loss\_function | — | RMSE |
-| random\_state / random\_seed | 42 | 42 |
+| Parameter | LightGBM | XGBoost | CatBoost |
+| ----- | ----- | ----- | ----- |
+| **Estimators / Iterations** | 1,000 | 1,500 | 1,500 |
+| **Max Depth** | 8 | 8 | 8 |
+| **Learning Rate** | 0.05 | 0.03 | 0.05 |
+| **Subsample** | 0.8 | 0.8 | — |
+| **Column Sample** | 0.8 | 0.8 | — |
+| **L1 Regularization** | 0.1 | — | — |
+| **L2 Regularization** | 1.0 | — | — |
+| **Loss Function** | Default MSE | RMSE | RMSE |
+| **Early Stopping** | — | — | 50 rounds |
+| **Random Seed** | 42 | 42 | 42 |
 
-*Table 13\. Final Model Hyperparameters*
+*Table 13\. Final Model Hyperparameters (3 Models per Tier)*
 
 ---
 
@@ -1295,7 +1297,7 @@ Real-Estate-Valuation/
 │   │   └── README.md                 ← Pipeline documentation
 │   │
 │   ├── models/                       ← ML model artifacts
-│   │   ├── saved_models/             ← Trained .pkl files (9-model (3-tier × 3-algorithm))
+│   │   ├── saved_models/             ← Trained .pkl files (9 models (3-tier × 3-algorithm))
 │   │   ├── scripts/                  ← Training scripts
 │   │   └── README.md                 ← Model architecture docs
 │   │
