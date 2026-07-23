@@ -192,7 +192,7 @@ geo = load_geo()
 # ---------------------------------------------------------------------------
 def do_valuation(street, locality, property_type, legal_status, direction,
                  area_m2, width_m, length_m, num_floors, num_bedrooms, road_width_m,
-                 bin_flags, text_flags):
+                 bin_flags, text_flags, price_tier="mid"):
     """Run valuation via API."""
     result = api_predict(
         street=street,
@@ -200,6 +200,7 @@ def do_valuation(street, locality, property_type, legal_status, direction,
         property_type=property_type,
         legal_status=legal_status,
         direction=direction,
+        price_tier=price_tier,
         area_m2=area_m2,
         width_m=width_m,
         length_m=length_m,
@@ -390,6 +391,7 @@ with tab_valuation:
                                     area_m2=area_m2, width_m=width_m, length_m=length_m,
                                     num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
                                     bin_flags=bin_flags, text_flags=text_flags,
+                                    price_tier=budget_range,
                                 )
                                 # Store in session state for persistent feedback form
                                 st.session_state.last_price = price
@@ -574,6 +576,7 @@ with tab_valuation:
                     area_m2=area_m2, width_m=width_m, length_m=length_m,
                     num_floors=num_floors, num_bedrooms=num_bedrooms, road_width_m=road_width_m,
                     bin_flags=bin_flags, text_flags=text_flags,
+                    price_tier=budget_range,
                 )
                 # Store in session state so it persists after form submission
                 st.session_state.last_price = price
