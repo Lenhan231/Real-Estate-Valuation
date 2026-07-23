@@ -492,7 +492,7 @@ This project differentiates itself from existing systems by shifting the focus f
 
 1. **Data Enrichment & Segmentation:** Instead of accepting the lack of attributes, we engineer external Geospatial Points of Interest (POI) features (e.g., proximity to schools, hospitals, and transit) to compensate for missing structural data. Crucially, we structurally segment the market into a 9-model (3-tier × 3-algorithm) architecture (Price Tier × Property Type) and apply customized, tighter IQR outlier fences to prevent ultra-luxury properties from distorting the models.
 
-2. **Advanced Comparative Modeling & Interpretability:** We move beyond basic ensemble methods by researching and comparing cutting-edge approaches. We benchmark traditional robust models, evolving into our final LightGBM and CatBoost ensemble, against state-of-the-art foundation models for tabular data like TabPFN. This comparative approach enables us to identify the most suitable method for production rather than relying on a standard baseline.
+2. **Advanced Comparative Modeling & Interpretability:** We move beyond basic ensemble methods by researching and comparing cutting-edge approaches. We benchmark traditional robust models, evolving into our final LightGBM, XGBoost, and CatBoost ensemble (9 models across 3 price tiers), against state-of-the-art foundation models for tabular data like TabPFN. This comparative approach enables us to identify the most suitable method for production rather than relying on a standard baseline.
 
 ## **Expected Impact** 
 
