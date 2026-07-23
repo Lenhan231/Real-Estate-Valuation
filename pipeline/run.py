@@ -21,9 +21,14 @@ Cache priority (highest to lowest):
 Output: data/processed/alonhadat_features.csv (incrementally saved)
 Cache: data/localities.csv (auto-updated with features)
 """
+import sys
+from pathlib import Path
+
+# Add parent directory to path so imports work from anywhere
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import pandas as pd
 import time
-from pathlib import Path
 import argparse
 
 from pipeline.transformation.cleaning import clean_data, final_clean
