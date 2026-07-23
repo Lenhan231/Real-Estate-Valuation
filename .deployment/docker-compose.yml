@@ -3,8 +3,8 @@ version: '3.8'
 services:
   api:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: .deployment/Dockerfile
     container_name: real-estate-api
     ports:
       - "8000:8000"
@@ -32,8 +32,8 @@ services:
   # Optional: Streamlit dashboard
   streamlit:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: .deployment/Dockerfile
     container_name: real-estate-streamlit
     command: streamlit run app/ui/streamlit_app.py --server.port=8501
     ports:

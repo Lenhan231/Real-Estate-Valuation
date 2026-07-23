@@ -31,5 +31,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Expose port
 EXPOSE 8000
 
-# Run FastAPI server
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Run FastAPI server with dynamic port support for cloud deployment
+CMD exec sh -c 'exec python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}'
