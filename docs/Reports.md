@@ -311,7 +311,7 @@ Routine team meetings will use Meet, Discord and Zalo to ensure alignment on res
 
 ### **2.1 WBS**
 
-**Data Acquisition:** 12,832 raw listing records were collected from Realtor.com via automated scraping. After UI validation and deduplication, 12,794 records were retained in the Supabase database. Following preprocessing pipeline (6 phases: outlier detection → temporal engineering → numeric imputation → dimensional features → amenity aggregation → text extraction), a final set of 10,421 records met quality thresholds (price bounds 2.0B-50.0B VND, area bounds 15-500m²) and were used for model training/evaluation. The 38-record gap (12,794 → 10,421) resulted from NULL values in critical structural columns during numeric imputation phase.
+**Data Acquisition:** 12,832 raw listing records were collected from Alonhadat.com via automated scraping. After UI validation and deduplication, 12,794 records were retained in the Supabase database. Following preprocessing pipeline (6 phases: outlier detection → temporal engineering → numeric imputation → dimensional features → amenity aggregation → text extraction), a final set of 10,421 records met quality thresholds (price bounds 2.0B-50.0B VND, area bounds 15-500m²) and were used for model training/evaluation. The 2,373-record gap (12,794 → 10,421) resulted from NULL values in critical structural columns and tier-specific outlier filtering during preprocessing phase.
 
 **Preprocessing & Feature Engineering:** Performed data cleaning, normalization, missing value handling, and outlier filtering. Engineered spatial and structural features such as distance to city center, property dimensions, population density, and binary amenity indicators to support predictive modeling.
 
@@ -760,9 +760,9 @@ Higher-order features capture non-linear relationships and domain-specific patte
 The final production model uses **3-tier price-based segmentation** (simplified from earlier 2-property-type × 3-price experiments):
 
 **Price Tiers (Target Segments):**
-- **Low (0–5B VND):** 1,120 properties (10.8%); budget apartments, small houses
-- **Mid (5–20B VND):** 6,288 properties (60.4%); standard mid-range residential
-- **High (>20B VND):** 3,013 properties (28.9%); luxury, penthouse, large villas
+- **Low (0–5B VND):** 1,156 properties (11.1%); budget apartments, small houses
+- **Mid (5–20B VND):** 6,319 properties (60.6%); standard mid-range residential
+- **High (>20B VND):** 2,946 properties (28.3%); luxury, penthouse, large villas
 
 **Rationale for Price-Only Segmentation:**
 Historical 2×3=6-bucket experiments (property-type × price) showed that **price tier was the dominant driver** of predictive accuracy, while property-type (frontage vs alley) added model complexity without material accuracy gains. Tier-specific training captures the heterogeneous price dynamics and feature relationships (e.g., high-tier buyers value metro proximity more heavily), while simple price-tier routing eliminates the overhead of multi-dimensional bucketing.
@@ -885,7 +885,7 @@ Each of the 9 models (3 algorithms × 3 tiers) is trained with algorithm-specifi
 
 **Current Production Models (v2.6):**
 - **Path:** `models/saved_models/`
-- **Format:** joblib .pkl files (12 models: 3 algorithms × 4 settings, but 9 active in production)
+- **Format:** joblib .pkl files (9 models: 3 algorithms × 3 price tiers, all active in production)
 - **Size:** ~40-60MB total (10-15MB per model)
 - **Loaded via:** `app/core/models.py` → `load_models()` function (cached via `@st.cache_resource`)
 - **Inference latency:** ~200-500ms per prediction (includes feature engineering + 3-model averaging)
@@ -1511,7 +1511,7 @@ The geocoding and POI lookup pipeline uses a **two-tier cache strategy**:
 ### **4.3 Model Maintenance & Versioning**
 
 **Current workflow:**
-- Manual retraining via `python scripts/train_ensemble.py`
+- Manual retraining via `python scripts/train_production.py`
 - Experiment tracking in Weights & Biases (wandb project: real-estate-valuation)
 - Model artifacts stored as .pkl files (9 files: 3 LightGBM + 3 XGBoost + 3 CatBoost for 3-tier × 3-algorithm segmentation, ~47.9 MB total)
 - Version history documented in LATEST_UPDATE.md
@@ -1552,7 +1552,7 @@ The geocoding and POI lookup pipeline uses a **two-tier cache strategy**:
 
 ### **1.1 Experimental Setup and Results**
 
-The final 9-model (3-tier × 3-algorithm) ensemble was evaluated on an independent test set (20% holdout, random_state=42) derived from a preprocessed dataset of **10,421 properties** in Ho Chi Minh City. The system uses four primary evaluation metrics for regression accuracy: Mean Absolute Percentage Error (MAPE), Coefficient of Determination (R²), Mean Absolute Error (MAE in VND billions), and Root Mean Squared Error (RMSE in VND billions).
+The final 9-model (3-tier × 3-algorithm) ensemble was evaluated on a test set (20% holdout, random_state=42) derived from a preprocessed dataset of **10,421 properties** in Ho Chi Minh City. **Note:** The test set was used for early stopping and ensemble weight calculation during training, so reported metrics represent in-sample performance rather than generalization to fully independent data (see Section IV.3 for details). The system uses four primary evaluation metrics for regression accuracy: Mean Absolute Percentage Error (MAPE), Coefficient of Determination (R²), Mean Absolute Error (MAE in VND billions), and Root Mean Squared Error (RMSE in VND billions).
 
 **Global Ensemble Performance (All Tiers Combined):**
 
@@ -1687,7 +1687,7 @@ While the project achieved a highly accurate and deployable system, several prac
 
 * **Improve high-price-tier accuracy.** The high-price segment (>20B VND) achieves MAPE of 16.45%, significantly higher than low-tier (10.48%) and mid-tier (12.80%). Root causes include higher intrinsic heterogeneity, sparse samples, and reliance on engineered features (area, POI) rather than missing structural attributes (materials, age, condition). Recommendation: acquire additional high-end property data, engineer custom amenity indices for luxury markets, or explore alternative architectures (neural networks, SHAP-based local models) for this segment.
 * **Expand longitudinal and geographic coverage.** Current dataset is HCMC-only with limited date-range variation. Collecting property listings over 12+ months and from Hanoi/Da Nang would enable true market-trend forecasting and improve geographic generalization. This directly supports the long-term vision of a national real estate valuation platform.
-* **Formalize leakage-safeguard protocol.** Target-encoded features (locality\_cv\_target\_median, property\_type\_cv\_target\_median) require per-locality GroupKFold validation during retraining. Recommend documenting and automating this in the training pipeline (models/scripts/train_ensemble.py) to ensure reproducibility.
+* **Formalize leakage-safeguard protocol.** Target-encoded features (locality\_cv\_target\_median, property\_type\_cv\_target\_median) require per-locality GroupKFold validation during retraining. Recommend documenting and automating this in the training pipeline (models/scripts/train_production.py) to ensure reproducibility.
 
 ### **3.2 For System Improvements**
 
@@ -1926,7 +1926,7 @@ This appendix provides a summary reference and production deployment notes.
 
 **Price-Tier-Specific Training:**
 - Each of 3 price tiers (Low, Mid, High) trained independently with identical hyperparameters
-- Sample sizes per tier: Low 1,120 (10.8%), Mid 6,288 (60.4%), High 3,013 (28.9%)
+- Sample sizes per tier: Low 1,156 (10.8%), Mid 6,319 (60.4%), High 2,946 (28.9%)
 - Train/test split: 80/20 (random seed=42, NO stratification applied)
 - **Early stopping:** Test set used for LightGBM/CatBoost early stopping (test set not independent)
 
@@ -1977,7 +1977,7 @@ This appendix provides a summary reference and production deployment notes.
 | **R²** | **0.9401** ⭐ | 0.9180 | 0.8950 | **0.9200** |
 | **MAE (B VND)** | 0.85 | 1.95 | 3.80 | 2.15 |
 | **RMSE (B VND)** | 1.32 | 2.85 | 5.20 | 3.41 |
-| **Samples** | 1,120 | 6,288 | 3,013 | 10,421 |
+| **Samples** | 1,156 | 6,319 | 2,946 | 10,421 |
 
 *Table 10. Final Model Performance by Price Tier (v2.6)*
 
@@ -2005,7 +2005,7 @@ final_price = exp(log_price_ensemble) - 1
 
 ### **Training Implementation**
 
-**Training Script:** `scripts/train_ensemble.py`
+**Training Script:** `scripts/train_production.py`
 
 ```python
 # Pseudocode for tier-specific training:
