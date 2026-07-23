@@ -123,7 +123,7 @@ class GeoLookup:
 
                 return df
             else:
-                print(f"⚠️  Supabase table empty, falling back to CSV")
+                print(f"⚠️  Supabase table empty")
         except ImportError:
             print("⚠️  supabase library not installed: pip install supabase")
         except Exception as e:
@@ -131,7 +131,6 @@ class GeoLookup:
             import traceback
             traceback.print_exc()
         return None
-
 
     def localities(self) -> list[str]:
         return sorted(self.df['locality_n'].dropna().unique())
