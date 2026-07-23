@@ -1,20 +1,36 @@
-# 🏠 Real Estate Valuation - Backend + Frontend
+# 🏠 Application Layer - API & UI
 
-Refactored architecture with FastAPI backend and Streamlit frontend.
+Complete backend (FastAPI) and frontend (Streamlit) for real estate valuation.
+
+---
 
 ## 🚀 Quick Start
 
-**Terminal 1 - API Backend:**
+### Prerequisites
+
+```bash
+pip install -r requirements.txt
+```
+
+### Run Locally
+
+**Terminal 1 - API Server:**
 ```bash
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-API: http://localhost:8000/docs (Swagger)
+- 📡 API Swagger Docs: http://localhost:8000/docs
+- 📊 ReDoc: http://localhost:8000/redoc
+- Health Check: http://localhost:8000/health
 
 **Terminal 2 - Streamlit UI:**
 ```bash
-streamlit run app/ui/streamlit_app.py --server.port 8500
+streamlit run app/ui/streamlit_app.py --server.port 8501
 ```
-UI: http://localhost:8500
+- 🎨 Web UI: http://localhost:8501
+
+---
+
+## 🏗️ Architecture Overview
 
 ## 🏗️ Architecture
 
