@@ -19,7 +19,7 @@ services:
     autoDeploy: true
     envVars:
       - key: API_URL
-        value: https://real-estate-valuation-api.onrender.com
+        value: https://real-estate-valuation-88yg.onrender.com
       - key: STREAMLIT_SERVER_HEADLESS
         value: "true"
       - key: STREAMLIT_SERVER_ENABLEXSRFPROTECTION
