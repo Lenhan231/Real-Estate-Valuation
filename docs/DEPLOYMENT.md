@@ -1,384 +1,436 @@
-# Production Deployment Guide
+# 🚀 Deployment Guide
 
-## Overview
-
-This guide covers deploying the Real Estate Valuation API to production using Railway and Supabase.
-
-## Architecture
-
-```
-┌─────────────────────────────────────────┐
-│       Frontend (Optional)               │
-│  - Vercel (Next.js/React)               │
-│  - Streamlit (app/ui/streamlit_app.py)  │
-└──────────────┬──────────────────────────┘
-               │ HTTPS API calls
-┌──────────────▼──────────────────────────┐
-│    FastAPI Backend (Railway)            │
-│  - /api/predict                         │
-│  - /api/feedback                        │
-│  - /api/admin                           │
-│  - /health (monitoring)                 │
-└──────────────┬──────────────────────────┘
-               │ PostgreSQL queries
-┌──────────────▼──────────────────────────┐
-│    Supabase (Database + Auth)           │
-│  - PostgreSQL database                  │
-│  - Feedback storage                     │
-│  - User authentication (optional)       │
-└─────────────────────────────────────────┘
-```
-
-## Prerequisites
-
-1. **Railway Account**: Sign up at [railway.app](https://railway.app)
-2. **Supabase Project**: Already configured (check SUPABASE_URL in .env)
-3. **GitHub Account**: For connecting your repository
-4. **Git**: For version control
-
-## Step 1: Prepare Repository
-
-### 1.1 Add Production Files
-
-All deployment files have been created:
-- `Dockerfile` - Container image definition
-- `railway.json` - Railway configuration
-- `.dockerignore` - Files to exclude from Docker build
-- `.env.example` - Environment variables template
-
-### 1.2 Verify Dependencies
-
-```bash
-# Check that all required packages are in requirements.txt
-cat requirements.txt | grep -E "fastapi|uvicorn|gunicorn"
-
-# Output should show:
-# fastapi
-# uvicorn
-# (other dependencies)
-```
-
-## Step 2: Deploy to Railway
-
-### 2.1 Connect GitHub Repository
-
-1. Go to [railway.app](https://railway.app) and sign up/login
-2. Click **"Create New Project"** → **"Deploy from GitHub"**
-3. Select your repository: `Real-Estate-Valuation`
-4. Authorize Railway to access your GitHub
-
-### 2.2 Configure Environment Variables
-
-After connecting, Railway detects the Dockerfile automatically.
-
-1. Go to your project → **Variables** tab
-2. Add the following variables:
-
-```env
-# Copy from your local .env file
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=your-service-key-here
-ENV=production
-DEBUG=false
-LOG_LEVEL=info
-```
-
-**Never commit .env to Git!** Railway stores secrets securely.
-
-### 2.3 Deploy
-
-Railway automatically deploys when you push to `main` branch:
-
-```bash
-# After making changes locally:
-git add .
-git commit -m "chore: add production deployment files"
-git push origin main
-
-# Railway will:
-# 1. Detect Dockerfile
-# 2. Build container image
-# 3. Run health checks
-# 4. Deploy to production
-```
-
-### 2.4 Verify Deployment
-
-1. Go to Railway dashboard → Your project → **Deployments**
-2. Wait for status to show **"Success"** (usually 2-5 minutes)
-3. Check the generated URL: `https://your-project-xxxx.railway.app`
-
-Test the API:
-```bash
-curl https://your-project-xxxx.railway.app/health
-
-# Expected response:
-# {"status":"healthy","service":"Real Estate Valuation API","version":"2.4.0"}
-```
-
-## Step 3: Connect Supabase
-
-### 3.1 Verify Supabase Credentials
-
-Make sure your Railway environment has:
-- `SUPABASE_URL` (your project URL)
-- `SUPABASE_SERVICE_KEY` (admin key from Settings → API)
-
-### 3.2 Create Feedback Table (if needed)
-
-If the `feedback` table doesn't exist in Supabase:
-
-```sql
-CREATE TABLE feedback (
-  id SERIAL PRIMARY KEY,
-  predicted_price_vnd BIGINT NOT NULL,
-  actual_price_vnd BIGINT,
-  rating INT,
-  bucket VARCHAR(50),
-  confidence FLOAT,
-  feature_version INT DEFAULT 1,
-  features_json JSONB,
-  timestamp TIMESTAMP DEFAULT NOW(),
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_feedback_timestamp ON feedback(timestamp);
-CREATE INDEX idx_feedback_bucket ON feedback(bucket);
-```
-
-## Step 4: Monitor Production
-
-### 4.1 Health Checks
-
-Railway automatically monitors:
-```
-GET /health - Should return 200 OK every 30 seconds
-```
-
-### 4.2 View Logs
-
-In Railway dashboard:
-1. Select your project
-2. Click **"Logs"** tab
-3. Filter by service name or search for errors
-
-### 4.3 Set Up Alerts (Optional)
-
-1. Go to **Settings** → **Notifications**
-2. Enable email alerts for:
-   - Deployment failures
-   - Service crashes
-   - Health check failures
-
-## Step 5: Connect Frontend (Optional)
-
-### 5.1 Update API URLs
-
-If you have a frontend (Next.js, React, etc.):
-
-```javascript
-// .env.production
-REACT_APP_API_URL=https://your-project-xxxx.railway.app
-
-// Usage in components:
-fetch(`${process.env.REACT_APP_API_URL}/api/predict`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(predictionData)
-})
-```
-
-### 5.2 Deploy to Vercel (Optional)
-
-```bash
-# If using Next.js, deploy to Vercel:
-npm install -g vercel
-vercel
-
-# Follow prompts to connect GitHub and deploy
-```
-
-## Step 6: Update Streamlit (Optional)
-
-If you want to run Streamlit app against production:
-
-```bash
-# Update your Streamlit app to use production API:
-# app/ui/streamlit_app.py
-
-API_URL = "https://your-project-xxxx.railway.app"
-
-# Then deploy Streamlit:
-streamlit run app/ui/streamlit_app.py --server.sslCertFile=/path/to/cert
-```
-
-Or deploy Streamlit to Railway as well:
-
-```bash
-# Create streamlit_config.toml
-[server]
-headless = true
-port = 8501
-
-# Push to Railway
-git push origin main
-```
-
-## Troubleshooting
-
-### Issue: Deployment Failed
-
-**Check logs:**
-```bash
-# In Railway dashboard: Logs tab
-# Look for error messages like:
-# - "Module not found"
-# - "Port already in use"
-# - "Environment variable missing"
-```
-
-**Common fixes:**
-1. Verify all environment variables are set
-2. Check that all dependencies in `requirements.txt` are compatible
-3. Ensure Dockerfile has correct Python version (3.11)
-
-### Issue: Health Check Failing
-
-```bash
-# Test locally:
-python -c "import requests; requests.get('http://localhost:8000/health')"
-
-# If fails, check:
-# 1. Is FastAPI running? (uvicorn app.main:app)
-# 2. Is /health endpoint defined? (check app/main.py)
-# 3. Are Supabase credentials valid?
-```
-
-### Issue: 502 Bad Gateway
-
-Usually means the app crashed:
-1. Check logs for Python errors
-2. Verify memory allocation (Railway provides 512MB default)
-3. Check model loading in `app/core/models.py`
-
-### Issue: Database Connection Errors
-
-```
-# Error: "could not translate host name"
-# Solution: Verify SUPABASE_URL is correct
-
-# Error: "permission denied"
-# Solution: Check SUPABASE_SERVICE_KEY has admin privileges
-```
-
-## Performance Monitoring
-
-### 4.1 Track Predictions
-
-Add metrics to track in production:
-
-```python
-# In app/routers/predict.py
-import time
-
-@router.post("/predict")
-async def predict(request: PredictRequest):
-    start_time = time.time()
-    
-    # ... prediction logic ...
-    
-    duration = time.time() - start_time
-    print(f"[PERF] Prediction took {duration:.2f}s")
-```
-
-### 4.2 Model Performance Tracking
-
-Monitor predictions vs actual prices:
-
-```bash
-# Query Supabase feedback table:
-SELECT 
-  DATE(timestamp) as date,
-  COUNT(*) as prediction_count,
-  AVG(ABS(predicted_price_vnd - actual_price_vnd) / actual_price_vnd) as mape
-FROM feedback
-GROUP BY DATE(timestamp)
-ORDER BY date DESC;
-```
-
-## Maintenance
-
-### Regular Tasks
-
-**Weekly:**
-- Check logs for errors
-- Monitor model performance metrics
-
-**Monthly:**
-- Review feedback data quality
-- Check if retraining is needed
-  ```bash
-  POST /api/admin/retrain
-  ```
-- Update dependencies if security patches available
-
-**Quarterly:**
-- Retrain models with new feedback
-- Test disaster recovery procedures
-- Review and update documentation
-
-### Auto-Retraining (Optional)
-
-Set up a cron job to retrain models:
-
-```bash
-# Using GitHub Actions (create .github/workflows/retrain.yml)
-name: Monthly Model Retraining
-on:
-  schedule:
-    - cron: '0 0 1 * *'  # First day of month at midnight UTC
-
-jobs:
-  retrain:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Trigger Retraining
-        run: |
-          curl -X POST ${{ secrets.RAILWAY_API_URL }}/api/admin/retrain \
-            -H "Authorization: Bearer ${{ secrets.API_KEY }}"
-```
-
-## Cost Estimation
-
-**Railway:**
-- Free tier: Up to $5/month credit
-- Pay-as-you-go after that: ~$0.50/hour for small app
-
-**Supabase:**
-- Free tier: Good for development
-- Pro tier: ~$25/month for production
-
-**Total estimated cost:** $25-50/month
-
-## Next Steps
-
-1. ✅ Push deployment files to GitHub
-2. ⏳ Connect Railway to repository
-3. ⏳ Set environment variables
-4. ⏳ Deploy and test
-5. ⏳ Monitor production logs
-6. ⏳ Set up monitoring/alerts
-7. ⏳ Configure auto-retraining
-
-## Support
-
-For deployment issues:
-- Railway Docs: https://docs.railway.app
-- FastAPI Docs: https://fastapi.tiangolo.com
-- Supabase Docs: https://supabase.com/docs
+Guide để deploy Real Estate Valuation project lên các cloud platforms.
 
 ---
 
-**Last updated:** 2026-07-23
-**Maintained by:** Real Estate Valuation Team
+## 📋 Prerequisites
+
+Trước khi deploy, chuẩn bị:
+
+- **Git repository**: Code phải ở GitHub (hoặc platform khác)
+- **Docker image**: Project có Dockerfile sẵn
+- **Environment variables**: .env file với credentials
+- **Models & Data**: Supabase database với dữ liệu training
+
+---
+
+## 🔧 Environment Variables
+
+### Required Variables
+
+```env
+# Supabase (Database)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=sb_secret_xxxxx
+SUPABASE_TABLE_CACHE=address_cache
+SUPABASE_TABLE_FEATURES=Raw_Features
+SUPABASE_TABLE_LISTINGS=listings
+
+# API & Server
+ENV=production
+DEBUG=false
+LOG_LEVEL=info
+PORT=8000
+
+# Streamlit (Optional)
+STREAMLIT_SERVER_HEADLESS=true
+STREAMLIT_SERVER_ENABLEXSRFPROTECTION=false
+API_URL=https://your-api-domain.com
+```
+
+---
+
+## 1️⃣ Render (Current)
+
+### Quick Setup
+
+1. **Connect GitHub to Render**
+   - Go to https://dashboard.render.com
+   - Click "New" → "Web Service"
+   - Select GitHub repo
+
+2. **Configure API Service**
+   ```
+   Name: real-estate-valuation-api
+   Runtime: Docker
+   Dockerfile: ./Dockerfile
+   Port: 8000
+   ```
+
+3. **Set Environment Variables**
+   - Environment → Add all variables from `.env`
+
+4. **Deploy Streamlit (Optional)**
+   ```
+   Name: real-estate-valuation-streamlit
+   Runtime: Docker
+   Dockerfile: .deployment/Dockerfile.streamlit
+   Port: 8501
+   Environment: Add API_URL + Supabase vars
+   ```
+
+### Limitations (Free Tier)
+- ⚠️ Slow startup (models load on first request)
+- ⚠️ Auto-spins down after 15 min inactivity
+- ⚠️ Limited disk space (~10GB)
+- ⚠️ Limited memory (512MB)
+
+---
+
+## 2️⃣ DigitalOcean App Platform
+
+### Step 1: Create App
+
+```bash
+# Install doctl CLI
+brew install digitalocean/digitalocean/doctl
+
+# Authenticate
+doctl auth init
+
+# Create app from GitHub
+doctl apps create --spec app.yaml
+```
+
+### Step 2: Create `app.yaml`
+
+```yaml
+name: real-estate-valuation
+services:
+  - name: api
+    github:
+      repo: your-username/Real-Estate-Valuation
+      branch: main
+    build_command: |
+      pip install -r requirements.txt
+    run_command: |
+      python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    http_port: 8000
+    envs:
+      - key: ENV
+        value: production
+      - key: SUPABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        value: ${DB_SUPABASE_URL}
+      - key: SUPABASE_SERVICE_KEY
+        scope: RUN_AND_BUILD_TIME
+        value: ${DB_SUPABASE_SERVICE_KEY}
+    # ... other env vars
+
+  - name: streamlit
+    github:
+      repo: your-username/Real-Estate-Valuation
+      branch: main
+    build_command: |
+      pip install streamlit
+    run_command: |
+      streamlit run app/ui/streamlit_app.py --server.port $PORT
+    http_port: 8501
+    envs:
+      - key: API_URL
+        value: https://${API_DOMAIN}/api
+
+databases:
+  - name: redis
+    engine: REDIS
+    version: "7"
+
+static_sites:
+  - name: docs
+    source_dir: docs
+```
+
+### Step 3: Deploy
+
+```bash
+doctl apps update [app-id] --spec app.yaml
+```
+
+### DigitalOcean Advantages
+- ✅ Better performance than Render
+- ✅ Persistent storage (100GB+)
+- ✅ More memory (2GB+)
+- ✅ No auto-shutdown
+- ✅ Easy scaling
+- 💰 ~$5-12/month for basic app
+
+---
+
+## 3️⃣ DigitalOcean Droplet (Self-Hosted)
+
+### Most Control & Cheapest
+
+### Step 1: Create Droplet
+
+```bash
+# SSH into droplet
+ssh root@your-droplet-ip
+
+# Update system
+apt update && apt upgrade -y
+
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sh get-docker.sh
+
+# Install Docker Compose
+apt install docker-compose -y
+```
+
+### Step 2: Create `docker-compose.yml`
+
+```yaml
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - PORT=8000
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: .deployment/Dockerfile.streamlit
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+    depends_on:
+      - api
+    restart: always
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+      - streamlit
+    restart: always
+```
+
+### Step 3: Deploy
+
+```bash
+# Copy code to droplet
+scp -r . root@your-droplet-ip:/app
+
+# SSH vào
+ssh root@your-droplet-ip
+cd /app
+
+# Create .env file
+nano .env
+# Paste environment variables
+
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+```
+
+### Step 4: Setup SSL (Let's Encrypt)
+
+```bash
+# Install certbot
+apt install certbot python3-certbot-nginx -y
+
+# Get certificate
+certbot certonly --standalone -d your-domain.com
+
+# Configure nginx to use SSL
+# (Update nginx.conf with certificate paths)
+
+# Restart
+docker-compose restart nginx
+```
+
+### Droplet Advantages
+- ✅ Cheapest (~$5/month)
+- ✅ Full control
+- ✅ No vendor lock-in
+- ✅ Easy to backup
+- ❌ Requires manual management
+- ❌ Need to handle security updates
+
+---
+
+## 4️⃣ AWS EC2
+
+### Deploy with ECS/Fargate
+
+### Step 1: Create ECR Repository
+
+```bash
+aws ecr create-repository --repository-name real-estate-valuation
+
+# Get login token
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin [your-account-id].dkr.ecr.us-east-1.amazonaws.com
+
+# Build & push
+docker build -t real-estate-valuation .
+docker tag real-estate-valuation:latest [account-id].dkr.ecr.us-east-1.amazonaws.com/real-estate-valuation:latest
+docker push [account-id].dkr.ecr.us-east-1.amazonaws.com/real-estate-valuation:latest
+```
+
+### Step 2: Create ECS Cluster & Task
+
+```bash
+# Create cluster
+aws ecs create-cluster --cluster-name real-estate
+
+# Register task definition (from ECS console or CLI)
+aws ecs register-task-definition --cli-input-json file://task-definition.json
+
+# Create service
+aws ecs create-service \
+  --cluster real-estate \
+  --service-name api \
+  --task-definition real-estate-valuation \
+  --desired-count 1
+```
+
+### AWS Advantages
+- ✅ Enterprise-grade
+- ✅ Auto-scaling
+- ✅ Load balancing
+- ✅ RDS for databases
+- ❌ Complex setup
+- ❌ Expensive (~$50+/month)
+
+---
+
+## 🔄 CI/CD Pipeline
+
+### GitHub Actions (Free)
+
+Create `.github/workflows/deploy.yml`:
+
+```yaml
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build Docker image
+        run: |
+          docker build -t real-estate-valuation .
+          docker tag real-estate-valuation [registry]/real-estate-valuation:latest
+
+      - name: Push to registry
+        run: |
+          docker push [registry]/real-estate-valuation:latest
+
+      - name: Deploy to Render
+        run: |
+          curl -X POST https://api.render.com/deploy/srv-[service-id] \
+            -H "Authorization: Bearer ${{ secrets.RENDER_DEPLOY_KEY }}"
+```
+
+---
+
+## 📊 Comparison Table
+
+| Platform | Cost | Startup | Control | Setup Difficulty |
+|----------|------|---------|---------|------------------|
+| **Render** | Free/Paid | Slow | Low | Easy |
+| **DigitalOcean App** | $5-12/mo | Fast | Medium | Medium |
+| **Droplet** | $5-20/mo | Fast | High | Hard |
+| **AWS EC2** | $10-50+/mo | Fast | High | Hard |
+| **Heroku** | $7-50+/mo | Medium | Low | Easy |
+
+---
+
+## 🛠️ Troubleshooting
+
+### "Module not found"
+- Ensure `requirements.txt` has all dependencies
+- Check Docker COPY commands
+
+### "Port already in use"
+- Kill existing process: `lsof -i :8000`
+- Or use different port
+
+### "Supabase connection failed"
+- Verify credentials in `.env`
+- Check firewall rules
+- Test: `curl https://your-project.supabase.co`
+
+### "Slow API startup"
+- First request loads ML models (normal)
+- Use warm-up requests in health checks
+- Consider pre-warming in startup script
+
+### "Out of memory"
+- Reduce model batch size
+- Use swap on Droplet: `fallocate -l 2G /swapfile`
+- Scale up to larger instance
+
+---
+
+## 📝 Best Practices
+
+1. **Use environment variables** - Never hardcode secrets
+2. **Health checks** - Add `/health` endpoint for monitoring
+3. **Logging** - Use structured logging for debugging
+4. **Backups** - Regularly backup Supabase data
+5. **Monitoring** - Setup alerts for failures
+6. **Auto-restart** - Use `restart: always` in Docker
+7. **SSL/TLS** - Always use HTTPS in production
+8. **Rate limiting** - Protect API from abuse
+
+---
+
+## 🔒 Security Checklist
+
+- [ ] All secrets in environment variables
+- [ ] HTTPS enabled
+- [ ] CORS configured properly
+- [ ] Rate limiting enabled
+- [ ] Database backups working
+- [ ] Monitoring & alerts setup
+- [ ] Firewall rules configured
+- [ ] Regular security updates
+
+---
+
+## 📞 Support
+
+- **Render**: https://render.com/docs
+- **DigitalOcean**: https://docs.digitalocean.com
+- **AWS**: https://docs.aws.amazon.com
+- **Docker**: https://docs.docker.com
+
+---
+
+**Last Updated**: 2026-07-23

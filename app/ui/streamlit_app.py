@@ -276,16 +276,41 @@ tab_valuation, tab_analysis, tab_feedback, tab_models = st.tabs(["💰 Định g
 # TAB 1: VALUATION
 # =========================================================================
 with tab_valuation:
-    mode = st.radio("📝 Cách nhập", ["📋 Paste mô tả", "✍️ Form chi tiết"], horizontal=True)
+    st.markdown("## 💰 Định Giá Bất Động Sản")
+    st.caption("Chọn phương pháp nhập thông tin bên dưới")
 
-    if mode == "📋 Paste mô tả":
-        st.subheader("📍 Dán Mô Tả Bài Đăng")
-        st.caption("Paste toàn bộ mô tả bài đăng BĐS (địa chỉ + thông số)")
-        address_text = st.text_area(
-            "Ví dụ: Vlasta Premier Phú Thuận, Đường Đào Trí, Phường Phú Thuận, Quận 7, Hồ Chí Minh. 80m2, 3 tầng, 3 phòng ngủ, hẻm xe hơi, nội thất, sổ hồng.",
-            placeholder="Paste mô tả bài đăng đầy đủ từ Alonhadat/Batdongsan...",
-            height=100
-        )
+    mode = st.radio(
+        "📝 Cách nhập thông tin:",
+        ["⚡ QUICK MODE (Paste)", "🔧 DETAILED MODE (Form)"],
+        horizontal=True,
+        help="Quick Mode: Paste listing → AI extract features | Detailed Mode: Manual form input"
+    )
+
+    if mode == "⚡ QUICK MODE (Paste)":
+        st.divider()
+
+        # QUICK MODE SECTION
+        col_paste, col_info = st.columns([2, 1])
+
+        with col_paste:
+            st.markdown("### 📋 Paste Mô Tả Bài Đăng")
+            st.caption("Dán toàn bộ mô tả từ BatDongSan, Alonhadat, v.v...")
+            address_text = st.text_area(
+                "Mô tả bài đăng (địa chỉ + thông số)",
+                placeholder="Ví dụ: Vlasta Premier Phú Thuận, Đường Đào Trí, Phường Phú Thuận, Quận 7. 80m2, 3 tầng, 3 phòng ngủ, hẻm xe hơi, nội thất, sổ hồng.",
+                height=120,
+                key="quick_paste_text"
+            )
+
+        with col_info:
+            st.markdown("### 💡 Gợi ý")
+            st.info(
+                "✓ Địa chỉ đầy đủ\n"
+                "✓ Diện tích (m²)\n"
+                "✓ Số tầng\n"
+                "✓ Tiện ích\n"
+                "✓ Pháp lý"
+            )
 
         if address_text.strip():
             address_lower = address_text.lower()
@@ -296,72 +321,165 @@ with tab_valuation:
                     break
 
             if matched_locality:
-                st.success(f"✅ Tìm thấy: **{matched_locality}**")
+                st.success(f"✅ **Tìm thấy phường: {matched_locality}**")
                 parsed = api_parse(address_text)
                 street_default = parsed.get("street", "") if "error" not in parsed else ""
 
-                st.subheader("🗺️ Xác nhận địa chỉ")
-                st.caption(f"💡 Tìm được đường: **{street_default}** (nếu trống = không có trong cache → dùng fallback)")
+                st.divider()
 
-                # Show available streets for this locality (optional - collapsible)
-                with st.expander("📍 Xem đường có sẵn trong cache"):
-                    available_streets = geo.streets_of(matched_locality)
-                    if available_streets:
-                        st.write(f"**{len(available_streets)} đường trong cache** cho {matched_locality}:")
-                        st.write(", ".join(available_streets[:15]))  # Show first 15
-                    else:
-                        st.write("(Không có đường nào trong cache)")
+                # SECTION 1: Location
+                st.markdown("### 🗺️ SECTION 1: Vị Trí & Địa Chỉ")
+                loc_col1, loc_col2 = st.columns([2, 1])
 
-                street_input = st.text_input("Đường/Phố (chỉnh sửa nếu cần)", value=street_default or "")
+                with loc_col1:
+                    street_input = st.text_input(
+                        "🚗 Tên đường/Phố",
+                        value=street_default or "",
+                        help="Auto-extracted từ mô tả bài đăng, có thể chỉnh sửa"
+                    )
 
-                col_loc, col_house = st.columns(2)
-                with col_loc:
-                    st.subheader("🏷️ Phân loại")
-                    # Property type default from parser
+                with loc_col2:
+                    with st.expander("📍 Xem đường có sẵn"):
+                        available_streets = geo.streets_of(matched_locality)
+                        if available_streets:
+                            st.caption(f"**{len(available_streets)} đường** trong cache:")
+                            for i in range(0, min(len(available_streets), 15), 3):
+                                st.caption(", ".join(available_streets[i:i+3]))
+                        else:
+                            st.caption("(Không có dữ liệu cache)")
+
+                st.divider()
+
+                # SECTION 2: Classification
+                st.markdown("### 🏷️ SECTION 2: Phân Loại & Đặc Điểm")
+                class_col1, class_col2, class_col3, class_col4 = st.columns(4)
+
+                with class_col1:
                     prop_type_default = parsed.get("property_type") or "nha_mat_tien"
                     prop_type_idx = list(PROPERTY_TYPES.keys()).index(prop_type_default) if prop_type_default in PROPERTY_TYPES else 0
-                    property_type = st.radio("Loại nhà", list(PROPERTY_TYPES),
-                                            format_func=PROPERTY_TYPES.get, horizontal=True, index=prop_type_idx)
+                    property_type = st.selectbox(
+                        "🏠 Loại nhà",
+                        list(PROPERTY_TYPES),
+                        format_func=PROPERTY_TYPES.get,
+                        index=prop_type_idx
+                    )
 
-                    # Budget range default from extracted price
+                with class_col2:
                     price_range_default = parsed.get("price_range") or "low"
                     price_range_map = {"low": 0, "mid": 1, "high": 2}
-                    budget_range = st.selectbox("Phân khúc giá", list(BUDGET_RANGES), format_func=BUDGET_RANGES.get,
-                                               index=price_range_map.get(price_range_default, 0))
+                    budget_range = st.selectbox(
+                        "💵 Phân khúc giá",
+                        list(BUDGET_RANGES),
+                        format_func=BUDGET_RANGES.get,
+                        index=price_range_map.get(price_range_default, 0)
+                    )
 
-                    legal_status = st.selectbox("Pháp lý", list(LEGAL_STATUS), format_func=LEGAL_STATUS.get,
-                                               index=list(LEGAL_STATUS.keys()).index(parsed.get("legal_status", "unknown")))
+                with class_col3:
+                    legal_status = st.selectbox(
+                        "📄 Pháp lý",
+                        list(LEGAL_STATUS),
+                        format_func=LEGAL_STATUS.get,
+                        index=list(LEGAL_STATUS.keys()).index(parsed.get("legal_status", "unknown"))
+                    )
 
-                    # Direction default from parser
+                with class_col4:
                     direction_default = parsed.get("direction", "unknown")
                     direction_idx = list(DIRECTIONS.keys()).index(direction_default) if direction_default in DIRECTIONS else 0
-                    direction = st.selectbox("Hướng nhà", list(DIRECTIONS), format_func=DIRECTIONS.get, index=direction_idx)
+                    direction = st.selectbox(
+                        "🧭 Hướng",
+                        list(DIRECTIONS),
+                        format_func=DIRECTIONS.get,
+                        index=direction_idx
+                    )
 
-                with col_house:
-                    st.subheader("📐 Thông số (tự động extract từ listing)")
-                    c1, c2 = st.columns(2)
-                    area_m2 = c1.number_input("Diện tích (m²)", 10.0, 1000.0, parsed.get("area_m2") or 80.0, step=5.0)
-                    road_width_m = c2.number_input("Đường trước nhà (m)", 1.0, 60.0, parsed.get("road_width_m") or 6.0, step=0.5)
-                    width_m = c1.number_input("Chiều ngang (m)", 1.0, 50.0, parsed.get("width_m") or 4.0, step=0.5)
-                    length_m = c2.number_input("Chiều dài (m)", 1.0, 100.0, parsed.get("length_m") or 20.0, step=0.5)
-                    num_floors = c1.number_input("Số tầng", 1, 15, parsed.get("num_floors") or 3)
-                    num_bedrooms = c2.number_input("Số phòng ngủ", 1, 20, parsed.get("num_bedrooms") or 3)
+                st.divider()
 
-                    st.subheader("✨ Tiện ích (tự detect)")
-                    b1, b2, b3 = st.columns(3)
-                    bin_flags = {
-                        "kitchen_bin": b1.checkbox("Nhà bếp", True),
-                        "dining_room_bin": b2.checkbox("Phòng ăn", True),
-                        "terrace_bin": b3.checkbox("Sân thượng"),
-                        "car_parking_bin": b1.checkbox("Chỗ để xe hơi"),
-                    }
-                    text_flags = {
-                        "is_hem_xe_hoi": b2.checkbox("Hẻm xe hơi", parsed["is_hem_xe_hoi"]),
-                        "is_no_hau": b3.checkbox("Nở hậu", parsed["is_no_hau"]),
-                        "has_noi_that": b1.checkbox("Có nội thất", parsed["has_noi_that"]),
-                        "is_gap": b2.checkbox("Cần bán gấp", parsed["is_gap"]),
-                        "is_kinh_doanh": b3.checkbox("Tiện kinh doanh", parsed["is_kinh_doanh"]),
-                    }
+                # SECTION 3: Dimensions (in expander for quick mode)
+                with st.expander("📐 SECTION 3: Thông Số & Tiện Ích (auto-extracted)", expanded=True):
+                    st.markdown("**Kích thước & Cấu trúc**")
+                    dim_col1, dim_col2, dim_col3 = st.columns(3)
+
+                    with dim_col1:
+                        area_m2 = st.number_input(
+                            "📏 Diện tích (m²)",
+                            10.0, 1000.0,
+                            parsed.get("area_m2") or 80.0,
+                            step=5.0
+                        )
+
+                    with dim_col2:
+                        road_width_m = st.number_input(
+                            "🛣️ Đường trước (m)",
+                            1.0, 60.0,
+                            parsed.get("road_width_m") or 6.0,
+                            step=0.5
+                        )
+
+                    with dim_col3:
+                        num_floors = st.number_input(
+                            "🏢 Số tầng",
+                            1, 15,
+                            parsed.get("num_floors") or 3
+                        )
+
+                    st.markdown("**Chiều kích**")
+                    size_col1, size_col2 = st.columns(2)
+
+                    with size_col1:
+                        width_m = st.number_input(
+                            "↔️ Chiều ngang (m)",
+                            1.0, 50.0,
+                            parsed.get("width_m") or 4.0,
+                            step=0.5
+                        )
+
+                    with size_col2:
+                        length_m = st.number_input(
+                            "↕️ Chiều dài (m)",
+                            1.0, 100.0,
+                            parsed.get("length_m") or 20.0,
+                            step=0.5
+                        )
+
+                    num_bedrooms = st.number_input(
+                        "🛏️ Số phòng ngủ",
+                        1, 20,
+                        parsed.get("num_bedrooms") or 3
+                    )
+
+                    st.markdown("**Tiện ích & Đặc điểm**")
+                    b1, b2, b3, b4, b5 = st.columns(5)
+
+                    with b1:
+                        bin_flags = {}
+                        bin_flags["kitchen_bin"] = st.checkbox("🍳 Nhà bếp", True)
+
+                    with b2:
+                        bin_flags["dining_room_bin"] = st.checkbox("🍽️ Phòng ăn", True)
+
+                    with b3:
+                        bin_flags["terrace_bin"] = st.checkbox("🌞 Sân thượng", False)
+
+                    with b4:
+                        bin_flags["car_parking_bin"] = st.checkbox("🚗 Để xe", False)
+
+                    with b5:
+                        text_flags = {}
+                        text_flags["is_hem_xe_hoi"] = st.checkbox("🚙 Hẻm xe hơi", parsed.get("is_hem_xe_hoi", False))
+
+                    t1, t2, t3 = st.columns(3)
+
+                    with t1:
+                        text_flags["is_no_hau"] = st.checkbox("📐 Nở hậu", parsed.get("is_no_hau", False))
+
+                    with t2:
+                        text_flags["has_noi_that"] = st.checkbox("🛋️ Nội thất", parsed.get("has_noi_that", False))
+
+                    with t3:
+                        text_flags["is_gap"] = st.checkbox("⚡ Cần bán gấp", parsed.get("is_gap", False))
+
+                    st.caption("Tại đây:")
+                    text_flags["is_kinh_doanh"] = st.checkbox("💼 Tiện kinh doanh", parsed.get("is_kinh_doanh", False))
 
                 st.divider()
                 if st.button("💰 Định giá", type="primary", use_container_width=True):
@@ -514,57 +632,191 @@ with tab_valuation:
                 st.warning("Không tìm thấy phường trong địa chỉ. Thử dùng Form chi tiết!")
 
     else:
-        # Form chi tiết
-        col_loc, col_house = st.columns(2)
+        # DETAILED MODE FORM
+        st.divider()
 
-        with col_loc:
-            st.subheader("📍 Vị trí")
+        # SECTION 1: LOCATION
+        st.markdown("### 🗺️ SECTION 1: Vị Trí & Địa Chỉ")
+
+        loc_col1, loc_col2 = st.columns([1.5, 1])
+
+        with loc_col1:
             localities = api_localities()
             default_idx = localities.index("phường bình thạnh") if "phường bình thạnh" in localities else 0
-            locality = st.selectbox("Phường / Xã", localities, index=default_idx)
+            locality = st.selectbox(
+                "🏘️ Phường / Xã",
+                localities,
+                index=default_idx,
+                help="Chọn phường hoặc xã"
+            )
 
             streets = geo.streets_of(locality)
-            street_choice = st.selectbox("Đường", streets + ["✏️ Khác (nhập tay)"])
-            street = (st.text_input("Tên đường", placeholder="ví dụ: đường lê quang định")
-                      if street_choice == "✏️ Khác (nhập tay)" else street_choice)
+            street_options = streets + ["✏️ Khác (nhập tay)"]
+            street_choice = st.selectbox(
+                "🚗 Đường / Phố",
+                street_options,
+                help="Chọn từ danh sách hoặc nhập tay"
+            )
 
-            st.subheader("🏷️ Phân loại")
-            property_type = st.radio("Loại nhà", list(PROPERTY_TYPES),
-                                      format_func=PROPERTY_TYPES.get, horizontal=True)
-            budget_range  = st.selectbox("Phân khúc giá",
-                                          list(BUDGET_RANGES), format_func=BUDGET_RANGES.get)
-            legal_status  = st.selectbox("Pháp lý", list(LEGAL_STATUS), format_func=LEGAL_STATUS.get)
-            direction     = st.selectbox("Hướng nhà", list(DIRECTIONS), format_func=DIRECTIONS.get)
+            if street_choice == "✏️ Khác (nhập tay)":
+                street = st.text_input(
+                    "📝 Tên đường (nhập tay)",
+                    placeholder="ví dụ: đường Lê Quang Định",
+                    key="detailed_street"
+                )
+            else:
+                street = street_choice
 
-        with col_house:
-            st.subheader("📐 Thông số")
-            c1, c2 = st.columns(2)
-            area_m2      = c1.number_input("Diện tích (m²)", 10.0, 1000.0, 80.0, step=5.0)
-            road_width_m = c2.number_input("Đường trước nhà (m)", 1.0, 60.0, 6.0, step=0.5)
-            width_unknown = c1.checkbox("Không rõ chiều ngang")
-            width_m  = c1.number_input("Chiều ngang (m)", 1.0, 50.0, 4.0, step=0.5, disabled=width_unknown)
-            length_unknown = c2.checkbox("Không rõ chiều dài")
-            length_m = c2.number_input("Chiều dài (m)", 1.0, 100.0, 20.0, step=0.5, disabled=length_unknown)
-            if width_unknown:  width_m  = None
-            if length_unknown: length_m = None
-            num_floors    = c1.number_input("Số tầng", 1, 15, 3)
-            num_bedrooms  = c2.number_input("Số phòng ngủ", 1, 20, 3)
+        with loc_col2:
+            st.markdown("**Gợi ý:**")
+            st.info(f"Có **{len(streets)}** đường trong cache cho phường này")
 
-            st.subheader("✨ Tiện ích & đặc điểm")
-            b1, b2, b3 = st.columns(3)
+        st.divider()
+
+        # SECTION 2: CLASSIFICATION
+        st.markdown("### 🏷️ SECTION 2: Phân Loại & Đặc Điểm")
+
+        class_col1, class_col2, class_col3, class_col4 = st.columns(4)
+
+        with class_col1:
+            property_type = st.selectbox(
+                "🏠 Loại nhà",
+                list(PROPERTY_TYPES),
+                format_func=PROPERTY_TYPES.get,
+                key="detailed_prop_type"
+            )
+
+        with class_col2:
+            budget_range = st.selectbox(
+                "💵 Phân khúc giá",
+                list(BUDGET_RANGES),
+                format_func=BUDGET_RANGES.get,
+                key="detailed_budget"
+            )
+
+        with class_col3:
+            legal_status = st.selectbox(
+                "📄 Pháp lý",
+                list(LEGAL_STATUS),
+                format_func=LEGAL_STATUS.get,
+                key="detailed_legal"
+            )
+
+        with class_col4:
+            direction = st.selectbox(
+                "🧭 Hướng nhà",
+                list(DIRECTIONS),
+                format_func=DIRECTIONS.get,
+                key="detailed_direction"
+            )
+
+        st.divider()
+
+        # SECTION 3: DIMENSIONS
+        st.markdown("### 📐 SECTION 3: Thông Số Kích Thước")
+
+        dim_col1, dim_col2, dim_col3 = st.columns(3)
+
+        with dim_col1:
+            area_m2 = st.number_input(
+                "📏 Diện tích (m²)",
+                10.0, 1000.0, 80.0,
+                step=5.0,
+                key="detailed_area"
+            )
+
+        with dim_col2:
+            road_width_m = st.number_input(
+                "🛣️ Đường trước nhà (m)",
+                1.0, 60.0, 6.0,
+                step=0.5,
+                key="detailed_road"
+            )
+
+        with dim_col3:
+            num_floors = st.number_input(
+                "🏢 Số tầng",
+                1, 15, 3,
+                key="detailed_floors"
+            )
+
+        st.markdown("**Chiều kích chi tiết**")
+        size_col1, size_col2 = st.columns(2)
+
+        with size_col1:
+            width_unknown = st.checkbox("❓ Không rõ chiều ngang", key="detailed_width_unk")
+            width_m = st.number_input(
+                "↔️ Chiều ngang (m)",
+                1.0, 50.0, 4.0,
+                step=0.5,
+                disabled=width_unknown,
+                key="detailed_width"
+            )
+            if width_unknown:
+                width_m = None
+
+        with size_col2:
+            length_unknown = st.checkbox("❓ Không rõ chiều dài", key="detailed_len_unk")
+            length_m = st.number_input(
+                "↕️ Chiều dài (m)",
+                1.0, 100.0, 20.0,
+                step=0.5,
+                disabled=length_unknown,
+                key="detailed_length"
+            )
+            if length_unknown:
+                length_m = None
+
+        num_bedrooms = st.number_input(
+            "🛏️ Số phòng ngủ",
+            1, 20, 3,
+            key="detailed_bedrooms"
+        )
+
+        st.divider()
+
+        # SECTION 4: AMENITIES & FEATURES
+        st.markdown("### ✨ SECTION 4: Tiện Ích & Đặc Điểm")
+
+        st.markdown("**Tiện ích nội bộ**")
+        util_col1, util_col2, util_col3, util_col4 = st.columns(4)
+
+        with util_col1:
             bin_flags = {
-                "kitchen_bin":    b1.checkbox("Nhà bếp", True),
-                "dining_room_bin": b2.checkbox("Phòng ăn", True),
-                "terrace_bin":    b3.checkbox("Sân thượng"),
-                "car_parking_bin": b1.checkbox("Chỗ để xe hơi"),
+                "kitchen_bin": st.checkbox("🍳 Nhà bếp", True, key="detailed_kitchen")
             }
+
+        with util_col2:
+            bin_flags["dining_room_bin"] = st.checkbox("🍽️ Phòng ăn", True, key="detailed_dining")
+
+        with util_col3:
+            bin_flags["terrace_bin"] = st.checkbox("🌞 Sân thượng", False, key="detailed_terrace")
+
+        with util_col4:
+            bin_flags["car_parking_bin"] = st.checkbox("🚗 Chỗ để xe hơi", False, key="detailed_parking")
+
+        st.markdown("**Đặc điểm vị trí & tính năng**")
+        feature_col1, feature_col2, feature_col3 = st.columns(3)
+
+        with feature_col1:
             text_flags = {
-                "is_hem_xe_hoi": b2.checkbox("Hẻm xe hơi / ô tô vào"),
-                "is_no_hau":     b3.checkbox("Nở hậu"),
-                "has_noi_that":  b1.checkbox("Có nội thất"),
-                "is_gap":        b2.checkbox("Cần bán gấp"),
-                "is_kinh_doanh": b3.checkbox("Tiện kinh doanh"),
+                "is_hem_xe_hoi": st.checkbox("🚙 Hẻm xe hơi / ô tô vào", False, key="detailed_hem_auto")
             }
+
+        with feature_col2:
+            text_flags["is_no_hau"] = st.checkbox("📐 Nở hậu", False, key="detailed_nohaus")
+
+        with feature_col3:
+            text_flags["has_noi_that"] = st.checkbox("🛋️ Có nội thất", False, key="detailed_interior")
+
+        st.markdown("**Tình trạng bán & kinh doanh**")
+        status_col1, status_col2 = st.columns(2)
+
+        with status_col1:
+            text_flags["is_gap"] = st.checkbox("⚡ Cần bán gấp", False, key="detailed_urgent")
+
+        with status_col2:
+            text_flags["is_kinh_doanh"] = st.checkbox("💼 Tiện kinh doanh", False, key="detailed_business")
 
         st.divider()
         if st.button("💰 Định giá", type="primary", use_container_width=True):
@@ -833,6 +1085,170 @@ with tab_analysis:
             st.dataframe(rank, hide_index=True, use_container_width=True)
             if len(rank):
                 st.bar_chart(rank.set_index("locality")["median_price_per_m2_million"], use_container_width=True)
+
+    # ===== NEW BI VISUALIZATIONS =====
+    st.divider()
+    st.markdown("## 📈 Phân Tích Chi Tiết & So Sánh")
+
+    if not filt.empty:
+        # ===== VIZ 1: Property Type Comparison =====
+        viz1_col, viz2_col = st.columns(2)
+
+        with viz1_col:
+            st.markdown("### 1️⃣ So Sánh Giá Theo Loại Nhà")
+            st.caption("Giá trung bình và số lượng listing theo loại nhà")
+
+            prop_type_analysis = (filt.groupby("property_type", as_index=False)
+                                 .agg(avg_price_billion=("price_billion_vnd", "mean"),
+                                      median_price_billion=("price_billion_vnd", "median"),
+                                      count=("price_billion_vnd", "size"),
+                                      avg_price_per_m2=("price_per_m2_million", "mean"))
+                                 .sort_values("avg_price_billion", ascending=False))
+
+            if not prop_type_analysis.empty:
+                st.dataframe(
+                    prop_type_analysis[[
+                        "property_type", "avg_price_billion", "count"
+                    ]].round(2),
+                    hide_index=True,
+                    use_container_width=True
+                )
+
+                # Bar chart
+                chart_data = prop_type_analysis[["property_type", "avg_price_billion"]].copy()
+                chart_data.columns = ["Loại Nhà", "Giá Trung Bình (tỷ VND)"]
+                st.bar_chart(
+                    chart_data.set_index("Loại Nhà"),
+                    use_container_width=True,
+                    height=300
+                )
+            else:
+                st.info("Không đủ dữ liệu loại nhà để phân tích")
+
+        # ===== VIZ 2: Area vs Price Scatter =====
+        with viz2_col:
+            st.markdown("### 2️⃣ Mối Quan Hệ Diện Tích - Giá")
+            st.caption("Scatter plot: Diện tích vs Giá (sắc độ = Giá/m²)")
+
+            scatter_data = filt[["area_m2", "price_billion_vnd", "price_per_m2_million"]].dropna()
+
+            if len(scatter_data) > 2:
+                import numpy as np
+
+                # Create scatter chart
+                scatter_chart = pd.DataFrame({
+                    "Diện Tích (m²)": scatter_data["area_m2"],
+                    "Giá (tỷ VND)": scatter_data["price_billion_vnd"],
+                    "Giá/m² (triệu)": scatter_data["price_per_m2_million"]
+                })
+
+                # Use custom function to create a scatter using Altair or st.scatter_chart
+                st.scatter_chart(
+                    scatter_chart,
+                    x="Diện Tích (m²)",
+                    y="Giá (tỷ VND)",
+                    size="Giá/m² (triệu)",
+                    use_container_width=True,
+                    height=300
+                )
+
+                # Add correlation insight
+                if len(scatter_data) > 2:
+                    corr = scatter_data["area_m2"].corr(scatter_data["price_billion_vnd"])
+                    st.caption(f"📊 Correlation: {corr:.3f} " +
+                             ("(Mạnh)" if abs(corr) > 0.7 else "(Trung bình)" if abs(corr) > 0.4 else "(Yếu)"))
+            else:
+                st.info("Không đủ dữ liệu để vẽ biểu đồ scatter")
+
+        st.divider()
+
+        # ===== VIZ 3: Price Distribution =====
+        dist_col, stats_col = st.columns([2, 1])
+
+        with dist_col:
+            st.markdown("### 3️⃣ Phân Bố Giá (Histogram)")
+            st.caption("Phân phối giá bán trong dữ liệu lọc")
+
+            price_dist = filt["price_billion_vnd"].dropna()
+
+            if len(price_dist) > 2:
+                # Create histogram using pandas cut
+                bins = 20
+                hist_data = pd.cut(price_dist, bins=bins).value_counts().sort_index()
+
+                hist_df = pd.DataFrame({
+                    "Khoảng Giá": [f"{interval.left:.1f}-{interval.right:.1f} tỷ" for interval in hist_data.index],
+                    "Số Lượng": hist_data.values
+                })
+
+                st.bar_chart(hist_df.set_index("Khoảng Giá"), use_container_width=True, height=300)
+            else:
+                st.info("Không đủ dữ liệu để tạo histogram")
+
+        with stats_col:
+            st.markdown("### 📊 Thống Kê Giá")
+            st.caption("Các chỉ số phân bố giá")
+
+            if not price_dist.empty:
+                st.metric("Min", f"{price_dist.min():.2f} tỷ")
+                st.metric("Q1 (25%)", f"{price_dist.quantile(0.25):.2f} tỷ")
+                st.metric("Median", f"{price_dist.median():.2f} tỷ")
+                st.metric("Q3 (75%)", f"{price_dist.quantile(0.75):.2f} tỷ")
+                st.metric("Max", f"{price_dist.max():.2f} tỷ")
+                st.metric("Std Dev", f"{price_dist.std():.2f} tỷ")
+
+        st.divider()
+
+        # ===== VIZ 4: Amenities Impact (using proxy metrics from available data) =====
+        st.markdown("### 4️⃣ Phân Tích Thuộc Tính Ảnh Hưởng Giá")
+        st.caption("So sánh giá theo các thuộc tính có sẵn trong dữ liệu")
+
+        amenity_col1, amenity_col2 = st.columns(2)
+
+        with amenity_col1:
+            st.markdown("**By Floor Count Impact**")
+
+            if "num_floors" in filt.columns:
+                floor_analysis = (filt.groupby("num_floors", as_index=False)
+                                 .agg(median_price=("price_billion_vnd", "median"),
+                                      avg_price_per_m2=("price_per_m2_million", "mean"),
+                                      count=("price_billion_vnd", "size"))
+                                 .sort_values("num_floors"))
+
+                if len(floor_analysis) > 0:
+                    floor_chart = pd.DataFrame({
+                        "Số Tầng": floor_analysis["num_floors"].astype(str),
+                        "Giá Trung Vị (tỷ)": floor_analysis["median_price"]
+                    })
+                    st.bar_chart(floor_chart.set_index("Số Tầng"), use_container_width=True, height=300)
+            else:
+                st.info("Dữ liệu số tầng không có sẵn")
+
+        with amenity_col2:
+            st.markdown("**By Area Size Impact**")
+
+            # Categorize properties by size
+            filt_with_category = filt.copy()
+            filt_with_category["size_category"] = pd.cut(
+                filt_with_category["area_m2"],
+                bins=[0, 50, 100, 150, 200, 1000],
+                labels=["< 50m²", "50-100m²", "100-150m²", "150-200m²", "> 200m²"]
+            )
+
+            size_analysis = (filt_with_category.groupby("size_category", as_index=False)
+                            .agg(median_price=("price_billion_vnd", "median"),
+                                 count=("price_billion_vnd", "size"))
+                            .sort_values("median_price"))
+
+            if len(size_analysis) > 0:
+                size_chart = pd.DataFrame({
+                    "Diện Tích": size_analysis["size_category"].astype(str),
+                    "Giá Trung Vị (tỷ)": size_analysis["median_price"]
+                })
+                st.bar_chart(size_chart.set_index("Diện Tích"), use_container_width=True, height=300)
+
+    else:
+        st.warning("⚠️ Bộ lọc không có dữ liệu. Vui lòng điều chỉnh các bộ lọc để xem các visualizations.")
 
 # =========================================================================
 # TAB 3: FEEDBACK ANALYTICS
