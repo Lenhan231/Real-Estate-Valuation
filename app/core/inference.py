@@ -17,10 +17,19 @@ import numpy as np
 import pandas as pd
 
 # Import preprocessing from training pipeline (single source of truth)
-_scripts_path = Path(__file__).resolve().parent.parent.parent / "models" / "scripts"
-if str(_scripts_path) not in sys.path:
-    sys.path.insert(0, str(_scripts_path))
-from shared.preprocessing import preprocess
+import importlib.util
+_preprocess_path = Path(__file__).resolve().parent.parent.parent / "models" / "scripts" / "shared" / "preprocessing.py"
+if _preprocess_path.exists():
+    spec = importlib.util.spec_from_file_location("shared_preprocessing", _preprocess_path)
+    shared_preprocessing = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(shared_preprocessing)
+    preprocess = shared_preprocessing.preprocess
+else:
+    # Fallback: import from sys.path
+    _scripts_path = Path(__file__).resolve().parent.parent.parent / "models" / "scripts"
+    if str(_scripts_path) not in sys.path:
+        sys.path.insert(0, str(_scripts_path))
+    from shared.preprocessing import preprocess
 
 from .geo import GeoLookup, POI_COLS
 
