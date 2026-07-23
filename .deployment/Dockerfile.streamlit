@@ -24,8 +24,10 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 # Copy application code
 COPY . .
 
-# Copy startup wrapper
+# Copy startup files
 COPY .deployment/run.py /app/run.py
+COPY .deployment/start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
 # Expose Streamlit port
 EXPOSE 8501
@@ -33,5 +35,5 @@ EXPOSE 8501
 # Debug: List what's installed
 RUN python -c "import streamlit; print(f'Streamlit version: {streamlit.__version__}')" || echo "WARNING: streamlit import failed"
 
-# Run with wrapper that catches errors
-CMD ["python", "/app/run.py"]
+# Run with shell script that outputs debug info
+ENTRYPOINT ["/app/start.sh"]
