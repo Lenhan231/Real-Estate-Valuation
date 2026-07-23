@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 # Use PORT environment variable if set, otherwise default to 8501
