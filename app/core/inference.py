@@ -61,13 +61,15 @@ def load_models():
     if not models:
         raise FileNotFoundError(f"No models in {MODEL_DIR} — ensure train_production.py has been run")
 
+    # Load training data (needed for both feature names fallback and medians)
+    training_df = pd.read_csv(READY_CSV)
+
     # Get feature names from trained model (single source of truth!)
     first_model = models[list(models.keys())[0]]
     try:
         feature_names = list(first_model.feature_names_in_)
     except AttributeError:
         # Fallback if model doesn't have feature_names_in_
-        training_df = pd.read_csv(READY_CSV)
         feature_names = [c for c in training_df.columns if c != 'price_vnd']
         feature_names += ["locality_price_median", "price_per_sqm_market"]
 
