@@ -765,9 +765,9 @@ Higher-order features capture non-linear relationships and domain-specific patte
 The final production model uses **3-tier price-based segmentation** (simplified from earlier 2-property-type × 3-price experiments):
 
 **Price Tiers (Target Segments):**
-- **Low (0–5B VND):** ~3,500 properties; budget apartments, small houses
-- **Mid (5–20B VND):** ~4,200 properties; standard mid-range residential
-- **High (>20B VND):** ~2,700 properties; luxury, penthouse, large villas
+- **Low (0–5B VND):** 1,120 properties (10.8%); budget apartments, small houses
+- **Mid (5–20B VND):** 6,288 properties (60.4%); standard mid-range residential
+- **High (>20B VND):** 3,013 properties (28.9%); luxury, penthouse, large villas
 
 **Rationale for Price-Only Segmentation:**
 Historical 2×3=6-bucket experiments (property-type × price) showed that **price tier was the dominant driver** of predictive accuracy, while property-type (frontage vs alley) added model complexity without material accuracy gains. Tier-specific training captures the heterogeneous price dynamics and feature relationships (e.g., high-tier buyers value metro proximity more heavily), while simple price-tier routing eliminates the overhead of multi-dimensional bucketing.
@@ -871,14 +871,15 @@ Each of the 9 models (3 algorithms × 3 tiers) is trained with algorithm-specifi
 ### **4.3 Data Splitting and Cross-Validation**
 
 **Train-Test Split:**
-- **Ratio:** 80% training / 20% holdout test
-- **Random seed:** random_state=42 (fixed for reproducibility across training runs)
-- **Method:** Stratified split by price tier (ensures each tier has proportional train/test distribution)
+- **Ratio:** 80% training / 20% test (10,421 total: ~8,337 train, ~2,084 test per tier)
+- **Random seed:** random_state=42 (fixed for reproducibility)
+- **Method:** Random split WITHOUT stratification (note: future work should add stratified split by tier)
 
-**Validation Strategy:**
-- **In-training validation:** 20% of training set (16% of full data) reserved as validation set for early stopping criterion
-- **Holdout test set:** 20% of full data (fresh, unseen at training time) for final model evaluation
-- **No cross-validation:** GroupKFold by locality recommended for future work (RQ2 limitations); currently using fixed split for reproducibility and faster iteration
+**Validation & Evaluation - IMPORTANT CAVEAT:**
+- **Test set reuse:** The 20% test set is used for **early stopping** in LightGBM and CatBoost during training (not held out), reducing independence
+- **Ensemble weighting:** Test set predictions are also used to calculate inverse-RMSE weights for the 3-model ensemble (further leakage)
+- **Interpretation:** Reported metrics (MAPE 13.10%, R² 0.9200) represent **in-sample performance conditional on test set**, not true generalization to fresh unseen data
+- **Production inference:** At inference time, ensemble uses **equal averaging** (not inverse-RMSE weighted), creating a train-serving mismatch (see Section V.1)
 
 **Experiment Tracking:**
 - **Platform:** Weights & Biases (wandb.ai, project: real-estate-valuation)
@@ -1209,11 +1210,13 @@ Returns:
 - API latency: ~100-200ms on Render free tier
 - Total end-to-end latency: ~1-2 seconds (including UI lag)
 
-Routing: It dynamically selects a specific model bucket pair (e.g., lgbm\_mid\_nha\_mat\_tien and cb\_mid\_nha\_mat\_tien) based on the user's selected property type and budget tier.
+Routing: It dynamically selects the 3-model ensemble for the user's selected price tier (low/mid/high).
 
-Execution: The assembled feature vector is fed to both the LightGBM and CatBoost models for that bucket.
+Execution: The assembled feature vector is fed to all three algorithms (LightGBM, XGBoost, CatBoost) for that tier. Each model makes an independent prediction in log-space.
 
-Ensembling: Both models predict prices in log-space (log1p(price\_vnd)). The system averages these two outputs and applies an inverse transformation (np.expm1) to produce the final VND price.
+Ensembling: All three models predict prices in log-space (log1p(price\_vnd)). The system applies **equal averaging** of the three predictions and applies an inverse transformation (np.expm1) to produce the final VND price.
+
+**Train-Serving Mismatch Note:** Training used **inverse-RMSE weighted averaging** to combine the 3 models (weights calculated on test set). Production inference uses **equal averaging** instead. This discrepancy means reported training metrics (MAPE 13.10%) may not exactly represent production system performance. This is flagged for future alignment.
 
 ## 
 
@@ -1259,7 +1262,7 @@ Ensembling: Both models predict prices in log-space (log1p(price\_vnd)). The sys
 
 #### **Phase 6: Model-Specific Preprocessing & Enrichment (**scripts/train\_ensemble.py**)**
 
-This phase runs dynamically right before the data is fed into the LightGBM/CatBoost models.
+This phase runs dynamically right before the data is fed into the 3-model ensemble (LightGBM/XGBoost/CatBoost).
 
 **Strict Pruning:** Drops any residual rows outside the target market bounds (Price: 2.0B–50.0B VND, Area: 15–500 m², Unit Price: 30M–800M VND/m²).
 
@@ -1514,11 +1517,11 @@ The geocoding and POI lookup pipeline uses a **two-tier cache strategy**:
 **Current workflow:**
 - Manual retraining via `python scripts/train_ensemble.py`
 - Experiment tracking in Weights & Biases (wandb project: real-estate-valuation)
-- Model artifacts stored as .pkl files (12 files: 6 LightGBM + 6 CatBoost per 9-model (3-tier × 3-algorithm) segmentation)
+- Model artifacts stored as .pkl files (9 files: 3 LightGBM + 3 XGBoost + 3 CatBoost for 3-tier × 3-algorithm segmentation, ~47.9 MB total)
 - Version history documented in LATEST_UPDATE.md
 
 **Version tracking (sample):**
-- v2.6: LightGBM + CatBoost ensemble (MAPE 13.10%, R² 0.9200) — Current production
+- v2.6: LightGBM + XGBoost + CatBoost 3-tier ensemble (MAPE 13.10%, R² 0.9200) — Current production
 - v2.5: Historical TabPFN experiments (MAPE 24.22%) — Archived
 - v2.0-v2.4: Earlier XGBoost/ensemble iterations — Archived
 
@@ -1649,7 +1652,7 @@ To improve model transparency, global feature-importance analysis was conducted 
 
 **Hypothesis:** Among tree-boosting (LightGBM, XGBoost, CatBoost) and foundation models (TabPFN), which architecture best balances accuracy and deployment practicality for real-time valuation?
 
-**Findings:** **DEPLOYMENT-DRIVEN SELECTION** — The final architecture uses **LightGBM + CatBoost** (XGBoost excluded for simplicity, not accuracy). Key trade-offs:
+**Findings:** **ENSEMBLE WITH ALL THREE ALGORITHMS** — The final architecture uses **LightGBM + XGBoost + CatBoost** ensemble (all 3 algorithms per tier for robustness). Per-model trade-offs for context:
 
 | Criterion | TabPFN | XGBoost | LightGBM | CatBoost |
 | :---- | :---- | :---- | :---- | :---- |
@@ -1659,11 +1662,12 @@ To improve model transparency, global feature-importance analysis was conducted 
 | Production stability | Uncertain | Good | Excellent | Excellent |
 | Categorical handling | Standard | Poor | Good | **Best** |
 
-**Decision Rationale:** LightGBM + CatBoost selected for final deployment because:
-1. **Fast inference** meets Streamlit/API latency requirements (<500ms including feature engineering)
-2. **CatBoost's ordered target encoding** naturally handles locality categorical features with minimal leakage risk
-3. **Simple serialization** (joblib .pkl files) and reproducibility for version tracking
-4. **Ensemble averaging** (3 models per tier) provides robustness without meta-learner complexity
+**Decision Rationale:** All three algorithms retained in final deployment because:
+1. **Ensemble robustness** — Combining LightGBM (fast), XGBoost (stable gradient descent), and CatBoost (ordered encoding) reduces per-algorithm overfitting
+2. **Complementary strengths** — LightGBM excels at feature interactions; XGBoost provides gradient-based regularization; CatBoost handles categorical features naturally
+3. **Fast ensemble inference** — Equal-average aggregation of 3 models still meets Streamlit/API latency (<500ms including feature engineering)
+4. **Simple serialization** (joblib .pkl files) and reproducibility for version tracking
+5. **Per-tier training** — Each tier trained independently on tier-specific distributions; ensemble voting captures consensus predictions across algorithms
 
 TabPFN's historical advantage (24% vs 25% MAPE) was measured under earlier preprocessing configurations; re-validating TabPFN under the current 6-phase pipeline and 3-tier segmentation remains a recommended future direction (RQ3.1 in Recommendations).
 
