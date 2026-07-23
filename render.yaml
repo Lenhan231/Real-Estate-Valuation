@@ -2,7 +2,7 @@ services:
   - type: web
     name: real-estate-valuation-api
     runtime: docker
-    dockerfilePath: .deployment/Dockerfile
+    dockerfilePath: Dockerfile
     autoDeploy: true
     envVars:
       - key: ENV
