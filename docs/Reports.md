@@ -323,7 +323,7 @@ Routine team meetings will use Meet, Discord and Zalo to ensure alignment on res
 
 | Risk | Impact | Prevention / Response Plan |
 | ----- | ----- | ----- |
-| Insufficient or low-quality data | Reduces model accuracy and reliability | Collect data from multiple sources and apply data cleaning/preprocessing techniques |
+| Insufficient or low-quality data | Reduces model accuracy and reliability | Apply aggressive data cleaning/preprocessing techniques; future expansion to multiple portals if data quality remains insufficient |
 | CAPTCHA and access restrictions during web scraping | Difficulties in automated data collection | Use public datasets, APIs, or alternative data sources when scraping is blocked |
 | Model performance not meeting expectations | Prediction accuracy may not achieve the target MAPE | Experiment with different ML/DL models and optimize hyperparameters |
 
@@ -521,9 +521,9 @@ How does TabPFN perform relative to XGBoost in historical experiments across pro
 
 ### **2.1 Data Collection**
 
-The data collection pipeline systematically acquired Vietnamese real estate property listings from multiple online portals. **Current dataset statistics:**
+The data collection pipeline systematically acquired Vietnamese real estate property listings from Alonhadat.com. **Current dataset statistics:**
 
-- **Raw listings collected:** ~15,000 initial links (from Alonhadat, Batdongsan, and related sources)
+- **Raw listings collected:** ~15,000 initial links from Alonhadat.com
 - **Supabase database:** 12,832 records in Raw_Features table
 - **UI analysis dataset:** 12,794 records (38-record gap due to NULL values in critical columns: lat, lon, price_vnd, area_m2)
 - **Model training dataset:** 10,421 properties after strict outlier filtering (price 2-50B VND, area 15-500m², unit price 30-800M VND/m²)
