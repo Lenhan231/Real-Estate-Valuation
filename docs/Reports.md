@@ -592,15 +592,38 @@ Several practical challenges were encountered during web scraping. The correspon
 
 *Table 5\. Data Collection Challenges*
 
-#### ***Data Quality Assurance***
+#### ***Data Validation & Quality Assurance***
 
-To ensure dataset reliability before downstream processing, several validation rules are applied:
+To ensure dataset reliability before downstream processing, multiple validation layers are applied:
 
-* Property price must be within **0.1–200 billion VND**
+**Validation Techniques (models/scripts/shared/preprocessing.py):**
 
-* Property area must be within **10–2,000 m²**
+| Validation Type | Rule | Purpose | Impact |
+| :---- | :---- | :---- | :---- |
+| **Price Range** | 2.0B – 50.0B VND | Remove data-entry errors, extreme outliers | ~18% of raw data filtered |
+| **Area Range** | 15–500 m² | Remove implausible property sizes | Combined with price filter |
+| **Unit Price Range** | 30–800M VND/m² | Remove price-per-m² anomalies | Catches misrecorded prices |
+| **Missing Value Detection** | Binary indicators (col_missing) | Preserve missingness signals | 8-10 indicator columns added |
+| **Data Type Validation** | Try-except parsing | Handle malformed numeric fields | Converts "123,45" → 123.45 |
+| **Deduplication** | (lat, lon, price_vnd, area_m2) tuple match | Remove re-listed properties | Exact tuple matching |
+| **NULL Handling** | Hierarchical filling (by property_type + area_segment) | Impute missing values systematically | No rows dropped for missing numerics |
 
-* Dataset validation performed before the geocoding and feature engineering stages
+*Table 5A. Data Validation Techniques and Impact*
+
+**Validation Timing:**
+- **Raw data ingestion:** Price/area bounds applied during scraping validation (pre-database)
+- **Preprocessing phase:** All 6 validation steps (Phase 1-6) applied before feature engineering
+- **Model training:** Final filtered dataset (~10,421 samples) used for train/test split
+
+**Quality Metrics Post-Validation:**
+- **NULL rate before:** ~15-20% across numeric columns (raw scraped data)
+- **NULL rate after:** <0.1% (via hierarchical imputation)
+- **Duplicate rate before:** ~8-12% (re-listed properties)
+- **Duplicate rate after:** 0% (removed by tuple matching)
+- **Outlier rate before:** ~18% (outside price/area/unit-price bounds)
+- **Outlier rate after:** 0% (filtered, kept central 82%)
+
+**Result:** 12,832 raw Supabase records → 12,794 UI-visible (38 removed: NULL lat/lon/price/area) → 10,421 training dataset (2,373 removed: outliers)
 
 #### ***Running the Scraping Pipeline***
 
