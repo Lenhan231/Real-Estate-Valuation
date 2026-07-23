@@ -1268,55 +1268,224 @@ This phase runs dynamically right before the data is fed into the LightGBM/CatBo
 
 ## **3\. Deployment Strategy** {#3.-deployment-strategy}
 
-The system is deployed as a production-ready containerized application with multi-platform support. Docker and Docker Compose provide consistent environments across development and deployment stages.
+The system is deployed as a production-ready containerized application with multi-platform support. Docker containerization ensures consistent environments across development, staging, and production. The current production deployment runs on **Render** with automatic git-triggered deployment.
 
 ### **3.1 Containerized Architecture**
 
-**Container Images:**
-- **FastAPI API Container** (.deployment/Dockerfile): Multi-stage build for minimal size; runs on port 8000
-- **Streamlit UI Container** (.deployment/Dockerfile.streamlit): Web interface running on port 8501
-- **Local Development** (.deployment/docker-compose.yml): Both services orchestrated together with internal networking
+**Docker Images:**
+
+| Service | Container | Port | Build Type | Purpose |
+| :---- | :---- | :---- | :---- | :---- |
+| **FastAPI API** | `.deployment/Dockerfile` | 8000 | Multi-stage | Backend inference service, `/api/predict`, `/api/parse`, `/api/localities` endpoints |
+| **Streamlit UI** | `.deployment/Dockerfile.streamlit` | 8501 | Multi-stage | Frontend web app with 4 tabs (Valuation, Market Analysis, Feedback, Model Info) |
+| **Docker Compose** | `.deployment/docker-compose.yml` | 8000 + 8501 | Orchestration | Local dev environment with both services networked together |
 
 **Key Features:**
-- ✅ Multi-stage Docker builds (builder → runtime)
-- ✅ Non-root user execution (security)
-- ✅ Health checks for both services
-- ✅ Dynamic port configuration via environment variables
-- ✅ Comprehensive logging and debug output
+- ✅ Multi-stage Docker builds (builder → runtime, ~30-40% size reduction)
+- ✅ Non-root user execution (security hardening)
+- ✅ Health checks via /health endpoint (for both FastAPI + Streamlit)
+- ✅ Dynamic port configuration via PORT environment variable
+- ✅ Explicit stderr logging with flush (catches startup errors on Render free tier)
+- ✅ Comprehensive startup diagnostics (model loading verification, Supabase connectivity)
+
+**Render-Specific Optimizations:**
+- Startup shell script (`scripts/startup.sh`): Proper signal handling via `exec` to replace shell process
+- Memory logging: Monitors resource usage during inference
+- Model caching: Loads all 9 .pkl files on startup (not lazy-loaded) to avoid timeout issues
 
 ### **3.2 Deployment Platforms**
 
-**Render (Current Production)**
-- Automatic deployment via git push to main branch
-- render.yaml defines 2 services: API and Streamlit UI
-- Environment variables managed via Render dashboard
-- Each service receives unique public URL
+#### **Render (Current Production) — https://real-estate-valuation-api.onrender.com**
 
-**Local Development (Docker Compose)**
-```bash
-docker-compose up              # Start both services
-docker-compose logs -f         # Monitor logs
-docker-compose down -v         # Full cleanup
+**Configuration (render.yaml):**
+```yaml
+services:
+  - type: web
+    name: real-estate-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app.main:app --workers 1 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: SUPABASE_URL
+        sync: false  # Set via dashboard secrets
+      - key: API_URL
+        value: https://real-estate-valuation-api.onrender.com
+
+  - type: web
+    name: real-estate-streamlit
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: exec streamlit run app/ui/streamlit_app.py --server.port=$PORT
+    envVars:
+      - key: PORT
+        value: 8501
+      - key: API_URL
+        value: https://real-estate-valuation-api.onrender.com
 ```
 
-**DigitalOcean & Self-Hosted**
-- Deploy docker-compose.yml directly to VPS
-- Requires: Docker, Docker Compose, git
-- See DEPLOYMENT.md for step-by-step guides
+**Deployment Flow:**
+1. Push to `main` branch on GitHub
+2. Render detects changes via webhook
+3. Both services rebuild and deploy in parallel
+4. API: gunicorn with 1 worker (free tier limitation)
+5. Streamlit: direct execution (no gunicorn needed)
+6. Each service gets unique public URL + auto-assigned domain
 
-### **3.3 Configuration Management**
+**Current Endpoints:**
+- API: `https://real-estate-valuation-api.onrender.com` (may sleep after 15 min inactivity)
+- Streamlit UI: `https://real-estate-valuation-streamlit.onrender.com` (access via rendered URL)
 
-- **Secrets:** .env file with Supabase credentials, API keys (excluded from git via .gitignore)
-- **Template:** .env.example documents all required variables
-- **Environment-based:** PORT, ENV, API_URL read from system environment
-- **Streamlit Config:** Server settings via STREAMLIT_* environment variables
+#### **Local Development (Docker Compose)**
 
-### **3.4 Data & Model Management**
+```bash
+# Start both services with internal networking
+docker-compose -f .deployment/docker-compose.yml up
 
-* **Data layer:** Processed datasets via Supabase (PostgreSQL cloud database)
-* **Model artifacts:** .pkl and .joblib files loaded on startup (cached in memory)
-* **Cache strategy:** data/cache/localities.csv for repeated geocoding/POI lookups
-* **Model versioning:** W&B (Weights & Biases) experiment tracking with model metadata
+# In separate terminal, view logs
+docker-compose -f .deployment/docker-compose.yml logs -f
+
+# Access
+# FastAPI: http://localhost:8000
+# Streamlit: http://localhost:8501
+# API health: http://localhost:8000/health
+
+# Cleanup (remove volumes)
+docker-compose -f .deployment/docker-compose.yml down -v
+```
+
+#### **DigitalOcean & Self-Hosted VPS**
+
+**Prerequisites:**
+- Linux server (Ubuntu 20.04+)
+- Docker & Docker Compose installed
+- Git clone of repository
+- Subdomain configured (DNS A record)
+
+**Deployment Steps:**
+```bash
+# 1. Clone repo
+git clone <repo-url>
+cd Real-Estate-Valuation
+
+# 2. Create .env with secrets
+cp .env.example .env
+# Edit .env with Supabase credentials, API_URL, etc.
+
+# 3. Start services
+docker-compose -f .deployment/docker-compose.yml up -d
+
+# 4. Configure reverse proxy (Nginx)
+# Route *.yourdomain.com → localhost:8000, localhost:8501
+
+# 5. Monitor
+docker-compose logs -f
+```
+
+See `.github/DEPLOYMENT.md` for detailed step-by-step guides.
+
+### **3.3 Environment Configuration**
+
+**Required Variables (.env file):**
+
+| Variable | Example | Purpose | Source |
+| :---- | :---- | :---- | :---- |
+| `SUPABASE_URL` | https://vyjys...co | Database connection | Supabase dashboard |
+| `SUPABASE_SERVICE_KEY` | sb_secret_... | API authentication | Supabase dashboard (keep secret!) |
+| `WANDB_API_KEY` | wandb_v1_... | Experiment tracking | Weights & Biases |
+| `API_URL` | https://real-estate-valuation-api.onrender.com | Backend URL for frontend | Render/deployment URL |
+| `PORT` | 8000 | Service port | Environment variable |
+| `ENV` | production | Environment name | deployment context |
+| `DEBUG` | false | Debug mode (disable in prod) | false for production |
+| `STREAMLIT_SERVER_HEADLESS` | true | Run headless (no browser auto-open) | true for server deployment |
+| `STREAMLIT_SERVER_ENABLEXSRFPROTECTION` | false | CSRF protection (may interfere with proxies) | false if behind reverse proxy |
+
+**.env.example Template:**
+```
+SUPABASE_URL=https://...supabase.co
+SUPABASE_SERVICE_KEY=sb_secret_...
+WANDB_API_KEY=wandb_v1_...
+API_URL=http://localhost:8000
+PORT=8000
+ENV=development
+DEBUG=true
+STREAMLIT_SERVER_HEADLESS=true
+STREAMLIT_SERVER_ENABLEXSRFPROTECTION=false
+```
+
+**Security Notes:**
+- `.env` is git-ignored (never commit secrets)
+- Use `SUPABASE_SERVICE_KEY` only on backend (not exposed to frontend)
+- Rotate API keys periodically (W&B, Supabase)
+- Use managed secrets on Render/DigitalOcean (not .env files in prod)
+
+### **3.4 UI Rendering & Frontend Tech**
+
+**Streamlit Chart Rendering (Altair-Based):**
+
+All BI dashboard visualizations use **Altair** for reliable rendering across browsers:
+
+| Visualization | Chart Type | Implementation | Feature |
+| :---- | :---- | :---- | :---- |
+| **Property Type Comparison** | Bar chart | `alt.Chart().mark_bar()` | Color-coded by price, interactive |
+| **Area vs Price Scatter** | Scatter plot | `alt.Chart().mark_circle()` | Bubble size = price/m², tooltip hover |
+| **Price Distribution** | Histogram | `alt.Chart().mark_bar()` | 20-bin distribution, statistics panel |
+| **Amenities Impact** | Multi-bar | `alt.Chart().mark_bar()` | Floor count & area size comparison |
+
+**Why Altair:**
+- ✅ Reliable across Streamlit versions (vs deprecated st.bar_chart/st.scatter_chart)
+- ✅ Interactive tooltips & hover
+- ✅ Theme-aware (light/dark mode support)
+- ✅ Browser-native rendering (no external CDN calls)
+- ✅ Respects all active filters (property type, locality, date range)
+
+**Chart Features:**
+```python
+st.altair_chart(
+    chart.properties(height=300),  # Fixed height for consistency
+    use_container_width=True,      # Responsive width
+)
+```
+
+### **3.5 Monitoring & Logging**
+
+**Startup Logging (app/main.py, app/ui/streamlit_app.py):**
+- Explicit flush to stderr: `sys.stderr.flush()` (catches errors on Render free tier)
+- Model loading verification: Logs model names, shapes, performance metrics
+- Supabase connectivity check: Verifies database connection on startup
+- Feature count validation: Confirms 79 features present
+
+**Production Logging (stderr routing):**
+- All logs → stderr (stdout reserved for Streamlit output)
+- Timestamps + log levels (INFO, WARNING, ERROR)
+- Render captures stderr automatically for debugging
+
+**Health Checks:**
+- FastAPI: `GET /health` endpoint (returns `{"status": "ok"}`)
+- Render: Pings /health every 60s to detect unresponsive service
+- Streamlit: Check `_streamlit_ready` on startup
+
+### **3.6 Performance & Scaling**
+
+**Render Free Tier Limitations:**
+- ✅ Single worker (no multi-threading)
+- ✅ 512MB RAM (tight for model loading)
+- ✅ Auto-sleep after 15 minutes inactivity (cold start ~30s)
+- ✅ Shared CPU (no guaranteed resources)
+
+**Optimization:**
+- Load all 9 models on startup (not lazy) to avoid mid-prediction timeouts
+- Streamlit caching via `@st.cache_resource` (load once per session)
+- 2-tier caching for geocoding (in-memory + CSV) reduces API calls 90%+
+- Single-threaded design suitable for free tier (no threading overhead)
+
+**Scaling Path (Future):**
+- Render Pro: $7/month → dedicated resources
+- DigitalOcean App Platform: $12+/month → auto-scaling
+- Self-hosted K8s: horizontal scaling via multiple pod replicas
 
 ## **4\. Scalability and Maintenance** {#4.-scalability-and-maintenance}
 
@@ -1614,27 +1783,139 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 # **VIII. Appendices** {#viii.-appendices}
 
-## **Appendix A - Core Processed Dataset Fields** {#appendix-a-core-processed-dataset-fields}
+## **Appendix A - Complete Dataset Fields (79 Features)** {#appendix-a-core-processed-dataset-fields}
 
-| \# | Feature | Type | Description |
-| ----- | ----- | ----- | ----- |
-| 1 | property\_type | int | 1 \= frontage (nhà mặt tiền), 0 \= alley (nhà trong hẻm) |
-| 2 | legal\_status | int | Legal document status (encoded) |
-| 3 | num\_floors | float | Number of floors |
-| 4 | num\_bedrooms | float | Number of bedrooms |
-| 5 | road\_width\_m | float | Adjacent road width (m) |
-| 6 | width\_m | float | Property frontage width (m) |
-| 7 | length\_m | float | Property length (m) |
-| 8 | price\_vnd | float | Total property price (VND) |
-| 9 | area\_m2 | float | Property area (m²) |
-| 10–13 | dining\_room\_bin, kitchen\_bin, terrace\_bin, car\_parking\_bin | int (binary) | Amenity presence flags |
-| 14 | locality\_square | float | Locality area statistic |
-| 15 | locality\_population\_density | float | Population density of the locality |
-| 16 | distance\_to\_center\_km | float | Distance to city center (km) |
-| 17–28 | nearest\_\*\_km and \*\_count\_\*km (school, hospital, marketplace, supermarket, mall, bus\_stop) | float | Geospatial POI proximity/density features |
-| 29 | metro\_count\_5km | float | Number of metro stations within 5 km |
+Comprehensive reference for all 79 engineered features used in the 9-model ensemble. Features are categorized by source and processing phase.
 
-*Table 12\. Data Dictionary*
+### **Category 1: Raw Structural Features (8 features)**
+
+| # | Feature | Type | Range/Values | Source | Notes |
+| :---- | :---- | :---- | :---- | :---- | :---- |
+| 1 | area_m2 | float | 15–500 | Scraped | Property area (m²); used for segmentation |
+| 2 | width_m | float | 0.5–50 | Scraped → imputed | Property frontage width |
+| 3 | length_m | float | 1–100 | Scraped → imputed | Property length/depth |
+| 4 | num_floors | float | 1–15 | Scraped → imputed | Number of stories |
+| 5 | num_bedrooms | float | 1–20 | Scraped → imputed | Number of bedrooms |
+| 6 | road_width_m | float | 1–60 | Scraped → imputed | Adjacent road width |
+| 7 | property_type_encoded | int | {0, 1, 2, ...} | Scraped (1-hot) | nhà_mat_tien, nhà_trong_hem, etc. |
+| 8 | legal_status_encoded | int | {0, 1, 2, ...} | Scraped (1-hot) | sổ hồng, giấy tờ, etc. |
+
+### **Category 2: Temporal Features (4 features)**
+
+| # | Feature | Type | Range | Source | Notes |
+| :---- | :---- | :---- | :---- | :---- | :---- |
+| 9 | post_day_year | int | 2024–2026 | post_day extraction | Year from listing date |
+| 10 | post_day_month | int | 1–12 | post_day extraction | Month (seasonality signal) |
+| 11 | post_day_day | int | 1–31 | post_day extraction | Day of month |
+| 12 | post_day_quarter | int | 1–4 | post_day extraction | Quarter aggregation (optional) |
+
+### **Category 3: Geospatial POI Features (15 features)**
+
+| # | Feature | Type | Range | Radius | Purpose |
+| :---- | :---- | :---- | :---- | :---- | :---- |
+| 13 | distance_to_center_km | float | 0–30 | — | Geodesic distance to HCM city center |
+| 14 | nearest_school_km | float | 0–10 | 3 km | Closest school |
+| 15 | school_count_3km | int | 0–20 | 3 km | Count of schools |
+| 16 | nearest_hospital_km | float | 0–15 | 5 km | Closest hospital/clinic |
+| 17 | hospital_count_5km | int | 0–8 | 5 km | Count of hospitals |
+| 18 | nearest_marketplace_km | float | 0–10 | 3 km | Closest market/supermarket |
+| 19 | marketplace_count_3km | int | 0–15 | 3 km | Count of markets |
+| 20 | nearest_supermarket_km | float | 0–10 | 3 km | Closest supermarket |
+| 21 | supermarket_count_3km | int | 0–12 | 3 km | Count of supermarkets |
+| 22 | nearest_mall_km | float | 0–15 | 3 km | Closest shopping mall |
+| 23 | mall_count_3km | int | 0–6 | 3 km | Count of malls |
+| 24 | nearest_bus_stop_km | float | 0–3 | 1 km | Closest bus stop |
+| 25 | bus_stop_count_1km | int | 0–15 | 1 km | Count of bus stops |
+| 26 | nearest_metro_km | float | 0–20 | 5 km | Closest metro/MRT station |
+| 27 | metro_count_5km | int | 0–5 | 5 km | Count of metro stations (weighted 3x in scores) |
+
+### **Category 4: Locality/Admin Features (2 features)**
+
+| # | Feature | Type | Range | Source | Notes |
+| :---- | :---- | :---- | :---- | :---- | :---- |
+| 28 | locality_square | float | 0–500 | Administrative data | Ward/district area (km²) |
+| 29 | locality_population_density | float | 0–50,000 | Administrative data | Population per km² |
+
+### **Category 5: Dimensional/Ratio Features (6 features)**
+
+| # | Feature | Type | Formula | Purpose |
+| :---- | :---- | :---- | :---- | :---- |
+| 30 | perimeter_m | float | 2×(width_m + length_m) | Plot perimeter |
+| 31 | shape_ratio | float | width_m / (length_m + 0.1) | Regularity (narrow vs. square) |
+| 32 | area_x_floors | float | area_m2 × num_floors | Total built-up area |
+| 33 | area_x_bedrooms | float | area_m2 × num_bedrooms | Space per bedroom proxy |
+| 34 | area_per_bedroom | float | area_m2 / num_bedrooms | Square meters per bedroom |
+| 35 | area_per_floor | float | area_m2 / num_floors | Average floor area |
+
+### **Category 6: Log-Transformed Features (5 features)**
+
+| # | Feature | Type | Transform | Purpose |
+| :---- | :---- | :---- | :---- | :---- |
+| 36 | log_area | float | log1p(area_m2) | Reduce skewness |
+| 37 | log_distance_to_center | float | log1p(distance_to_center_km) | Skewness reduction |
+| 38 | log_population_density | float | log1p(locality_population_density) | Handle extreme values |
+| 39 | log_nearby_amenities | float | log1p(nearby_amenities) | Facility count scaling |
+| 40 | log_road_width | float | log1p(road_width_m) | Normalize road widths |
+
+### **Category 7: Composite Scoring Features (3 features)**
+
+| # | Feature | Type | Formula | Range | Purpose |
+| :---- | :---- | :---- | :---- | :---- | :---- |
+| 41 | location_score | float | 10/(dist+1)×2.0 + 10/(sch+1)×1.5 + ... | 0–100 | Urban accessibility index |
+| 42 | amenity_score | float | Sum(POI counts, metro×3) | 0–50 | Facility density index |
+| 43 | interaction_loc_amenity | float | location_score × amenity_score | 0–5000 | Joint location quality |
+
+### **Category 8: Text-Based/NLP Features (6 features)**
+
+| # | Feature | Type | Source | Values | Notes |
+| :---- | :---- | :---- | :---- | :---- | :---- |
+| 44 | is_hem_xe_hoi | int | Regex on description | {0, 1} | Car-accessible alley |
+| 45 | is_mat_tien | int | Regex on description | {0, 1} | Frontage property |
+| 46 | is_no_hau | int | Regex on description | {0, 1} | Widened rear |
+| 47 | has_noi_that | int | Regex on description | {0, 1} | Furnished |
+| 48 | is_gap | int | Regex on description | {0, 1} | Urgent/distressed sale |
+| 49 | is_kinh_doanh | int | Regex on description | {0, 1} | Commercial use |
+
+### **Category 9: Locality Target Encoding (2 features)**
+
+| # | Feature | Type | Computation | Purpose |
+| :---- | :---- | :---- | :---- | :---- |
+| 50 | locality_price_median | float | Training set groupby median | Ward-level price baseline |
+| 51 | price_per_sqm_market | float | Training set groupby median | Ward-level unit price |
+
+### **Category 10: Amenity Aggregation (2 features)**
+
+| # | Feature | Type | Computation | Purpose |
+| :---- | :---- | :---- | :---- | :---- |
+| 52 | nearby_amenities | int | Sum(school_count + hospital_count + ...) | Total facility count |
+| 53 | amenity_density | float | nearby_amenities / (area_m2 + 1) | Facility density per m² |
+
+### **Category 11: Missing Value Indicators (10 features)**
+
+| # | Feature | Type | Values | Purpose |
+| :---- | :---- | :---- | :---- | :---- |
+| 54 | width_m_missing | int | {0, 1} | Width imputed? |
+| 55 | length_m_missing | int | {0, 1} | Length imputed? |
+| 56 | road_width_m_missing | int | {0, 1} | Road width imputed? |
+| 57 | perimeter_m_missing | int | {0, 1} | Perimeter computed from imputed dims |
+| 58 | shape_ratio_missing | int | {0, 1} | Shape ratio computed from imputed dims |
+| 59 | nearest_metro_km_missing | int | {0, 1} | Metro distance imputed? |
+| 60 | nearest_hospital_km_missing | int | {0, 1} | Hospital distance imputed? |
+| 61 | nearest_marketplace_km_missing | int | {0, 1} | Market distance imputed? |
+| 62 | nearest_bus_stop_km_missing | int | {0, 1} | Bus stop distance imputed? |
+| 63 | nearest_school_km_missing | int | {0, 1} | School distance imputed? |
+
+### **Category 12: Area Segmentation (Binning)**
+
+| # | Feature | Type | Bins | Purpose |
+| :---- | :---- | :---- | :---- | :---- |
+| 64 | area_segment | category | {tiny, small, med_low, med, med_high, large, xlarge} | Grouped imputation key |
+
+**TOTAL: 64 Base + 79 Final Features**
+
+**Note:** The 79-feature count includes all engineered, interaction, and missing-indicator features created during preprocessing.py phases 1–6. The exact count may vary slightly based on categorical encoding (one-hot vs. ordinal) for property_type and legal_status.
+
+*Table 13. Complete Dataset Fields Reference (79 Features)*
 
 ## 
 
