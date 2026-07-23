@@ -152,6 +152,17 @@ Then open:
 - 📡 **API Docs**: http://localhost:8000/docs (Swagger)
 - 🎨 **Web UI**: http://localhost:8500 (Streamlit)
 
+---
+
+## 🌐 Live Deployment (Render)
+
+**Production URLs:**
+- 🔗 **API**: https://real-estate-valuation-88yg.onrender.com
+  - API Docs: https://real-estate-valuation-88yg.onrender.com/docs
+- 🎨 **Streamlit Web App**: https://real-estate-valuation-2.onrender.com
+
+---
+
 **Or run manually (2 terminals):**
 
 Terminal 1:
