@@ -10,7 +10,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.logging import setup_logging
 from app.routers import predict, feedback, admin
+
+# Setup logging for production
+setup_logging()
 
 # Create FastAPI app
 app = FastAPI(
@@ -42,6 +46,40 @@ async def root():
         "version": settings.API_VERSION,
         "docs": "/docs",
     }
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for deployment monitoring."""
+    import os
+    from datetime import datetime
+
+    health_status = {
+        "status": "healthy",
+        "service": settings.API_TITLE,
+        "version": settings.API_VERSION,
+        "timestamp": datetime.utcnow().isoformat(),
+        "environment": os.getenv("ENV", "development"),
+    }
+
+    # Optional: Check Supabase connectivity
+    try:
+        from supabase import create_client
+
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_KEY")
+        if url and key:
+            client = create_client(url, key)
+            response = client.table("feedback").select("count", count="exact").execute()
+            health_status["database"] = "connected"
+            health_status["feedback_count"] = response.count
+        else:
+            health_status["database"] = "not configured"
+    except Exception as e:
+        health_status["database"] = f"error: {str(e)}"
+        health_status["status"] = "degraded"
+
+    return health_status
 
 
 if __name__ == "__main__":

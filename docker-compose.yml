@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: real-estate-api
+    ports:
+      - "8000:8000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - ENV=production
+      - DEBUG=false
+      - LOG_LEVEL=info
+      - PORT=8000
+    volumes:
+      # Mount data directory for model cache
+      - ./data:/app/data:ro
+      - ./models:/app/models:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - real-estate-network
+
+  # Optional: Streamlit dashboard
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: real-estate-streamlit
+    command: streamlit run app/ui/streamlit_app.py --server.port=8501
+    ports:
+      - "8501:8501"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - ENV=production
+      - DEBUG=false
+      - API_URL=http://api:8000
+    volumes:
+      - ./data:/app/data:ro
+      - ./models:/app/models:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - real-estate-network
+    profiles:
+      - "with-streamlit"  # Only start with: docker-compose --profile with-streamlit up
+
+networks:
+  real-estate-network:
+    driver: bridge
+
+volumes:
+  data:
+  models:
