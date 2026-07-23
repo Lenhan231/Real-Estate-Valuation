@@ -972,6 +972,8 @@ The use of segment-specific IQR filters means that ultra-luxury properties (\>50
 
 The locality\_price\_median encoding is computed strictly from the training set and applied to the test set via lookup, reducing direct test-set leakage risk. Unseen localities default to the global training median, which may introduce mild geographic bias in under-represented wards.
 
+**Production Inference Limitation:** At production inference time (Streamlit/API), the trained locality encoding maps are not persisted. The model_training_data.csv used to rebuild maps during inference does not contain the locality columns, so locality-based target-encoded features default to 0.0. This represents a functional gap where production inference lacks the intended locality adjustment. This limitation is flagged for future implementation (persist encoding maps separately or use Supabase for runtime lookup).
+
 ### **7.3 Model Transparency and Limitations**
 
 * The model is presented as a reference price estimate, not a legally binding appraisal. The application explicitly communicates an indicative MAPE-based error range (currently ±13.10%) alongside each prediction. This range is not a statistically calibrated confidence interval.
@@ -1936,9 +1938,9 @@ This appendix provides a summary reference and production deployment notes.
 
 **Price-Tier-Specific Training:**
 - Each of 3 price tiers (Low, Mid, High) trained independently with identical hyperparameters
-- Sample sizes per tier: Low (~3,500), Mid (~4,200), High (~2,700)
-- Train/test split: 80/20 with random_state=42 (stratified by tier)
-- Validation set: 20% of training data (16% of full) for early stopping
+- Sample sizes per tier: Low 1,120 (10.8%), Mid 6,288 (60.4%), High 3,013 (28.9%)
+- Train/test split: 80/20 (random seed=42, NO stratification applied)
+- **Early stopping:** Test set used for LightGBM/CatBoost early stopping (test set not independent)
 
 **Algorithm Hyperparameters (Identical Across All 3 Tiers):**
 
@@ -2008,9 +2010,10 @@ final_price = exp(log_price_ensemble) - 1
 
 **Reproducibility:**
 - Fixed random_state=42 across all algorithms and tiers
-- Stratified train/test split by price tier
+- Random train/test split (80/20, no stratification)
+- Tier assignment done post-split via price binning
 - Feature engineering deterministic (no randomness in preprocessing.py)
-- Results guaranteed reproducible on same data with same hardware (GPU-less, CPU training)
+- Results reproducible on same data with same hardware (CPU-based training)
 
 ### **Training Implementation**
 
