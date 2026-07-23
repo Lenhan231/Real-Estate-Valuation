@@ -17,7 +17,7 @@ try:
     sys.argv = [
         "streamlit",
         "run",
-        "app/ui/test_app.py",
+        "app/ui/streamlit_app.py",
         f"--server.port={os.getenv('PORT', '8501')}",
         "--server.address=0.0.0.0",
         "--server.headless=true",
