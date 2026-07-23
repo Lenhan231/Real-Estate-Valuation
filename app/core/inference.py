@@ -71,22 +71,30 @@ def load_models():
         feature_names = [c for c in training_df.columns if c != 'price_vnd']
         feature_names += ["locality_price_median", "price_per_sqm_market"]
 
-    # Load training data to compute locality encoding stats (reuses preprocessing.py logic)
-    training_df = pd.read_csv(READY_CSV)
+    # Load locality encoding maps (saved during training)
+    import json
+    locality_stats_path = MODEL_DIR / 'locality_encoding.json'
 
-    # Compute locality price/sqm stats from training data (same as add_locality_features)
-    # Handle case where locality column might not exist in CSV
-    if 'locality' in training_df.columns and 'locality_price_median' in training_df.columns:
-        locality_price_map = training_df.groupby('locality')['locality_price_median'].first().to_dict()
-        locality_price_global = training_df['locality_price_median'].median()
+    if locality_stats_path.exists():
+        try:
+            with open(locality_stats_path, 'r') as f:
+                locality_stats = json.load(f)
+            locality_price_map = locality_stats.get('price_median', {})
+            locality_price_global = locality_stats.get('global_price_median', 0.0)
+            locality_sqm_map = locality_stats.get('price_per_sqm', {})
+            locality_sqm_global = locality_stats.get('global_price_per_sqm', 0.0)
+            print(f"[INFERENCE] ✓ Loaded locality maps from {locality_stats_path}")
+        except Exception as e:
+            print(f"[INFERENCE] ⚠️  Failed to load locality maps: {e}")
+            locality_price_map = {}
+            locality_price_global = 0.0
+            locality_sqm_map = {}
+            locality_sqm_global = 0.0
     else:
+        print(f"[INFERENCE] ⚠️  Locality maps file not found at {locality_stats_path}")
+        print(f"[INFERENCE]    Locality features will default to 0.0")
         locality_price_map = {}
         locality_price_global = 0.0
-
-    if 'locality' in training_df.columns and 'price_per_sqm_market' in training_df.columns:
-        locality_sqm_map = training_df.groupby('locality')['price_per_sqm_market'].first().to_dict()
-        locality_sqm_global = training_df['price_per_sqm_market'].median()
-    else:
         locality_sqm_map = {}
         locality_sqm_global = 0.0
 

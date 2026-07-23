@@ -111,24 +111,24 @@ def train_ensemble_3models(X_train, y_train, X_test, y_test, price_tier):
     return models_dict, val_errors
 
 def ensemble_predictions(models_dict, X_test, val_errors):
-    """Generate weighted ensemble predictions."""
+    """Generate equal-weight ensemble predictions (matching production inference).
+
+    Changed from inverse-RMSE weighting to equal averaging for consistency between
+    training evaluation and production serving. All 3 models contribute equally.
+    """
     predictions = {}
 
     for model_name, model in models_dict.items():
         predictions[model_name] = model.predict(X_test)
 
-    # Calculate weights based on inverse RMSE
-    if val_errors:
-        total_error = sum(1.0 / (e + 1e-6) for e in val_errors.values())
-        weights = {name: (1.0 / (val_errors.get(name, 1.0) + 1e-6)) / total_error
-                   for name in predictions.keys()}
-    else:
-        weights = {name: 1.0 / len(predictions) for name in predictions.keys()}
+    # Equal weighting for all models (matches production inference at inference.py:349)
+    n_models = len(predictions)
+    weights = {name: 1.0 / n_models for name in predictions.keys()}
 
-    # Weighted average
+    # Simple equal average
     ensemble_pred = np.zeros_like(predictions[list(predictions.keys())[0]])
     for model_name, pred in predictions.items():
-        ensemble_pred += pred * weights.get(model_name, 1.0 / len(predictions))
+        ensemble_pred += pred / n_models
 
     return ensemble_pred, weights
 
@@ -258,6 +258,30 @@ def main():
         models[f"{price_bin}"] = models_dict
 
     print(f"  ✓ Training complete ({time.time() - t0:.1f}s)")
+
+    # Save locality encoding maps for inference
+    print("  Saving locality encoding maps...")
+    if 'locality' in df.columns:
+        import json
+        locality_price_map = df.loc[train_idx].groupby('locality')['price_vnd'].median().to_dict()
+        train_data = df.loc[train_idx].copy()
+        train_data['price_per_sqm'] = train_data['price_vnd'] / (train_data['area_m2'] + 1)
+        locality_sqm_map = train_data.groupby('locality')['price_per_sqm'].median().to_dict()
+
+        global_median = float(y_train.median())
+        global_sqm = float((df.loc[train_idx, 'price_vnd'] / (df.loc[train_idx, 'area_m2'] + 1)).median())
+
+        locality_stats = {
+            'price_median': {str(k): float(v) for k, v in locality_price_map.items()},
+            'price_per_sqm': {str(k): float(v) for k, v in locality_sqm_map.items()},
+            'global_price_median': float(global_median),
+            'global_price_per_sqm': float(global_sqm)
+        }
+
+        locality_path = MODEL_DIR / 'locality_encoding.json'
+        with open(locality_path, 'w') as f:
+            json.dump(locality_stats, f, indent=2)
+        print(f"  ✓ Locality maps saved to {locality_path}")
 
     # Evaluation
     print("\n[5/5] Evaluating...")
