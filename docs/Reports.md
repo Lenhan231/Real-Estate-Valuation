@@ -167,7 +167,7 @@
 
 *Table 9\. Evaluation Metrics Definitions*
 
-*Table 10\. Final Model Performance (6-Bucket Ensemble)*
+*Table 10\. Final Model Performance (9-Model 3-Tier Ensemble)*
 
 *Table 11\. Historical Segmentation Impact (Pre-Ensemble Benchmarks)*
 
@@ -783,7 +783,7 @@ main.py orchestrates the end-to-end ETL flow:
 
 * scripts/clean\_features.py: Final feature preparation and segment splitting.
 
-* scripts/train\_ensemble.py: 6-Bucket LightGBM \+ CatBoost ensemble training with W\&B logging. Produces 12 .pkl model artefacts under models/.
+* scripts/train\_ensemble.py: 9-Model (3-Tier × 3-Algorithm) LightGBM + XGBoost + CatBoost ensemble training with W\&B logging. Produces 12 .pkl model artefacts under models/.
 
 * scripts/train\_tabpfn.py: Historical TabPFN segmented experiment using its own preprocessing and routing configuration. Its results are reported separately and are not directly comparable with the final 9-model (3-tier × 3-algorithm) ensemble evaluation.
 
@@ -831,7 +831,7 @@ Web scraping is conducted respectfully: requests are rate-limited (3-second inte
 
 ## **1\. AI Model Integration** {#1.-ai-model-integration}
 
-The AI model is integrated into a Streamlit web application, bridging raw user inputs with a 6-Bucket Ensemble (LightGBM \+ CatBoost) via a dedicated inference engine.
+The AI model is integrated into a Streamlit web application, bridging raw user inputs with a 9-Model (3-Tier × 3-Algorithm) Ensemble (LightGBM + XGBoost + CatBoost) via a dedicated inference engine.
 
 ### **1.1 Interface & Data Collection**
 
@@ -1122,7 +1122,7 @@ While the project achieved a highly accurate and deployable system, several prac
 
 ### **3.2 For System Improvements**
 
-* **Consolidate model architectures into a single documented pipeline.** Clearly archive the earlier ensemble-plus-meta-learner and legacy Flask/dashboard workflows, and designate the final six-bucket Streamlit prototype as the primary reference architecture.  
+* **Consolidate model architectures into a single documented pipeline.** Clearly archive the earlier ensemble-plus-meta-learner and legacy Flask/dashboard workflows, and designate the final 9-model (3-tier × 3-algorithm) Streamlit prototype as the primary reference architecture.  
 * **Grow and diversify the dataset.** Extend scraping to additional portals and other major cities (Hanoi, Da Nang) to improve generalization and give the mid/high-price buckets enough samples to train reliably.  
 * **Add automated retraining/monitoring.** Given the acknowledged risk of market volatility (Section I.6), schedule periodic retraining and track live prediction error against newly scraped listings to detect drift early.
 
@@ -1153,7 +1153,7 @@ Overall, the project delivered a working end-to-end pipeline (scraping → geosp
 
 The project provides evidence that market segmentation and domain-aware outlier handling can substantially improve valuation performance on heterogeneous Vietnamese real estate data. Historical frontage-specific experiments showed an improvement from approximately 107% to 26.6% MAPE, while the separately evaluated final 9-model ensemble achieved a global MAPE of 13.10%. The project also contributes a reusable geospatial feature pipeline that supplements, but does not fully replace, missing structural information in scraped property listings.
 
-The resulting web app and dashboard are usable artifacts, not just a benchmark.
+The resulting web app and dashboard are usable artifacts, not just a benchmark. The comprehensive technical report (this document) serves as the research paper deliverable, documenting the full methodology, results, and insights suitable for publication at academic conferences or journals focused on real estate analytics, machine learning applications, or geospatial data science.
 
 ### **2.2 What worked well**
 
