@@ -103,21 +103,21 @@
 
 [3\. Limitations and Future Work	36](#3.-limitations-and-future-work)
 
-[**VIII. Appendices	39**](#viii.-appendices)
+[**VIII. References	48**](#viii.-references)
 
-[Appendix A - Core Processed Dataset Fields	39](#appendix-a-core-processed-dataset-fields)
+[**IX. Appendices	49**](#ix.-appendices)
 
-[Appendix B - Final Model Hyperparameters (9-Model 3-Tier Ensemble)	40](#appendix-b-final-model-hyperparameters-9-model-3-tier-ensemble)
+[Appendix A - Core Processed Dataset Fields	49](#appendix-a-core-processed-dataset-fields)
 
-[Appendix C - Repository Structure and Documentation	41](#appendix-c-repository-structure-and-documentation)
+[Appendix B - Final Model Hyperparameters (9-Model 3-Tier Ensemble)	50](#appendix-b-final-model-hyperparameters-9-model-3-tier-ensemble)
 
-[Appendix D - Performance Benchmarks & Metrics	45](#appendix-d-performance-benchmarks-metrics)
+[Appendix C - Repository Structure and Documentation	51](#appendix-c-repository-structure-and-documentation)
 
-[Appendix E - Deployment Platforms Comparison	47](#appendix-e-deployment-platforms-comparison)
+[Appendix D - Performance Benchmarks & Metrics	55](#appendix-d-performance-benchmarks-metrics)
 
-[Appendix F - Environment Variables Reference	48](#appendix-f-environment-variables-reference)
+[Appendix E - Deployment Platforms Comparison	57](#appendix-e-deployment-platforms-comparison)
 
-[**IX. References	48**](#ix.-references)
+[Appendix F - Environment Variables Reference	58](#appendix-f-environment-variables-reference)
 
 # **Definition and Acronyms**  {#definition-and-acronyms}
 
@@ -1298,49 +1298,48 @@ The system is deployed as a production-ready containerized application with mult
 
 ### **3.2 Deployment Platforms**
 
-#### **Render (Current Production) — https://real-estate-valuation-api.onrender.com**
+#### **Render (Current Production) — Docker-based deployment**
 
-**Configuration (render.yaml):**
+**Configuration (render.yaml) — Multi-Service Docker Deployment:**
 ```yaml
 services:
   - type: web
-    name: real-estate-api
-    runtime: python
-    plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app.main:app --workers 1 --bind 0.0.0.0:$PORT
+    name: real-estate-valuation-api
+    runtime: docker
+    dockerfilePath: Dockerfile
+    autoDeploy: true
     envVars:
-      - key: PORT
-        value: 8000
-      - key: SUPABASE_URL
-        sync: false  # Set via dashboard secrets
-      - key: API_URL
-        value: https://real-estate-valuation-api.onrender.com
+      - key: ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LOG_LEVEL
+        value: info
 
   - type: web
-    name: real-estate-streamlit
-    runtime: python
-    plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: exec streamlit run app/ui/streamlit_app.py --server.port=$PORT
+    name: real-estate-valuation-streamlit
+    runtime: docker
+    dockerfilePath: .deployment/Dockerfile.streamlit
+    autoDeploy: true
     envVars:
-      - key: PORT
-        value: 8501
       - key: API_URL
-        value: https://real-estate-valuation-api.onrender.com
+        value: https://real-estate-valuation-88yg.onrender.com
+      - key: STREAMLIT_SERVER_HEADLESS
+        value: "true"
 ```
 
-**Deployment Flow:**
-1. Push to `main` branch on GitHub
-2. Render detects changes via webhook
-3. Both services rebuild and deploy in parallel
-4. API: gunicorn with 1 worker (free tier limitation)
-5. Streamlit: direct execution (no gunicorn needed)
-6. Each service gets unique public URL + auto-assigned domain
+**Deployment Strategy:**
+- Both FastAPI and Streamlit services use **Docker containers** (not Python runtime)
+- FastAPI: Multi-stage Dockerfile with uvicorn ASGI server
+- Streamlit: Dedicated Dockerfile.streamlit with Streamlit runner
+- Auto-deploy on git push to main branch
+- Services communicate via internal Docker network on Render
+- Free tier limitations: May experience 15-minute inactivity sleep; single instance
 
 **Current Endpoints:**
-- API: `https://real-estate-valuation-api.onrender.com` (may sleep after 15 min inactivity)
-- Streamlit UI: `https://real-estate-valuation-streamlit.onrender.com` (access via rendered URL)
+- API: `https://real-estate-valuation-88yg.onrender.com/api/*` (via Render-assigned URL)
+- Streamlit UI: Accessible through Streamlit's native routing
+- Render may assign different subdomains; check `.deployment/render.yaml` for current URLs
 
 #### **Local Development (Docker Compose)**
 
@@ -1771,7 +1770,7 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 # 
 
-# **IX. References** {#ix.-references}
+# **VIII. References** {#viii.-references}
 
 1. Chen, T., & Guestrin, C. (2016). *XGBoost: A scalable tree boosting system*. In *Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining* (pp. 785–794). ACM. [https://arxiv.org/abs/1603.02754](https://arxiv.org/abs/1603.02754)  
 2. Ha, M.-T., Nguyen, T.-C., Pham, T.-H., & Nguyen, V.-H. (2025). Using machine learning regression algorithms to predict house prices in Vietnam. *International Real Estate Review, 28*(4), 505–527. [https://doi.org/10.53383/100412](https://doi.org/10.53383/100412)  
@@ -1785,7 +1784,7 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 # 
 
-# **VIII. Appendices** {#viii.-appendices}
+# **IX. Appendices** {#ix.-appendices}
 
 ## **Appendix A - Complete Dataset Fields (79 Features)** {#appendix-a-core-processed-dataset-fields}
 
