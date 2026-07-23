@@ -1,7 +1,0 @@
-FROM alpine:latest
-
-WORKDIR /app
-
-EXPOSE 8501
-
-CMD ["sh", "-c", "echo 'Container started' && sleep 1000000"]
