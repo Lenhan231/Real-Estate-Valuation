@@ -675,10 +675,10 @@ The final model input consists of **79 engineered features** across 7 categories
 | :---- | :---- | :---- | :---- |
 | **Raw Structural** | 8 | Scraped listings | area_m2, width_m, length_m, num_floors, num_bedrooms, road_width_m, property_type (1-hot) |
 | **Geospatial POI** | 15 | OpenStreetMap Overpass API | nearest_school_km, school_count_3km, metro_count_5km, distance_to_center_km |
-| **Temporal** | 4 | post_day field | post_day_year, post_day_month, post_day_day, post_day_quarter |
-| **Dimensional** | 6 | Computed from raw | perimeter_m, shape_ratio, area_x_floors, area_x_bedrooms, area_per_bedroom, area_per_floor |
-| **Log-Transformed** | 5 | Skewness reduction | log_area, log_distance_to_center, log_population_density, log_nearby_amenities, log_road_width |
-| **Interaction** | 3 | Composite scoring | location_score, amenity_score, interaction_loc_amenity |
+| **Temporal** | 3 | post_day field | post_day_year, post_day_month, post_day_day |
+| **Dimensional** | 6 | Computed from raw | perimeter_m, shape_ratio, area_x_floors, area_x_bedrooms, area_per_bedroom, area_per_distance |
+| **Log-Transformed** | 4 | Skewness reduction | log_area, log_distance_to_center, log_population_density, log_nearby_amenities |
+| **Interaction** | 2 | Composite metrics | density_x_area, locality_sq_x_area |
 | **Text-Based & Categorical** | 18 | NLP + encoding | 6 text flags (is_hem_xe_hoi, is_mat_tien, has_noi_that, is_gap, is_kinh_doanh, is_no_hau) + legal_status (1-hot) + locality_price_median + price_per_sqm_market + 8 missing indicators |
 | **Locality Encoding** | 2 | Training set statistics | locality_price_median, price_per_sqm_market (per-ward averages from training set) |
 | **Amenity Features** | 8 | Aggregated POI | nearby_amenities (sum), nearby_amenities_log, amenity_density, school_count_3km, hospital_count_5km, marketplace_count_3km, mall_count_3km, bus_stop_count_1km |
@@ -720,7 +720,7 @@ To compensate for missing structural attributes (house age, interior condition, 
 | **Marketplaces** | nearest_marketplace_km, marketplace_count_3km | 3 km | Daily commerce |
 | **Shopping Malls** | nearest_mall_km, mall_count_3km | 3 km | Modern shopping |
 | **Bus Stops** | nearest_bus_stop_km, bus_stop_count_1km | 1 km | Public transit |
-| **Metro Stations** | nearest_metro_km, metro_count_5km | 5 km | Mass transit (weighted 3x in amenity_score) |
+| **Metro Stations** | nearest_metro_km, metro_count_5km | 5 km | Mass transit (key urban indicator) |
 | **Supermarkets** | nearest_supermarket_km, supermarket_count_3km | 3 km | Modern retail |
 | **City Center** | distance_to_center_km | — | Distance to HCM center (10.7769°N, 106.7009°E) |
 
@@ -737,12 +737,7 @@ Higher-order features capture non-linear relationships and domain-specific patte
 - area_per_floor — intensity per story
 
 **Log-Transformed Features (skewness reduction for tree models):**
-- log_area, log_distance_to_center, log_population_density, log_nearby_amenities, log_road_width
-
-**Accessibility Scoring (weighted composites):**
-- location_score = 10/(distance_to_center+1) × 2.0 + 10/(nearest_school+1) × 1.5 + ... (captures urban proximity)
-- amenity_score = sum of POI counts with metro weighted 3x (captures facility density)
-- **interaction_loc_amenity = location_score × amenity_score** (joint urban quality metric)
+- log_area, log_distance_to_center, log_population_density, log_nearby_amenities
 
 **Text-Based Boolean Flags (Vietnamese NLP regex extraction from listing description):**
 - is_hem_xe_hoi (1 = car-accessible alley / 0 = no parking access) — critical for alley houses (nhà trong hẻm)
@@ -1104,15 +1099,15 @@ price_tier = request.price_tier  # "mid"
 # Load 3 models for this tier:
 lgbm_model = models["lgbm_mid"]
 xgb_model = models["xgb_mid"]
-catboost_model = models["catboost_mid"]
+cb_model = models["cb_mid"]
 
 # Make predictions in log-space:
 log_price_lgbm = lgbm_model.predict(feature_vector)[0]
 log_price_xgb = xgb_model.predict(feature_vector)[0]
-log_price_catboost = catboost_model.predict(feature_vector)[0]
+log_price_cb = cb_model.predict(feature_vector)[0]
 
 # Ensemble averaging:
-log_price_ensemble = (log_price_lgbm + log_price_xgb + log_price_catboost) / 3
+log_price_ensemble = (log_price_lgbm + log_price_xgb + log_price_cb) / 3
 
 # Inverse transform:
 final_price_vnd = exp(log_price_ensemble) - 1  # Back to VND
@@ -1133,7 +1128,7 @@ xai_data = {
     "model_predictions": {
         "lgbm_mid": lgbm_prediction,
         "xgb_mid": xgb_prediction,
-        "catboost_mid": catboost_prediction
+        "cb_mid": cb_prediction
     },
     "confidence": calculate_confidence_score(model_predictions),
     "bucket": "mid",
@@ -1179,7 +1174,7 @@ Returns:
     "bucket": "mid",
     "xai": {
         "feature_importance": {"area_m2": 0.35, "distance_to_center_km": 0.18, ...},
-        "models": {"lgbm_mid": 8.4B, "xgb_mid": 8.6B, "catboost_mid": 8.5B},
+        "models": {"lgbm_mid": 8.4B, "xgb_mid": 8.6B, "cb_mid": 8.5B},
         "confidence": 0.92
     },
     "row": [...79 features...],
@@ -1628,7 +1623,7 @@ To improve model transparency, global feature-importance analysis was conducted 
 
 **Hypothesis:** In the absence of hard structural data (house age, property condition, interior quality), engineered geospatial features (POI proximity, distance to center, amenity counts) can compensate and improve predictive accuracy.
 
-**Findings:** **PARTIAL SUPPORT** — Feature importance analysis reveals that engineered geospatial variables (distance_to_center_km, school_count_3km, nearest_bus_stop_km, interaction_loc_amenity) collectively rank in the top 15 predictors and contribute meaningfully to model accuracy. However, raw property size (area_m2, area_x_floors) remains the dominant predictor across all tiers, confirming traditional hedonic pricing theory.
+**Findings:** **PARTIAL SUPPORT** — Feature importance analysis reveals that engineered geospatial variables (distance_to_center_km, school_count_3km, nearest_bus_stop_km, nearby_amenities) collectively rank in the top 15 predictors and contribute meaningfully to model accuracy. However, raw property size (area_m2, area_x_floors) remains the dominant predictor across all tiers, confirming traditional hedonic pricing theory.
 
 **Interpretation:** Geospatial features act as **proxy indicators of neighborhood accessibility and urban development** rather than replacements for missing structural attributes. The 2-tier caching strategy (in-memory + persistent CSV) successfully reduces repeated Nominatim/Overpass API calls by 90%+ while maintaining fast prediction latency (~200-500ms per property).
 
@@ -1816,7 +1811,6 @@ Comprehensive reference for all 79 engineered features used in the 9-model ensem
 | 9 | post_day_year | int | 2024–2026 | post_day extraction | Year from listing date |
 | 10 | post_day_month | int | 1–12 | post_day extraction | Month (seasonality signal) |
 | 11 | post_day_day | int | 1–31 | post_day extraction | Day of month |
-| 12 | post_day_quarter | int | 1–4 | post_day extraction | Quarter aggregation (optional) |
 
 ### **Category 3: Geospatial POI Features (15 features)**
 
@@ -1854,9 +1848,9 @@ Comprehensive reference for all 79 engineered features used in the 9-model ensem
 | 32 | area_x_floors | float | area_m2 × num_floors | Total built-up area |
 | 33 | area_x_bedrooms | float | area_m2 × num_bedrooms | Space per bedroom proxy |
 | 34 | area_per_bedroom | float | area_m2 / num_bedrooms | Square meters per bedroom |
-| 35 | area_per_floor | float | area_m2 / num_floors | Average floor area |
+| 35 | area_per_distance | float | area_m2 / distance_to_center_km | Size relative to distance |
 
-### **Category 6: Log-Transformed Features (5 features)**
+### **Category 6: Log-Transformed Features (4 features)**
 
 | # | Feature | Type | Transform | Purpose |
 | :---- | :---- | :---- | :---- | :---- |
@@ -1864,15 +1858,10 @@ Comprehensive reference for all 79 engineered features used in the 9-model ensem
 | 37 | log_distance_to_center | float | log1p(distance_to_center_km) | Skewness reduction |
 | 38 | log_population_density | float | log1p(locality_population_density) | Handle extreme values |
 | 39 | log_nearby_amenities | float | log1p(nearby_amenities) | Facility count scaling |
-| 40 | log_road_width | float | log1p(road_width_m) | Normalize road widths |
 
-### **Category 7: Composite Scoring Features (3 features)**
+### **Category 7: Interaction/Composite Features (8 features - Removed in v2.6)**
 
-| # | Feature | Type | Formula | Range | Purpose |
-| :---- | :---- | :---- | :---- | :---- | :---- |
-| 41 | location_score | float | 10/(dist+1)×2.0 + 10/(sch+1)×1.5 + ... | 0–100 | Urban accessibility index |
-| 42 | amenity_score | float | Sum(POI counts, metro×3) | 0–50 | Facility density index |
-| 43 | interaction_loc_amenity | float | location_score × amenity_score | 0–5000 | Joint location quality |
+**Note:** High-level scoring features (location_score, amenity_score, interaction_loc_amenity) were removed in v2.6 to reduce engineered feature complexity. Models now rely directly on raw POI distance and count features instead, which provides better interpretability and reduces the risk of composite feature instability.
 
 ### **Category 8: Text-Based/NLP Features (6 features)**
 
@@ -1971,13 +1960,13 @@ This appendix provides a summary reference and production deployment notes.
 | `xgb_low.pkl` | XGBoost | Low | ~13MB | joblib | ✅ Production |
 | `xgb_mid.pkl` | XGBoost | Mid | ~15MB | joblib | ✅ Production |
 | `xgb_high.pkl` | XGBoost | High | ~11MB | joblib | ✅ Production |
-| `catboost_low.pkl` | CatBoost | Low | ~11MB | joblib | ✅ Production |
-| `catboost_mid.pkl` | CatBoost | Mid | ~13MB | joblib | ✅ Production |
-| `catboost_high.pkl` | CatBoost | High | ~9MB | joblib | ✅ Production |
+| `cb_low.pkl` | CatBoost | Low | ~11MB | joblib | ✅ Production |
+| `cb_mid.pkl` | CatBoost | Mid | ~13MB | joblib | ✅ Production |
+| `cb_high.pkl` | CatBoost | High | ~9MB | joblib | ✅ Production |
 
 *Table 9. Production Model Artifacts (9-Model Ensemble)*
 
-**Total model size: ~110-120MB across all 9 models**
+**Total model size: ~47.9 MB across all 9 models**
 
 ### **Training & Validation Metrics**
 
@@ -1989,7 +1978,7 @@ This appendix provides a summary reference and production deployment notes.
 | **R²** | **0.9401** ⭐ | 0.9180 | 0.8950 | **0.9200** |
 | **MAE (B VND)** | 0.85 | 1.95 | 3.80 | 2.15 |
 | **RMSE (B VND)** | 1.32 | 2.85 | 5.20 | 3.41 |
-| **Samples** | 3,500 | 4,200 | 2,700 | 10,421 |
+| **Samples** | 1,120 | 6,288 | 3,013 | 10,421 |
 
 *Table 10. Final Model Performance by Price Tier (v2.6)*
 
