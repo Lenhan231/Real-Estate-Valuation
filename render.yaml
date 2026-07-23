@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: real-estate-valuation
+    env: docker
+    dockerfilePath: .deployment/Dockerfile
+    port: 8000
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LOG_LEVEL
+        value: info
