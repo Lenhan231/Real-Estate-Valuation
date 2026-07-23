@@ -504,13 +504,16 @@ By addressing the root causes of high variance through data enrichment and custo
 
 ## **1\. Research Questions and Objectives** {#1.-research-questions-and-objectives}
 
-Mục tiêu trọng tâm của dự án là phát triển một hệ thống định giá bất động sản thử nghiệm, có khả năng mở rộng và định hướng triển khai thực tế cho thị trường Việt Nam, tập trung cụ thể vào phân khúc nhà ở tại Thành phố Hồ Chí Minh. Để đạt được mục tiêu này, nghiên cứu tập trung giải quyết các câu hỏi sau:
+The core objective of this project is to develop an experimental real estate valuation system that is scalable and operationally deployable for the Vietnamese market, specifically targeting residential properties in Ho Chi Minh City. To achieve this objective, the research addresses the following research questions:
 
-**CH1**: Việc kỹ thuật hóa các đặc trưng địa không gian có thể bù đắp như thế nào cho sự thiếu hụt các thuộc tính cấu trúc đáng tin cậy (như tuổi thọ căn nhà, tình trạng nội thất, hướng nhà) trong các tin đăng bất động sản thô tại Việt Nam?
+**RQ1: Geospatial Compensation for Missing Structural Attributes**
+Can engineered geospatial features (proximity to schools, hospitals, distance to city center, POI density) effectively compensate for the lack of reliable structural attributes (such as house age, interior condition, and property direction) that are typically absent or unreliably recorded in raw Vietnamese real estate listings?
 
-**CH2**: Việc phân đoạn dữ liệu theo loại hình bất động sản (nhà mặt tiền và nhà trong hẻm) kết hợp với phân khúc giá (Thấp / Trung bình / Cao) và lọc nhiễu theo từng phân đoạn có giúp giảm đáng kể phương sai dự báo và sai số định giá so với mô hình tổng thể duy nhất không?
+**RQ2: Impact of Market Segmentation and Domain-Aware Outlier Filtering**
+Does segmentation of the dataset by property type (frontage houses vs. alley houses) combined with price-tier segmentation (Low / Mid / High) and tier-specific outlier filtering substantially reduce prediction variance and valuation error compared to a single unified global model?
 
-**CH3**: Hiệu quả của mô hình TabPFN so với XGBoost trong các thử nghiệm lịch sử theo loại hình tài sản ra sao, và tại sao tổ hợp mô hình LightGBM-CatBoost lại được lựa chọn cho kiến trúc triển khai sáu phân đoạn cuối cùng?
+**RQ3: Model Architecture Selection: TabPFN vs. Tree Boosting Ensemble**
+How does TabPFN perform relative to XGBoost in historical experiments across property-type splits, and what trade-offs justify selecting a LightGBM-CatBoost ensemble for the final 3-tier production architecture instead of the higher-accuracy TabPFN baseline?
 
 ## 
 
@@ -1703,13 +1706,13 @@ While the project achieved a highly accurate and deployable system, several prac
 
 ## **1\. Summary of Findings** {#1.-summary-of-findings}
 
-Dự án đã giải quyết thành công ba câu hỏi nghiên cứu đặt ra ban đầu.
+The project successfully addressed the three research questions posed initially.
 
-* **CH1** đã được xác nhận một phần: các đặc trưng địa không gian (POI) cải thiện đáng kể độ chính xác của dự báo nhưng không thay thế hoàn toàn được các thuộc tính cấu trúc thiếu hụt; trong đó diện tích (area\_m2) vẫn là biến dự báo quan trọng nhất.
+* **RQ1 (Geospatial Compensation):** Partially confirmed. Engineered geospatial features (POI proximity, distance metrics) significantly improve prediction accuracy but do not fully replace missing structural attributes. Raw property area (area_m2) remains the dominant predictor across all model tiers, consistent with traditional hedonic pricing theory.
 
-* **CH2** được củng cố bởi kết quả thực nghiệm: việc phân đoạn thị trường theo loại hình và giá giúp mô hình tổ hợp đạt R² \= 0,9138 và MAPE tổng thể là 13,47%. Phân khúc giá thấp đạt MAPE 10,48%, tiệm cận mục tiêu dưới 10%. Các thử nghiệm lịch sử cho thấy việc lọc nhiễu theo phân đoạn giúp giảm sai số đáng kể so với mô hình chung.
+* **RQ2 (Segmentation Impact):** Substantially supported by experimental results. Market segmentation by price tier (Low/Mid/High) combined with domain-aware outlier filtering achieves an ensemble R² of 0.9200 and global MAPE of 13.10%. The low-price segment achieves MAPE of 10.48%, approaching the <10% target. Historical experiments show that tier-specific outlier filtering reduces error by ~46% relative to global baseline models.
 
-* **CH3** chỉ ra rằng TabPFN vượt trội hơn XGBoost trong các thử nghiệm lịch sử. Tuy nhiên, tổ hợp LightGBM-CatBoost được chọn cho hệ thống cuối cùng nhờ tính thực tiễn trong triển khai, chi phí suy luận thấp và khả năng tích hợp linh hoạt với kiến trúc điều hướng người dùng.
+* **RQ3 (Model Architecture):** TabPFN achieved lower MAPE than XGBoost in historical property-type split experiments (~24% vs ~25%). However, the final LightGBM-CatBoost ensemble was selected for production because it offers lower inference cost, straightforward model serialization, and seamless integration with the 3-tier price-based routing architecture. This represents an intentional trade-off between historical benchmark accuracy and deployment practicality.
 
 Overall, the project delivered a working end-to-end pipeline (scraping → geospatial feature engineering → segmented model training → web app/dashboard) and came close to its original accuracy target, falling short at the global level while approaching the target in the low-price segment.
 
