@@ -790,7 +790,7 @@ Each price tier trains **three independent tree-boosting models** to maximize ro
 3. **CatBoost** — Categorical-native handling via ordered target encoding; minimal target leakage risk; excels on locality features
 
 **Prediction Pipeline (Runtime Inference):**
-1. User selects price tier (or Streamlit infers from area_m2 × 50M heuristic)
+1. User explicitly selects price tier (Low 0-5B / Mid 5-20B / High >20B VND) via dropdown
 2. Extract and engineer all 79 features from user input (via models/scripts/shared/preprocessing.py)
 3. Each of 3 tier-models makes prediction in **log-space** (log(price_vnd))
 4. Ensemble average: `log_price_ensemble = (log_lgbm + log_xgb + log_catboost) / 3`
