@@ -24,12 +24,11 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 # Copy application code
 COPY . .
 
-# Copy launcher script
-COPY .deployment/run_streamlit.py /app/
-RUN chmod +x /app/run_streamlit.py
-
 # Expose Streamlit port
 EXPOSE 8501
 
-# Run via Python launcher script (ensures PATH and env vars work)
-CMD ["python", "/app/run_streamlit.py"]
+# Debug: List what's installed
+RUN python -c "import streamlit; print(f'Streamlit version: {streamlit.__version__}')" || echo "WARNING: streamlit import failed"
+
+# Run with python -m streamlit (most reliable)
+CMD python -m streamlit run app/ui/test_app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true --logger.level=debug
