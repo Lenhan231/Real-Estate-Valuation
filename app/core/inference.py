@@ -16,20 +16,23 @@ import joblib
 import numpy as np
 import pandas as pd
 
-# Import preprocessing from training pipeline (single source of truth)
-import importlib.util
-_preprocess_path = Path(__file__).resolve().parent.parent.parent / "models" / "scripts" / "shared" / "preprocessing.py"
-if _preprocess_path.exists():
-    spec = importlib.util.spec_from_file_location("shared_preprocessing", _preprocess_path)
-    shared_preprocessing = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(shared_preprocessing)
-    preprocess = shared_preprocessing.preprocess
-else:
-    # Fallback: import from sys.path
-    _scripts_path = Path(__file__).resolve().parent.parent.parent / "models" / "scripts"
-    if str(_scripts_path) not in sys.path:
-        sys.path.insert(0, str(_scripts_path))
-    from shared.preprocessing import preprocess
+# Lazy import of preprocessing to avoid import errors in deployment
+_preprocess_cache = None
+
+def _get_preprocess():
+    """Lazily load preprocessing function."""
+    global _preprocess_cache
+    if _preprocess_cache is None:
+        import importlib.util
+        _preprocess_path = Path(__file__).resolve().parent.parent.parent / "models" / "scripts" / "shared" / "preprocessing.py"
+        if _preprocess_path.exists():
+            spec = importlib.util.spec_from_file_location("shared_preprocessing", _preprocess_path)
+            shared_preprocessing = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(shared_preprocessing)
+            _preprocess_cache = shared_preprocessing.preprocess
+        else:
+            raise ImportError("Could not find preprocessing module")
+    return _preprocess_cache
 
 from .geo import GeoLookup, POI_COLS
 
@@ -221,7 +224,8 @@ def build_row(meta, geo: GeoLookup, *,
     # Run through preprocessing.preprocess() (single source of truth for 78 features)
     try:
         print(f"[DEBUG] Calling preprocess() with row_df shape={row_df.shape}")
-        preprocessed, _, _ = preprocess(row_df)
+        preprocess_func = _get_preprocess()
+        preprocessed, _, _ = preprocess_func(row_df)
         print(f"[DEBUG] preprocess returned shape={preprocessed.shape if preprocessed is not None else None}")
         if preprocessed.empty:
             error_msg = "Preprocessing returned empty dataframe"
