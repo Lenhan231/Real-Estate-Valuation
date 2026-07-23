@@ -25,13 +25,17 @@ def _get_preprocess():
     if _preprocess_cache is None:
         import importlib.util
         _preprocess_path = Path(__file__).resolve().parent.parent.parent / "models" / "scripts" / "shared" / "preprocessing.py"
+        print(f"[DEBUG] Looking for preprocessing at: {_preprocess_path}")
+        print(f"[DEBUG] File exists: {_preprocess_path.exists()}")
         if _preprocess_path.exists():
             spec = importlib.util.spec_from_file_location("shared_preprocessing", _preprocess_path)
             shared_preprocessing = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(shared_preprocessing)
             _preprocess_cache = shared_preprocessing.preprocess
         else:
-            raise ImportError("Could not find preprocessing module")
+            import os
+            print(f"[DEBUG] Directory contents: {os.listdir(_preprocess_path.parent) if _preprocess_path.parent.exists() else 'parent not found'}")
+            raise ImportError(f"Could not find preprocessing module at {_preprocess_path}")
     return _preprocess_cache
 
 from .geo import GeoLookup, POI_COLS
