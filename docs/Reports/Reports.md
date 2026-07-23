@@ -119,18 +119,6 @@
 
 [**IX. References	48**](#ix.-references)
 
-[Appendix A — Core Processed Dataset Fields	39](#appendix-a-—-core-processed-dataset-fields)
-
-[Appendix B - Final Model Hyperparameters (9-Model 3-Tier Ensemble)	40](#appendix-b-final-model-hyperparameters-9-model-3-tier-ensemble)
-
-[Appendix C — Repository Structure and Documentation	41](#appendix-c-—-repository-structure-and-documentation)
-
-[Appendix D — Performance Benchmarks & Metrics	45](#appendix-d-—-performance-benchmarks-&-metrics)
-
-[Appendix E — Deployment Platforms Comparison	47](#appendix-e-—-deployment-platforms-comparison)
-
-[Appendix F — Environment Variables Reference	48](#appendix-f-—-environment-variables-reference)
-
 # **Definition and Acronyms**  {#definition-and-acronyms}
 
 | Acronym | Definition |
