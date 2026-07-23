@@ -6,15 +6,23 @@ Predicts property prices using Machine Learning based on area, location, ameniti
 
 | Metric | Value |
 |--------|-------|
-| **Model** | LightGBM + XGBoost + CatBoost (Ensemble) |
-| **MAPE** | 13.25% (v2.4) |
-| **R²** | 0.9187 |
-| **Dataset** | 10,432 properties |
-| **Features** | 166 engineered + 70 dynamic |
+| **Model** | LightGBM + XGBoost + CatBoost (3-tier ensemble) |
+| **MAPE** | 13.10% (v2.6) |
+| **R²** | 0.9200 |
+| **Dataset** | 10,432 properties (training) |
+| **Features** | 78 optimized (64 base + 14 polynomial/interaction) |
 
 ---
 
-## ✨ Latest Features (v2.4)
+## ✨ Latest Features (v2.6)
+
+### **🎯 Price Tier Segmentation**
+- ✅ 3-tier ensemble model (low/mid/high price segments)
+- ✅ Specialized model per price range for better accuracy
+- ✅ 13.10% MAPE - 2.15% improvement over v2.4
+- ✅ Feature optimization: 78 features (down from 166, better signal)
+
+### **📝 Feedback Collection System**
 
 ### **📝 Feedback Collection System**
 - ✅ Persistent feedback form in Streamlit UI
@@ -134,46 +142,117 @@ app/
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start - Local Development
 
-**Start both API and Streamlit UI with one command:**
+### Prerequisites
 
-**Windows (PowerShell):**
+- Python 3.11+
+- Git
+- Supabase account (for database)
+
+### Setup (5 minutes)
+
+**1. Clone & setup environment:**
+
 ```bash
-.\run.ps1
+git clone https://github.com/Lenhan231/Real-Estate-Valuation.git
+cd Real-Estate-Valuation
+
+# Create virtual environment
+python -m venv .venv
+
+# Activate
+# Windows:
+.\.venv\Scripts\activate
+# Linux/Mac:
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
 ```
 
-**Linux/Mac (Bash):**
+**2. Configure environment:**
+
 ```bash
+# Copy example env file
+cp .env.example .env
+
+# Edit .env with your Supabase credentials
+nano .env
+# Required:
+# - SUPABASE_URL
+# - SUPABASE_SERVICE_KEY
+# - WANDB_API_KEY (optional, for experiment tracking)
+```
+
+**3. Start both services:**
+
+```bash
+# Option A: One command (if run.sh exists)
 bash run.sh
+# or Windows:
+.\run.ps1
+
+# Option B: Manual (2 terminals)
+# Terminal 1 - API:
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 2 - Streamlit UI:
+streamlit run app/ui/streamlit_app.py --server.port 8501
 ```
 
-Then open:
-- 📡 **API Docs**: http://localhost:8000/docs (Swagger)
-- 🎨 **Web UI**: http://localhost:8500 (Streamlit)
+**4. Access:**
+
+- 📡 **API Swagger Docs**: http://localhost:8000/docs
+- 🎨 **Streamlit UI**: http://localhost:8501
+- 📊 **API Root**: http://localhost:8000
+
+### Testing
+
+```bash
+# Test API health
+curl http://localhost:8000/health
+
+# Test prediction
+curl -X POST http://localhost:8000/api/predict \
+  -H "Content-Type: application/json" \
+  -d '{"street":"Nguyễn Hữu Cảnh","locality":"Bình Thạnh","area_m2":100}'
+
+# List available localities
+curl http://localhost:8000/api/localities
+```
+
+### Troubleshooting
+
+**"Module not found" error:**
+```bash
+pip install -r requirements.txt
+```
+
+**"Supabase connection failed":**
+- Check `.env` file has correct credentials
+- Verify Supabase tables exist: `address_cache`, `Raw_Features`
+- Test connection: `python -c "from app.core.models import get_models; get_models()"`
+
+**Port already in use:**
+```bash
+# Kill process on port 8000
+lsof -i :8000 | grep LISTEN | awk '{print $2}' | xargs kill -9
+```
 
 ---
 
 ## 🌐 Live Deployment (Render)
 
 **Production URLs:**
+
 - 🔗 **API**: https://real-estate-valuation-88yg.onrender.com
   - API Docs: https://real-estate-valuation-88yg.onrender.com/docs
+  - Status: https://real-estate-valuation-88yg.onrender.com/health
+
 - 🎨 **Streamlit Web App**: https://real-estate-valuation-2.onrender.com
 
----
-
-**Or run manually (2 terminals):**
-
-Terminal 1:
-```bash
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Terminal 2:
-```bash
-streamlit run app/ui/streamlit_app.py --server.port 8500
-```
+**For deployment to other platforms (DigitalOcean, AWS, self-hosted), see [DEPLOYMENT.md](DEPLOYMENT.md)**
 
 ---
 
