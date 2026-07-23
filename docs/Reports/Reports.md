@@ -716,17 +716,18 @@ This **3-tier × 3-model = 9-model ensemble** design provides:
 
 | Hyperparameter | LightGBM | XGBoost | CatBoost |
 | :---- | :---- | :---- | :---- |
-| **Estimators / Iterations** | 1,000 | 1,000 | 1,000 |
-| **Max Depth** | 8 | 6-8 | 6 |
-| **Learning Rate** | 0.03 | 0.03 | 0.03 |
+| **Estimators / Iterations** | 1,000 | 1,500 | 1,500 |
+| **Max Depth** | 8 | 8 | 8 |
+| **Learning Rate** | 0.05 | 0.03 | 0.05 |
 | **Subsample** | 0.8 | 0.8 | — |
 | **Column Sample** | 0.8 | 0.8 | — |
 | **L1 Regularization** | 0.1 | — | — |
-| **L2 Regularization** | 1.0 | 1.0 | — |
+| **L2 Regularization** | 1.0 | — | — |
 | **Loss Function** | Default MSE | RMSE | RMSE |
+| **Early Stopping** | — | — | 50 rounds |
 | **Random Seed** | 42 | 42 | 42 |
 
-**Ensemble Strategy:** All three models are trained per price tier (3 tiers = 9 total models). Predictions are made in log-space and averaged before inverse transformation.
+**Ensemble Strategy:** All three models are trained per price tier (3 tiers = 9 total models). Predictions are made in log-space and averaged before inverse transformation. Each tier-model pair is tuned independently to capture price-segment-specific relationships.
 
 *Table 8\. Model Configurations (3-Model Ensemble per Tier)*
 
@@ -1023,17 +1024,18 @@ The geocoding and POI lookup pipeline uses a **two-tier cache strategy**:
 
 ### **1.1 Experimental Setup and Results**
 
-Kết quả của sáu phân đoạn cuối cùng được trình bày cùng với các thử nghiệm cơ sở lịch sử. Hệ thống được đánh giá trên tập kiểm thử độc lập chiếm 20% dữ liệu từ tập dữ liệu đã làm sạch gồm 3.202 bất động sản tại Thành phố Hồ Chí Minh.
+Kết quả của ba phân đoạn giá cuối cùng được trình bày cùng với các thử nghiệm cơ sở lịch sử. Hệ thống được đánh giá trên tập kiểm thử độc lập chiếm 20% dữ liệu từ tập dữ liệu đã làm sạch gồm 10,421 bất động sản tại Thành phố Hồ Chí Minh.
 
 Do tính chất của bài toán hồi quy, nghiên cứu sử dụng Sai số phần trăm tuyệt đối trung bình (MAPE), Sai số bình phương trung bình căn (RMSE) và Hệ số xác định (R²) làm các chỉ số đánh giá chính.
 
-| Metric | Global Performance | Low Segment (0-5B VND) |
-| :---- | :---- | :---- |
-| **R²** | **0.9138** | **—** |
-| **MAPE** | **13.47%** | **10.48%** |
-| **RMSE (log)** | **0.24** | **—** |
+| Metric | Global Performance |
+| :---- | :---- |
+| **MAPE** | **13.10%** |
+| **R²** | **0.9200** |
+| **MAE** | **2.15B VND** |
+| **RMSE** | **3.41B VND** |
 
-*Table 10\. Final Model Performance (6-Bucket Ensemble)*
+*Table 10\. Final Model Performance (9-Model 3-Tier Ensemble)*
 
 | Architecture | Dataset Split | R² | MAPE |
 | :---- | :---- | :---- | :---- |
@@ -1403,16 +1405,18 @@ docker-compose logs -f  # Monitor
 
 ## **Appendix D — Performance Benchmarks & Metrics** {#appendix-d-—-performance-benchmarks-&-metrics}
 
-### **Final Model Performance (6-Bucket Ensemble)**
+### **Final Model Performance (9-Model 3-Tier Ensemble)**
 
 | Metric | Value | Target | Status |
 | ----- | ----- | ----- | ----- |
-| **Global R²** | 0.9138 | \>0.90 | ✅ Exceeded |
-| **Global MAPE** | 13.47% | \<10% | ⚠️ Close |
-| **Low-Price MAPE** | 10.48% | \<10% | ✅ At target |
+| **Global R²** | 0.9200 | \>0.90 | ✅ Exceeded |
+| **Global MAPE** | 13.10% | \<10% | ⚠️ Very close |
+| **MAE** | 2.15B VND | N/A | — |
+| **RMSE** | 3.41B VND | N/A | — |
 | **Inference latency (avg)** | ~300ms | \<1s | ✅ Good |
-| **Model size (12 pkl files)** | ~250MB | N/A | ✅ Manageable |
-| **Data volume (processed)** | 3,202 properties | \>3,000 | ✅ Sufficient |
+| **Model size (9 pkl files)** | ~40MB | N/A | ✅ Efficient |
+| **Training samples** | 10,421 | \>10,000 | ✅ Sufficient |
+| **Features per model** | 79 | 50-100 | ✅ Balanced |
 
 ### **Feature Engineering Impact**
 

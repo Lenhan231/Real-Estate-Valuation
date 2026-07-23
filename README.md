@@ -6,11 +6,13 @@ Predicts property prices using Machine Learning based on area, location, ameniti
 
 | Metric | Value |
 |--------|-------|
-| **Model** | LightGBM + XGBoost + CatBoost (3-tier ensemble) |
-| **MAPE** | 13.10% (v2.6) |
-| **R²** | 0.9200 |
-| **Dataset** | 10,432 properties (training) |
-| **Features** | 78 optimized (64 base + 14 polynomial/interaction) |
+| **Model** | 9-Model Ensemble: LightGBM + XGBoost + CatBoost (3-tier price segmentation) |
+| **MAPE** | 13.10% (v2.6 production) |
+| **R²** | 0.9200 (explains 92% of variance) |
+| **MAE** | 2.15B VND |
+| **Training Data** | 10,421 properties (80-20 split) |
+| **Features** | 79 (78 engineered + 1 target price) |
+| **Training Time** | ~149 seconds |
 
 ---
 
