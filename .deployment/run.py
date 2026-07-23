@@ -2,7 +2,6 @@
 """Wrapper to catch and display any startup errors."""
 import sys
 import os
-import subprocess
 
 print(f"[DEBUG] Python version: {sys.version}")
 print(f"[DEBUG] Working directory: {os.getcwd()}")
@@ -18,6 +17,8 @@ try:
     print(f"[DEBUG] Starting streamlit run on port {port}...")
 
     cmd = [
+        sys.executable,
+        "-m",
         "streamlit",
         "run",
         "app/ui/streamlit_app.py",
@@ -28,7 +29,7 @@ try:
     ]
 
     print(f"[DEBUG] Running: {' '.join(cmd)}")
-    os.execvp("streamlit", cmd)
+    os.execv(sys.executable, cmd)
 
 except Exception as e:
     print(f"[ERROR] Exception occurred: {type(e).__name__}: {e}")
