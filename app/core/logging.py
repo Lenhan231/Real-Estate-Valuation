@@ -110,4 +110,4 @@ class ProductionLogger:
 
 
 # Setup logging when module is imported
-setup_logging(level=os.getenv("LOG_LEVEL", "INFO"))
+setup_logging(level=os.getenv("LOG_LEVEL", "INFO").upper())
