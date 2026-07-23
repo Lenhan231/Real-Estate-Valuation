@@ -21,8 +21,11 @@ wandb/
 
 # Local model artifacts & plots
 
+# Block JSON and PNG by default, but allow critical files
 *.json
+!models/saved_models/locality_encoding.json
 *.png
+!docs/figures/*.png
 
 # Temporary and split datasets
 data/processed/split_*.csv
