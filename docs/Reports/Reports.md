@@ -105,6 +105,18 @@
 
 [**VIII. Appendices	39**](#viii.-appendices)
 
+[Appendix A - Core Processed Dataset Fields	39](#appendix-a-core-processed-dataset-fields)
+
+[Appendix B - Final Model Hyperparameters (9-Model 3-Tier Ensemble)	40](#appendix-b-final-model-hyperparameters-9-model-3-tier-ensemble)
+
+[Appendix C - Repository Structure and Documentation	41](#appendix-c-repository-structure-and-documentation)
+
+[Appendix D - Performance Benchmarks & Metrics	45](#appendix-d-performance-benchmarks-metrics)
+
+[Appendix E - Deployment Platforms Comparison	47](#appendix-e-deployment-platforms-comparison)
+
+[Appendix F - Environment Variables Reference	48](#appendix-f-environment-variables-reference)
+
 [**IX. References	48**](#ix.-references)
 
 [Appendix A — Core Processed Dataset Fields	39](#appendix-a-—-core-processed-dataset-fields)
@@ -1217,7 +1229,7 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 # **VIII. Appendices** {#viii.-appendices}
 
-## **Appendix A — Core Processed Dataset Fields** {#appendix-a-—-core-processed-dataset-fields}
+## **Appendix A - Core Processed Dataset Fields** {#appendix-a-core-processed-dataset-fields}
 
 | \# | Feature | Type | Description |
 | ----- | ----- | ----- | ----- |
@@ -1260,7 +1272,7 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 ---
 
-## **Appendix C — Repository Structure and Documentation** {#appendix-c-—-repository-structure-and-documentation}
+## **Appendix C - Repository Structure and Documentation** {#appendix-c-repository-structure-and-documentation}
 
 ### **Complete File Organization**
 
@@ -1405,7 +1417,7 @@ docker-compose logs -f  # Monitor
 
 ---
 
-## **Appendix D — Performance Benchmarks & Metrics** {#appendix-d-—-performance-benchmarks-&-metrics}
+## **Appendix D - Performance Benchmarks & Metrics** {#appendix-d-performance-benchmarks-metrics}
 
 ### **Final Model Performance (9-Model 3-Tier Ensemble)**
 
@@ -1443,7 +1455,7 @@ docker-compose logs -f  # Monitor
 
 ---
 
-## **Appendix E — Deployment Platforms Comparison** {#appendix-e-—-deployment-platforms-comparison}
+## **Appendix E - Deployment Platforms Comparison** {#appendix-e-deployment-platforms-comparison}
 
 | Platform | Cost | Setup Time | Scaling | Model Hosting | Data Hosting | Status |
 | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
@@ -1455,7 +1467,7 @@ docker-compose logs -f  # Monitor
 
 ---
 
-## **Appendix F — Environment Variables Reference** {#appendix-f-—-environment-variables-reference}
+## **Appendix F - Environment Variables Reference** {#appendix-f-environment-variables-reference}
 
 ### **Required (All Environments)**
 
