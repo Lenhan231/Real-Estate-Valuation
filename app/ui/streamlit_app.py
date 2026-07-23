@@ -1123,7 +1123,7 @@ with tab_analysis:
                     x=alt.X("Loại Nhà:N", title="Loại Nhà"),
                     y=alt.Y("Giá Trung Bình (tỷ VND):Q", title="Giá (tỷ VND)"),
                     color=alt.Color("Giá Trung Bình (tỷ VND):Q", scale=alt.Scale(scheme="viridis"))
-                ).properties(height=300, width=None).interactive()
+                ).properties(height=300).interactive()
 
                 st.altair_chart(chart, use_container_width=True)
             else:
@@ -1152,7 +1152,7 @@ with tab_analysis:
                     y=alt.Y("Giá (tỷ VND):Q", title="Giá (tỷ VND)"),
                     color=alt.Color("Giá/m² (triệu):Q", scale=alt.Scale(scheme="viridis"), title="Giá/m² (triệu)"),
                     tooltip=["Diện Tích (m²)", "Giá (tỷ VND)", "Giá/m² (triệu)"]
-                ).properties(height=300, width=None).interactive()
+                ).properties(height=300).interactive()
 
                 st.altair_chart(chart, use_container_width=True)
 
@@ -1189,7 +1189,7 @@ with tab_analysis:
                     x=alt.X("Khoảng Giá:N", title="Khoảng Giá (tỷ VND)"),
                     y=alt.Y("Số Lượng:Q", title="Số Lượng"),
                     color=alt.value("#1f77b4")
-                ).properties(height=300, width=None)
+                ).properties(height=300)
 
                 st.altair_chart(chart, use_container_width=True)
             else:
@@ -1235,7 +1235,7 @@ with tab_analysis:
                         x=alt.X("Số Tầng:N", title="Số Tầng"),
                         y=alt.Y("Giá Trung Vị (tỷ):Q", title="Giá Trung Vị (tỷ VND)"),
                         color=alt.value("#2ca02c")
-                    ).properties(height=300, width=None)
+                    ).properties(height=300)
                     st.altair_chart(chart, use_container_width=True)
             else:
                 st.info("Dữ liệu số tầng không có sẵn")
@@ -1266,7 +1266,7 @@ with tab_analysis:
                     x=alt.X("Diện Tích:N", title="Loại Diện Tích"),
                     y=alt.Y("Giá Trung Vị (tỷ):Q", title="Giá Trung Vị (tỷ VND)"),
                     color=alt.value("#ff7f0e")
-                ).properties(height=300, width=None)
+                ).properties(height=300)
                 st.altair_chart(chart, use_container_width=True)
 
     else:
