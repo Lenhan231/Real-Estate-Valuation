@@ -2,6 +2,7 @@
 Chạy: streamlit run app/app.py
 """
 import sys
+import os
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -33,8 +34,8 @@ except Exception:
 # Import from consolidated app.core module
 from app.core.geo import GeoLookup
 
-# API Configuration
-API_BASE_URL = "http://localhost:8000"
+# API Configuration (use environment variable for deployed backend, fallback to localhost for dev)
+API_BASE_URL = os.getenv("API_URL", "http://localhost:8000")
 API_TIMEOUT = 30
 
 # Feature version (same as app/core/constants.py)
