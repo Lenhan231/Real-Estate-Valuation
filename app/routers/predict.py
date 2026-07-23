@@ -17,6 +17,7 @@ async def predict(request: PredictRequest):
             property_type=request.property_type,
             legal_status=request.legal_status,
             direction=request.direction,
+            price_tier=request.price_tier,
             area_m2=request.area_m2,
             width_m=request.width_m or 0,
             length_m=request.length_m or 0,

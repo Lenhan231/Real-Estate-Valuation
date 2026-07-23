@@ -10,6 +10,7 @@ class PredictRequest(BaseModel):
     property_type: Optional[str] = None
     legal_status: Optional[str] = None
     direction: Optional[str] = None
+    price_tier: Optional[str] = "mid"  # User-selected tier: low (0-5B), mid (5-20B), high (20B+)
     area_m2: float
     width_m: Optional[float] = None
     length_m: Optional[float] = None

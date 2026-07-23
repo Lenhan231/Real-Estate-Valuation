@@ -17,6 +17,7 @@ def predict_property_price(
     property_type: str,
     legal_status: str,
     direction: str,
+    price_tier: str,
     area_m2: float,
     width_m: float,
     length_m: float,
@@ -57,12 +58,9 @@ def predict_property_price(
     if row is None:
         raise ValueError(f"Failed to build feature row: {info}")
 
-    # Determine price tier
-    bucket = "low"
-    est_price = area_m2 * 50e6
-    if est_price > 20e9:
-        bucket = "high"
-    elif est_price > 5e9:
+    # Use user-selected price tier (default to mid if not specified)
+    bucket = price_tier.lower() if price_tier else "mid"
+    if bucket not in ["low", "mid", "high"]:
         bucket = "mid"
 
     # Get predictions from ensemble

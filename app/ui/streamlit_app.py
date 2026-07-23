@@ -72,7 +72,7 @@ if "last_xai_data" not in st.session_state:
 # API Helper Functions
 # ---------------------------------------------------------------------------
 def api_predict(street, locality, property_type, legal_status, direction,
-                 area_m2, width_m, length_m, num_floors, num_bedrooms, road_width_m,
+                 price_tier, area_m2, width_m, length_m, num_floors, num_bedrooms, road_width_m,
                  bin_flags, text_flags):
     """Call /api/predict endpoint."""
     try:
@@ -82,6 +82,7 @@ def api_predict(street, locality, property_type, legal_status, direction,
             "property_type": property_type,
             "legal_status": legal_status,
             "direction": direction,
+            "price_tier": price_tier,
             "area_m2": area_m2,
             "width_m": width_m,
             "length_m": length_m,
