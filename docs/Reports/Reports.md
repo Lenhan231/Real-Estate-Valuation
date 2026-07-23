@@ -109,7 +109,7 @@
 
 [Appendix A — Core Processed Dataset Fields	39](#appendix-a-—-core-processed-dataset-fields)
 
-[Appendix B — Final Model Hyperparameters (6-Bucket Ensemble)	40](#appendix-b-—-final-model-hyperparameters-\(9-model (3-tier × 3-algorithm)-ensemble\))
+[Appendix B - Final Model Hyperparameters (9-Model 3-Tier Ensemble)	40](#appendix-b-final-model-hyperparameters-9-model-3-tier-ensemble)
 
 [Appendix C — Repository Structure and Documentation	41](#appendix-c-—-repository-structure-and-documentation)
 
@@ -1241,7 +1241,7 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 ## 
 
-## **Appendix B — Final Model Hyperparameters (9-Model 3-Tier Ensemble)**  {#appendix-b-—-final-model-hyperparameters-(9-model-3-tier-ensemble)}
+## **Appendix B - Final Model Hyperparameters (9-Model 3-Tier Ensemble)**  {#appendix-b-final-model-hyperparameters-9-model-3-tier-ensemble}
 
 | Parameter | LightGBM | XGBoost | CatBoost |
 | ----- | ----- | ----- | ----- |
