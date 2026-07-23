@@ -474,7 +474,7 @@ Multiple model architectures were compared for predictive performance using Weig
 
 The dataset lacks several key structural attributes, including house age, property condition, and reliable direction information. Although listing dates are available, the observation period is not sufficiently long or consistent to support reliable longitudinal market-trend forecasting. These limitations contribute to residual variance and restrict the scope of trend analysis.
 
-Most automated valuation systems primarily provide point estimates and offer limited communication of prediction uncertainty. In an earlier frontage-house experiment, applying tighter segment-specific IQR outlier filtering reduced MAPE from approximately 107% to 26.6%. This historical result is separate from the final six-bucket evaluation. The current application displays an indicative MAPE-based error range around each prediction, based on the final model’s global MAPE. This range is not a statistically calibrated confidence interval. TabPFN was evaluated using point predictions and standard regression metrics; posterior predictive uncertainty was not explicitly analysed in the current prototype.
+Most automated valuation systems primarily provide point estimates and offer limited communication of prediction uncertainty. In an earlier frontage-house experiment, applying tighter segment-specific IQR outlier filtering reduced MAPE from approximately 107% to 26.6%. This historical result is separate from the final 9-model (3-tier × 3-algorithm) ensemble evaluation. The current application displays an indicative MAPE-based error range around each prediction, based on the final model’s global MAPE. This range is not a statistically calibrated confidence interval. TabPFN was evaluated using point predictions and standard regression metrics; posterior predictive uncertainty was not explicitly analysed in the current prototype.
 
 ## **7\. Justification for the Project** {#7.-justification-for-the-project}
 
@@ -1730,7 +1730,7 @@ Validating the segmentation hypothesis empirically (Table 11\) before committing
 
 ### **2.3 What could improve**
 
-Parallel research tracks including the stacking ensemble, TabPFN-based segmentation, and the final six-bucket router produced results under different experimental settings. Consequently, the reported metrics were not always directly comparable and required reconciliation during the final stages. Establishing a shared benchmarking protocol, dataset split, preprocessing pipeline, and evaluation metrics from the beginning would have improved consistency.
+Parallel research tracks including the stacking ensemble, TabPFN-based segmentation, and the final 9-model (3-tier × 3-algorithm) ensemble produced results under different experimental settings. Consequently, the reported metrics were not always directly comparable and required reconciliation during the final stages. Establishing a shared benchmarking protocol, dataset split, preprocessing pipeline, and evaluation metrics from the beginning would have improved consistency.
 
 Model interpretation was limited to global feature-importance analysis from tree-based models. The project did not implement local, per-prediction explanations, meaning the system cannot clearly explain how individual features contribute to a specific property valuation. Future development should incorporate a suitable local explanation method to improve model transparency and provide local, per-prediction explanations.
 
