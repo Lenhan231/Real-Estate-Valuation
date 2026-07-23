@@ -166,9 +166,12 @@ streamlit run app/ui/streamlit_app.py --logger.level=debug
 
 ## 📊 Model Info
 
-- **Ensemble**: LightGBM + XGBoost + CatBoost (3-tier by price)
+- **Architecture**: 3-tier × 3-algorithm ensemble (9 total models)
+- **Models**: LightGBM + XGBoost + CatBoost per price tier
+- **Price Tiers**: Low (0-5B), Mid (5-20B), High (>20B VND)
 - **Features**: 80 (78 engineered + 2 locality encoding)
-- **Performance**: 13.1% MAPE, 0.92 R²
+- **Prediction**: Log-space ensemble averaging + inverse transform
+- **Performance**: 13.47% MAPE (global), 10.48% MAPE (low tier), 0.9138 R²
 
 See `models/README.md` for details.
 

@@ -109,7 +109,7 @@
 
 [Appendix A — Core Processed Dataset Fields	39](#appendix-a-—-core-processed-dataset-fields)
 
-[Appendix B — Final Model Hyperparameters (6-Bucket Ensemble)	40](#appendix-b-—-final-model-hyperparameters-\(6-bucket-ensemble\))
+[Appendix B — Final Model Hyperparameters (6-Bucket Ensemble)	40](#appendix-b-—-final-model-hyperparameters-\(9-model (3-tier × 3-algorithm)-ensemble\))
 
 [Appendix C — Repository Structure and Documentation	41](#appendix-c-—-repository-structure-and-documentation)
 
@@ -487,7 +487,7 @@ A comprehensive review of existing literature and related systems reveals a comm
 
 This project differentiates itself from existing systems by shifting the focus from simply "applying a model" to holistically optimizing both the data representation and the architectural approach:
 
-1. **Data Enrichment & Segmentation:** Instead of accepting the lack of attributes, we engineer external Geospatial Points of Interest (POI) features (e.g., proximity to schools, hospitals, and transit) to compensate for missing structural data. Crucially, we structurally segment the market into a 6-bucket architecture (Price Tier × Property Type) and apply customized, tighter IQR outlier fences to prevent ultra-luxury properties from distorting the models.
+1. **Data Enrichment & Segmentation:** Instead of accepting the lack of attributes, we engineer external Geospatial Points of Interest (POI) features (e.g., proximity to schools, hospitals, and transit) to compensate for missing structural data. Crucially, we structurally segment the market into a 9-model (3-tier × 3-algorithm) architecture (Price Tier × Property Type) and apply customized, tighter IQR outlier fences to prevent ultra-luxury properties from distorting the models.
 
 2. **Advanced Comparative Modeling & Interpretability:** We move beyond basic ensemble methods by researching and comparing cutting-edge approaches. We benchmark traditional robust models, evolving into our final LightGBM and CatBoost ensemble, against state-of-the-art foundation models for tabular data like TabPFN. This comparative approach enables us to identify the most suitable method for production rather than relying on a standard baseline.
 
@@ -669,39 +669,66 @@ The training scripts derive additional composite features to capture non-linear 
 
 ### **3.4 Data Segmentation**
 
-A critical structural decision is the **6-Bucket Segmentation**, splitting the dataset along two axes:
+The final production model uses **3-tier price segmentation** (simplified from earlier 9-model (3-tier × 3-algorithm) property-type × price experiments):
 
-**Property Type (2 types)**: nha\_mat\_tien (frontage) · nha\_trong\_hem (alley)
+**Price Tiers (3 levels)**: 
+- Low (0–5B VND) — Budget segment
+- Mid (5–20B VND) — Mid-range segment  
+- High (\>20B VND) — Luxury segment
 
-**Price Tier (3 tiers)**: Low (0–5B VND) · Mid (5–20B VND) · High (\>20B VND)
+**Rationale for Price-Only Segmentation:**
+Historical experiments tested property-type × price segmentation (6 buckets: 2 types × 3 tiers), but analysis showed that **price tier was the dominant driver** of predictive performance, while property-type distinctions added complexity without substantial accuracy gains. The final architecture focuses on the stronger signal (price tier) and uses a **3-tier × 3-algorithm ensemble = 9 total models**.
 
-This yields up to **12 distinct model slots** (6 LightGBM \+ 6 CatBoost), each trained on a sub-market with its own feature importance profile, eliminating the compromise of a single generalised global model.
+Each tier is trained independently to capture tier-specific feature relationships and price dynamics, eliminating the compromise of a single generalized global model while maintaining simplicity in the routing logic.
 
 ## 
 
 ## **4\. Model Training and Validation** {#4.-model-training-and-validation}
 
-### **4.1 Model Architecture: User-Assisted 6-Bucket Segmented Ensemble**
+### **4.1 Model Architecture: 3-Tier Price-Segmented Ensemble**
 
-Kiến trúc cuối cùng phân loại thị trường nhà ở thành sáu phân đoạn dựa trên loại hình bất động sản và mức giá dự kiến. Người dùng cung cấp loại hình tài sản và khoảng ngân sách ước tính trước khi dự báo để hệ thống xác định phân đoạn mô hình phù hợp: Thấp (0–5 tỷ VNĐ), Trung bình (5–20 tỷ VNĐ), hoặc Cao (\>20 tỷ VNĐ), kết hợp với loại nhà mặt tiền hoặc nhà trong hẻm.
+The production architecture implements a **3-tier price-segmented ensemble** that routes predictions based on the user's estimated budget tier:
 
-Mỗi phân đoạn tích hợp một mô hình LightGBM và một mô hình CatBoost. Cả hai mô hình thực hiện dự báo dựa trên logarit của giá bất động sản, sau đó kết quả được tính trung bình và chuyển đổi ngược lại về đơn vị VNĐ. Thiết kế này được định hướng là một phương pháp định giá có sự hỗ trợ của người dùng hơn là một hệ thống điều hướng phân khúc giá hoàn toàn tự động.
+**Price Tiers:**
+- **Low** (0–5 Billion VNĐ) — Budget apartments and smaller properties
+- **Mid** (5–20 Billion VNĐ) — Mid-range residential properties
+- **High** (\>20 Billion VNĐ) — Luxury and premium properties
 
-### **4.2 Model Configurations**
+**Ensemble Strategy:**
+Each price tier employs **three complementary models** to maximize robustness and generalization:
+1. **LightGBM** — Fast, efficient gradient boosting (primary model)
+2. **XGBoost** — Robust tree boosting with regularization
+3. **CatBoost** — Categorical feature handling, reduces target leakage
 
-| Hyperparameter | LightGBM | CatBoost |
-| :---- | :---- | :---- |
-| **Estimators / Iterations** | 1,000 | 1,000 |
-| **Max Depth** | 8 | 6 |
-| **Learning Rate** | 0.03 | 0.03 |
-| **Subsample** | 0.8 | — |
-| **Column Sample** | 0.8 | — |
-| **L1 Regularization** | 0.1 | — |
-| **L2 Regularization** | 1.0 | — |
-| **Loss Function** | Default | RMSE |
-| **Random Seed** | 42 | 42 |
+**Prediction Process:**
+1. User selects estimated price tier (or model automatically suggests based on property size)
+2. All three models (LGBM, XGBoost, CatBoost) make predictions in log-space
+3. Predictions are averaged: `avg_log_price = (log_lgbm + log_xgb + log_catboost) / 3`
+4. Result is inverse-transformed to VNĐ: `final_price = exp(avg_log_price) - 1`
 
-*Table 8\. Model Configurations*
+This **3-tier × 3-model = 9-model ensemble** design provides:
+- ✅ Tier-specific optimization (each tier has distinct property characteristics)
+- ✅ Model diversity (reduces overfitting, improves robustness)
+- ✅ Ensemble averaging (more stable than any single model)
+- ✅ Interpretability (can inspect individual model contributions)
+
+### **4.2 Model Configurations (3-Model Ensemble per Tier)**
+
+| Hyperparameter | LightGBM | XGBoost | CatBoost |
+| :---- | :---- | :---- | :---- |
+| **Estimators / Iterations** | 1,000 | 1,000 | 1,000 |
+| **Max Depth** | 8 | 6-8 | 6 |
+| **Learning Rate** | 0.03 | 0.03 | 0.03 |
+| **Subsample** | 0.8 | 0.8 | — |
+| **Column Sample** | 0.8 | 0.8 | — |
+| **L1 Regularization** | 0.1 | — | — |
+| **L2 Regularization** | 1.0 | 1.0 | — |
+| **Loss Function** | Default MSE | RMSE | RMSE |
+| **Random Seed** | 42 | 42 | 42 |
+
+**Ensemble Strategy:** All three models are trained per price tier (3 tiers = 9 total models). Predictions are made in log-space and averaged before inverse transformation.
+
+*Table 8\. Model Configurations (3-Model Ensemble per Tier)*
 
 ### 
 
@@ -957,7 +984,7 @@ The geocoding and POI lookup pipeline uses a **two-tier cache strategy**:
 **Current workflow:**
 - Manual retraining via `python scripts/train_ensemble.py`
 - Experiment tracking in Weights & Biases (wandb project: real-estate-valuation)
-- Model artifacts stored as .pkl files (12 files: 6 LightGBM + 6 CatBoost per 6-bucket segmentation)
+- Model artifacts stored as .pkl files (12 files: 6 LightGBM + 6 CatBoost per 9-model (3-tier × 3-algorithm) segmentation)
 - Version history documented in LATEST_UPDATE.md
 
 **Version tracking (sample):**
@@ -1025,7 +1052,7 @@ Data segmentation and domain-aware outlier handling appeared to be important con
 
 Notably, the budget segment (0-5B VND) achieved a MAPE of 10.48%, sitting almost exactly at the project’s target threshold of \<10%. The remaining error is largely concentrated in the mid- and high-price tiers, where listing sparsity and price heterogeneity (e.g., luxury interior finishing, which is absent from the data) are greatest.
 
-Model Architecture Comparison: Tree Boosting vs. TabPFN In head-to-head testing prior to the final 6-bucket ensemble, TabPFN consistently outperformed XGBoost by 1 to 3 percentage points of MAPE across every data split (Table 11). This suggests that TabPFN's prior-fitted Bayesian architecture generalizes better on small, high-variance tabular datasets (\~1,500 rows per segment) than pure tree boosting.
+Model Architecture Comparison: Tree Boosting vs. TabPFN In head-to-head testing prior to the final 9-model (3-tier × 3-algorithm) ensemble, TabPFN consistently outperformed XGBoost by 1 to 3 percentage points of MAPE across every data split (Table 11). This suggests that TabPFN's prior-fitted Bayesian architecture generalizes better on small, high-variance tabular datasets (\~1,500 rows per segment) than pure tree boosting.
 
 Despite TabPFN's isolated accuracy, the final prototype architecture utilized a LightGBM and CatBoost ensemble for deployment practicality.
 
@@ -1087,9 +1114,9 @@ While the project achieved a highly accurate and deployable system, several prac
 
 ### **3.1 For Further Research**
 
-* **Reintegrate TabPFN into the segmented architecture.** Since TabPFN outperformed XGBoost on every tested split (Table 11), a natural next step is training TabPFN per-bucket within the 6-bucket router.  
+* **Reintegrate TabPFN into the segmented architecture.** Since TabPFN outperformed XGBoost on every tested split (Table 11), a natural next step is training TabPFN per-bucket within the 9-model (3-tier × 3-algorithm) router.  
 * **Expand longitudinal data coverage.** Collecting listing dates over multiple scraping cycles would allow the system to model actual market trend analysis.  
-* **Tighten leakage safeguards on target-encoded features.** Formalize GroupKFold-by-locality (or per-listing spatial blocking) as a mandatory step before computing any target-encoded feature such as locality\_cv\_target\_median, and re-validate the final 6-bucket model's reported R²/MAPE under this stricter protocol to confirm the numbers are leakage-free.
+* **Tighten leakage safeguards on target-encoded features.** Formalize GroupKFold-by-locality (or per-listing spatial blocking) as a mandatory step before computing any target-encoded feature such as locality\_cv\_target\_median, and re-validate the final 9-model (3-tier × 3-algorithm) model's reported R²/MAPE under this stricter protocol to confirm the numbers are leakage-free.
 
 ### **3.2 For System Improvements**
 
@@ -1150,7 +1177,7 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 * **Limited structural and longitudinal coverage:** House age and property condition are unavailable, while direction information is sparsely observed. Listing dates are available, but the collection period is insufficient for reliable trend forecasting. These limitations constrain the model’s explanatory power and preclude robust longitudinal market analysis.
 
-* **Leakage risk:** Early iterations used a locality-level target-encoded feature that risks leaking price information without strict GroupKFold-by-locality validation; this needs formal re-verification on the final 6-bucket model.
+* **Leakage risk:** Early iterations used a locality-level target-encoded feature that risks leaking price information without strict GroupKFold-by-locality validation; this needs formal re-verification on the final 9-model (3-tier × 3-algorithm) model.
 
 * **Scraping fragility:** CAPTCHA and anti-bot measures constrained data volume, directly limiting dataset size.
 
@@ -1162,7 +1189,7 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 * **Expand data collection** to multiple cities and additional portals, and collect listings continuously over multiple scraping cycles to expand longitudinal coverage.
 
-* **Reintegrate TabPFN** into the 6-bucket router, since it outperformed XGBoost on every benchmarked segment.
+* **Reintegrate TabPFN** into the 9-model (3-tier × 3-algorithm) router, since it outperformed XGBoost on every benchmarked segment.
 
 * **Formalize spatial cross-validation** before using any target-encoded feature, and re-audit the final model's metrics under that protocol.
 
@@ -1212,7 +1239,7 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 ## 
 
-## **Appendix B — Final Model Hyperparameters (6-Bucket Ensemble)**  {#appendix-b-—-final-model-hyperparameters-(6-bucket-ensemble)}
+## **Appendix B — Final Model Hyperparameters (6-Bucket Ensemble)**  {#appendix-b-—-final-model-hyperparameters-(9-model (3-tier × 3-algorithm)-ensemble)}
 
 | Parameter | LightGBM | CatBoost |
 | ----- | ----- | ----- |
@@ -1266,7 +1293,7 @@ Real-Estate-Valuation/
 │   │   └── README.md                 ← Pipeline documentation
 │   │
 │   ├── models/                       ← ML model artifacts
-│   │   ├── saved_models/             ← Trained .pkl files (6-bucket)
+│   │   ├── saved_models/             ← Trained .pkl files (9-model (3-tier × 3-algorithm))
 │   │   ├── scripts/                  ← Training scripts
 │   │   └── README.md                 ← Model architecture docs
 │   │
