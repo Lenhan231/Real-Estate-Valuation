@@ -42,8 +42,12 @@ DATA_DIR = PROJECT_ROOT / "models" / "data"
 MODEL_DIR = PROJECT_ROOT / "models" / "saved_models"
 PLOT_DIR = MODEL_DIR / "plots"
 
-def train_ensemble_3models(X_train, y_train, X_test, y_test, price_tier):
-    """Train LightGBM, CatBoost, and XGBoost with early stopping."""
+def train_ensemble_3models(X_train, y_train, X_val, y_val, price_tier):
+    """Train LightGBM, CatBoost, and XGBoost with validation-based early stopping.
+
+    Uses separate validation set (not test set) for early stopping to avoid data leakage.
+    Test set remains untouched for unbiased final evaluation.
+    """
     try:
         from catboost import CatBoostRegressor
     except ImportError:
@@ -71,42 +75,42 @@ def train_ensemble_3models(X_train, y_train, X_test, y_test, price_tier):
         "verbose": 0, "random_seed": 42, "early_stopping_rounds": 50,
     }
 
-    # Train LightGBM
+    # Train LightGBM (use validation set for early stopping, not test set)
     model_lgb = LGBMRegressor(**lgb_params)
-    eval_set_lgb = [(X_test, y_test)] if len(X_test) > 0 else None
-    callbacks_lgb = [lgb_early_stopping(50), log_evaluation(period=0)] if len(X_test) > 0 else []
+    eval_set_lgb = [(X_val, y_val)] if len(X_val) > 0 else None
+    callbacks_lgb = [lgb_early_stopping(50), log_evaluation(period=0)] if len(X_val) > 0 else []
     model_lgb.fit(X_train, y_train, eval_set=eval_set_lgb, callbacks=callbacks_lgb)
     models_dict["lgbm"] = model_lgb
 
-    # Train XGBoost
+    # Train XGBoost (use validation set for early stopping)
     model_xgb = XGBRegressor(**xgb_params)
-    if len(X_test) > 0:
-        model_xgb.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
+    if len(X_val) > 0:
+        model_xgb.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
     else:
         model_xgb.fit(X_train, y_train, verbose=False)
     models_dict["xgb"] = model_xgb
 
-    # Train CatBoost
+    # Train CatBoost (use validation set for early stopping)
     model_cb = None
     if CatBoostRegressor is not None:
         model_cb = CatBoostRegressor(**cb_params)
-        if len(X_test) > 0:
-            model_cb.fit(X_train, y_train, eval_set=(X_test, y_test))
+        if len(X_val) > 0:
+            model_cb.fit(X_train, y_train, eval_set=(X_val, y_val))
         else:
             model_cb.fit(X_train, y_train)
         models_dict["cb"] = model_cb
 
-    # Calculate validation errors for weighting
-    if len(X_test) > 0:
-        y_pred_lgb = model_lgb.predict(X_test)
-        y_pred_xgb = model_xgb.predict(X_test)
+    # Calculate validation errors for weighting (also on validation set, not test)
+    if len(X_val) > 0:
+        y_pred_lgb = model_lgb.predict(X_val)
+        y_pred_xgb = model_xgb.predict(X_val)
 
-        val_errors["lgbm"] = np.sqrt(mean_squared_error(y_test, y_pred_lgb))
-        val_errors["xgb"] = np.sqrt(mean_squared_error(y_test, y_pred_xgb))
+        val_errors["lgbm"] = np.sqrt(mean_squared_error(y_val, y_pred_lgb))
+        val_errors["xgb"] = np.sqrt(mean_squared_error(y_val, y_pred_xgb))
 
         if model_cb is not None:
-            y_pred_cb = model_cb.predict(X_test)
-            val_errors["cb"] = np.sqrt(mean_squared_error(y_test, y_pred_cb))
+            y_pred_cb = model_cb.predict(X_val)
+            val_errors["cb"] = np.sqrt(mean_squared_error(y_val, y_pred_cb))
 
     return models_dict, val_errors
 
@@ -190,21 +194,29 @@ def main():
     X_with_target.to_csv(processed_data_dir / "model_training_data.csv", index=False)
     print(f"  ✓ Saved training data ({len(X)} rows × {X.shape[1]} features)")
 
-    # Train/test split
-    print("\n[3/5] Train/test split (80/20)...")
-    train_idx, test_idx = train_test_split(X.index, test_size=0.2, random_state=42)
-    X_train, X_test = X.loc[train_idx], X.loc[test_idx]
-    y_train, y_test = y.loc[train_idx], y.loc[test_idx]
-    y_log_train, y_log_test = y_log.loc[train_idx], y_log.loc[test_idx]
+    # Train/val/test split (64% train, 16% val for early stopping, 20% test)
+    print("\n[3/5] Train/val/test split (64/16/20)...")
+    # First split: 80% train+val, 20% test
+    temp_idx, test_idx = train_test_split(X.index, test_size=0.2, random_state=42)
+    # Second split: 80% train, 20% val (of the 80%)
+    train_idx, val_idx = train_test_split(temp_idx, test_size=0.2, random_state=42)
 
-    X_train, X_test = add_locality_features(X_train, X_test, df, train_idx, test_idx, y_train)
+    X_train, X_val, X_test = X.loc[train_idx], X.loc[val_idx], X.loc[test_idx]
+    y_train, y_val, y_test = y.loc[train_idx], y.loc[val_idx], y.loc[test_idx]
+    y_log_train, y_log_val, y_log_test = y_log.loc[train_idx], y_log.loc[val_idx], y_log.loc[test_idx]
 
+    # Add locality features (use train+val to compute stats, apply to all)
+    X_train, X_val = add_locality_features(X_train, X_val, df, train_idx, val_idx, y_train)
+    _, X_test = add_locality_features(X_train, X_test, df, train_idx, test_idx, y_train)
+
+    # Drop text columns
     drop_text = [c for c in ['locality', 'description'] if c in X_train.columns]
     if drop_text:
         X_train = X_train.drop(columns=drop_text)
+        X_val = X_val.drop(columns=drop_text)
         X_test = X_test.drop(columns=drop_text)
 
-    print(f"  ✓ Train: {X_train.shape[0]} | Test: {X_test.shape[0]}")
+    print(f"  ✓ Train: {X_train.shape[0]} | Val: {X_val.shape[0]} | Test: {X_test.shape[0]}")
 
     meta["features"] = list(X_train.columns)
     feature_names = meta["features"]
@@ -219,8 +231,10 @@ def main():
     BIN_LABELS = ['low', 'mid', 'high']
 
     train_prices = np.expm1(y_log_train)
+    val_prices = np.expm1(y_log_val)
     test_prices = np.expm1(y_log_test)
     train_bins = pd.cut(train_prices, bins=BINS_VND, labels=BIN_LABELS)
+    val_bins = pd.cut(val_prices, bins=BINS_VND, labels=BIN_LABELS)
     test_bins = pd.cut(test_prices, bins=BINS_VND, labels=BIN_LABELS)
 
     models = {}
@@ -229,10 +243,13 @@ def main():
     t0 = time.time()
     for price_bin in BIN_LABELS:
         train_mask = (train_bins == price_bin)
+        val_mask = (val_bins == price_bin)
         test_mask = (test_bins == price_bin)
 
         X_tr_b = X_train[train_mask]
         y_tr_b = y_log_train[train_mask]
+        X_val_b = X_val[val_mask]
+        y_val_b = y_log_val[val_mask]
         X_te_b = X_test[test_mask]
         y_te_b = y_log_test[test_mask]
 
@@ -240,9 +257,9 @@ def main():
             print(f"  Skipping tier {price_bin} (too few samples)")
             continue
 
-        print(f"  Training {price_bin} tier: {len(X_tr_b)} train, {len(X_te_b)} test")
+        print(f"  Training {price_bin} tier: {len(X_tr_b)} train, {len(X_val_b)} val, {len(X_te_b)} test")
 
-        models_dict, val_errors = train_ensemble_3models(X_tr_b, y_tr_b, X_te_b, y_te_b, price_bin)
+        models_dict, val_errors = train_ensemble_3models(X_tr_b, y_tr_b, X_val_b, y_val_b, price_bin)
 
         if len(X_te_b) > 0:
             y_log_pred_b, weights = ensemble_predictions(models_dict, X_te_b, val_errors)

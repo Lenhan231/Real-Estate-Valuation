@@ -260,8 +260,8 @@ st.title("🏠 Định giá & Phân tích Bất Động Sản TP.HCM")
 col_title, col_status = st.columns([3, 1])
 with col_title:
     st.caption(
-        "Model: **v2.4 Ensemble (LightGBM + XGBoost + CatBoost)** · "
-        "R² **0.9187** · MAPE **13.25%**"
+        "Model: **v2.6 Ensemble (LightGBM + XGBoost + CatBoost)** · "
+        "R² **0.9200** · MAPE **13.10%**"
     )
 with col_status:
     status_color = "🟢" if geo.data_source == "Supabase" else "🟡"
@@ -527,7 +527,7 @@ with tab_valuation:
                             st.error(f"❌ Lỗi xây dựng feature row:\n\n{error_msg}")
                             st.info("💡 Thử dùng **Form chi tiết** (tab ✍️) để nhập thủ công thay vì paste")
                         else:
-                            mape_err = price * 0.1325
+                            mape_err = price * 0.1310
 
                             r1, r2, r3 = st.columns(3)
                             r1.metric("Giá dự đoán", f"{price / 1e9:,.2f} tỷ VND")
@@ -839,7 +839,7 @@ with tab_valuation:
             if price is None:
                 st.error("Không xác định được vị trí — kiểm tra lại tên đường / phường.")
             else:
-                mape_err = price * 0.1325
+                mape_err = price * 0.1310
 
                 r1, r2, r3 = st.columns(3)
                 r1.metric("Giá dự đoán", f"{price / 1e9:,.2f} tỷ VND")

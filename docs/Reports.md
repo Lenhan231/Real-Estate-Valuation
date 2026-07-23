@@ -145,7 +145,6 @@
 | WBS | Work Breakdown Structure |
 | XGBoost | eXtreme Gradient Boosting |
 
-# 
 
 # **List of Tables** {#list-of-tables}
 
@@ -252,7 +251,6 @@ The main objectives of this project include:
 
 This project demonstrates the application of machine learning, data engineering, and data visualization in solving real-world real estate problems. The system helps improve valuation accuracy, consistency, and efficiency while reducing manual effort and operational costs. It also supports investors, buyers, and businesses in making data-driven decisions and highlights the growing role of AI-powered systems in modern real estate analytics.
 
-## 
 
 ## **6\. Project Scope & Limitations** {#6.-project-scope-&-limitations}
 
@@ -299,7 +297,6 @@ The team structure for Group 3, which is developing the "Automated Real Estate V
 
 *Table 1\. Team Structure and Roles*
 
-### 
 
 ### **1.2 Communication Plan**
 
@@ -498,7 +495,6 @@ This project differentiates itself from existing systems by shifting the focus f
 
 By addressing the root causes of high variance through data enrichment and customized outlier filtering, and by systematically comparing traditional ensembles against new foundational models, this project provides a significantly more robust valuation tool. The ultimate impact is a drastic reduction in pricing deviation (error per square meter), offering a highly accurate, explainable, and optimized solution for determining real estate values and market trends.
 
-# 
 
 # **IV. Methodology** {#iv.-methodology}
 
@@ -515,7 +511,6 @@ Does segmentation of the dataset by property type (frontage houses vs. alley hou
 **RQ3: Model Architecture Selection: TabPFN vs. Tree Boosting Ensemble**
 How does TabPFN perform relative to XGBoost in historical experiments across property-type splits, and what trade-offs justify selecting a LightGBM-CatBoost ensemble for the final 3-tier production architecture instead of the higher-accuracy TabPFN baseline?
 
-## 
 
 ## **2\. Data Collection and Preprocessing** {#2.-data-collection-and-preprocessing}
 
@@ -663,7 +658,6 @@ The raw scraped data undergoes a comprehensive 6-phase preprocessing workflow im
 
 The preprocessed dataset of **10,421 records** is persisted to **data/processed/model_training_data.csv** and synchronized to **Supabase Raw_Features table** for cross-session access and BI dashboard queries.
 
-## 
 
 ## **3\. Feature Selection and Engineering** {#3.-feature-selection-and-engineering}
 
@@ -769,7 +763,6 @@ Historical 2×3=6-bucket experiments (property-type × price) showed that **pric
 
 **Result:** 9-model (3-tier × 3-algorithm) ensemble balances **tier-specific optimization** (each tier trained independently) with **simplicity** (single routing dimension: user-selected budget range).
 
-## 
 
 ## **4\. Model Training and Validation** {#4.-model-training-and-validation}
 
@@ -953,7 +946,6 @@ A Streamlit web application (app/app.py) serves the trained ensemble:
 
 * Results are displayed as a predicted price in Billion VND, an indicative MAPE-based error range, and a price-per-m² figure, alongside an interactive map and POI breakdown.
 
-## 
 
 ## **7\. Ethical Considerations** {#7.-ethical-considerations}
 
@@ -983,7 +975,6 @@ The locality\_price\_median encoding is computed strictly from the training set 
 
 Web scraping is conducted respectfully: requests are rate-limited (3-second intervals for geocoding), and a persistent cache (data/localities.csv) minimises redundant API calls to the OpenStreetMap Nominatim service, honouring its usage policy.
 
-# 
 
 # **V. System Design and Implementation** {#v.-system-design-and-implementation}
 
@@ -1215,7 +1206,6 @@ Ensembling: All three models predict prices in log-space (log1p(price\_vnd)). Th
 
 **Train-Serving Mismatch Note:** Training used **inverse-RMSE weighted averaging** to combine the 3 models (weights calculated on test set). Production inference uses **equal averaging** instead. This discrepancy means reported training metrics (MAPE 13.10%) may not exactly represent production system performance. This is flagged for future alignment.
 
-## 
 
 ## **2\. Data Flow and Processing** {#2.-data-flow-and-processing}
 
@@ -1700,7 +1690,6 @@ While the project achieved a highly accurate and deployable system, several prac
 * **Pilot with real estate stakeholders.** Deploy the Streamlit web app to brokers, appraisers, and bank loan teams for feedback on usability, fairness, and prediction acceptance. This could inform future API-first architecture or mobile app development.  
 * **Package as a lightweight valuation microservice.** The current 9-model ensemble and price-tier router can be containerized (Docker) and deployed as an inference API for integration with property-listing platforms, CRM systems, or bank appraisal workflows. This positions the work for commercial deployment.
 
-# 
 
 # **VII. Conclusion** {#vii.-conclusion}
 
@@ -1768,7 +1757,6 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 * **Consolidate the codebase** around the single production architecture and retire superseded ones, with automated retraining to handle market drift over time.
 
-# 
 
 # **VIII. References** {#viii.-references}
 
@@ -1782,7 +1770,6 @@ The team hopes this segmented-router approach and geospatial feature engineering
 8. Wolpert, D. H. (1992). Stacked generalization. *Neural Networks, 5*(2), 241–259. [https://doi.org/10.1016/S0893-6080(05)80023-1](https://doi.org/10.1016/S0893-6080\(05\)80023-1)  
 9. Rosen, S. (1974). Hedonic prices and implicit markets: Product differentiation in pure competition. *Journal of Political Economy, 82*(1), 34–55.
 
-# 
 
 # **IX. Appendices** {#ix.-appendices}
 
@@ -1914,7 +1901,6 @@ Comprehensive reference for all 79 engineered features used in the 9-model ensem
 
 *Table 13. Complete Dataset Fields Reference (79 Features)*
 
-## 
 
 ## **Appendix B - Final Model Hyperparameters (9-Model 3-Tier Ensemble)**  {#appendix-b-final-model-hyperparameters-9-model-3-tier-ensemble}
 
