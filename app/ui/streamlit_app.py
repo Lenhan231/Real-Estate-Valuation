@@ -1114,14 +1114,18 @@ with tab_analysis:
                     use_container_width=True
                 )
 
-                # Bar chart
+                # Bar chart using altair for reliability
+                import altair as alt
                 chart_data = prop_type_analysis[["property_type", "avg_price_billion"]].copy()
                 chart_data.columns = ["Loại Nhà", "Giá Trung Bình (tỷ VND)"]
-                st.bar_chart(
-                    chart_data.set_index("Loại Nhà"),
-                    use_container_width=True,
-                    height=300
-                )
+
+                chart = alt.Chart(chart_data).mark_bar().encode(
+                    x=alt.X("Loại Nhà:N", title="Loại Nhà"),
+                    y=alt.Y("Giá Trung Bình (tỷ VND):Q", title="Giá (tỷ VND)"),
+                    color=alt.Color("Giá Trung Bình (tỷ VND):Q", scale=alt.Scale(scheme="viridis"))
+                ).properties(height=300, width=None).interactive()
+
+                st.altair_chart(chart, use_container_width=True)
             else:
                 st.info("Không đủ dữ liệu loại nhà để phân tích")
 
@@ -1133,30 +1137,29 @@ with tab_analysis:
             scatter_data = filt[["area_m2", "price_billion_vnd", "price_per_m2_million"]].dropna()
 
             if len(scatter_data) > 2:
-                import numpy as np
+                import altair as alt
 
-                # Create scatter chart
+                # Create scatter chart data
                 scatter_chart = pd.DataFrame({
                     "Diện Tích (m²)": scatter_data["area_m2"],
                     "Giá (tỷ VND)": scatter_data["price_billion_vnd"],
                     "Giá/m² (triệu)": scatter_data["price_per_m2_million"]
                 })
 
-                # Use custom function to create a scatter using Altair or st.scatter_chart
-                st.scatter_chart(
-                    scatter_chart,
-                    x="Diện Tích (m²)",
-                    y="Giá (tỷ VND)",
-                    size="Giá/m² (triệu)",
-                    use_container_width=True,
-                    height=300
-                )
+                # Create Altair scatter plot
+                chart = alt.Chart(scatter_chart).mark_circle(size=100).encode(
+                    x=alt.X("Diện Tích (m²):Q", title="Diện Tích (m²)"),
+                    y=alt.Y("Giá (tỷ VND):Q", title="Giá (tỷ VND)"),
+                    color=alt.Color("Giá/m² (triệu):Q", scale=alt.Scale(scheme="viridis"), title="Giá/m² (triệu)"),
+                    tooltip=["Diện Tích (m²)", "Giá (tỷ VND)", "Giá/m² (triệu)"]
+                ).properties(height=300, width=None).interactive()
+
+                st.altair_chart(chart, use_container_width=True)
 
                 # Add correlation insight
-                if len(scatter_data) > 2:
-                    corr = scatter_data["area_m2"].corr(scatter_data["price_billion_vnd"])
-                    st.caption(f"📊 Correlation: {corr:.3f} " +
-                             ("(Mạnh)" if abs(corr) > 0.7 else "(Trung bình)" if abs(corr) > 0.4 else "(Yếu)"))
+                corr = scatter_data["area_m2"].corr(scatter_data["price_billion_vnd"])
+                st.caption(f"📊 Correlation: {corr:.3f} " +
+                         ("(Mạnh)" if abs(corr) > 0.7 else "(Trung bình)" if abs(corr) > 0.4 else "(Yếu)"))
             else:
                 st.info("Không đủ dữ liệu để vẽ biểu đồ scatter")
 
@@ -1172,6 +1175,7 @@ with tab_analysis:
             price_dist = filt["price_billion_vnd"].dropna()
 
             if len(price_dist) > 2:
+                import altair as alt
                 # Create histogram using pandas cut
                 bins = 20
                 hist_data = pd.cut(price_dist, bins=bins).value_counts().sort_index()
@@ -1181,7 +1185,13 @@ with tab_analysis:
                     "Số Lượng": hist_data.values
                 })
 
-                st.bar_chart(hist_df.set_index("Khoảng Giá"), use_container_width=True, height=300)
+                chart = alt.Chart(hist_df).mark_bar().encode(
+                    x=alt.X("Khoảng Giá:N", title="Khoảng Giá (tỷ VND)"),
+                    y=alt.Y("Số Lượng:Q", title="Số Lượng"),
+                    color=alt.value("#1f77b4")
+                ).properties(height=300, width=None)
+
+                st.altair_chart(chart, use_container_width=True)
             else:
                 st.info("Không đủ dữ liệu để tạo histogram")
 
@@ -1216,11 +1226,17 @@ with tab_analysis:
                                  .sort_values("num_floors"))
 
                 if len(floor_analysis) > 0:
+                    import altair as alt
                     floor_chart = pd.DataFrame({
                         "Số Tầng": floor_analysis["num_floors"].astype(str),
                         "Giá Trung Vị (tỷ)": floor_analysis["median_price"]
                     })
-                    st.bar_chart(floor_chart.set_index("Số Tầng"), use_container_width=True, height=300)
+                    chart = alt.Chart(floor_chart).mark_bar().encode(
+                        x=alt.X("Số Tầng:N", title="Số Tầng"),
+                        y=alt.Y("Giá Trung Vị (tỷ):Q", title="Giá Trung Vị (tỷ VND)"),
+                        color=alt.value("#2ca02c")
+                    ).properties(height=300, width=None)
+                    st.altair_chart(chart, use_container_width=True)
             else:
                 st.info("Dữ liệu số tầng không có sẵn")
 
@@ -1241,11 +1257,17 @@ with tab_analysis:
                             .sort_values("median_price"))
 
             if len(size_analysis) > 0:
+                import altair as alt
                 size_chart = pd.DataFrame({
                     "Diện Tích": size_analysis["size_category"].astype(str),
                     "Giá Trung Vị (tỷ)": size_analysis["median_price"]
                 })
-                st.bar_chart(size_chart.set_index("Diện Tích"), use_container_width=True, height=300)
+                chart = alt.Chart(size_chart).mark_bar().encode(
+                    x=alt.X("Diện Tích:N", title="Loại Diện Tích"),
+                    y=alt.Y("Giá Trung Vị (tỷ):Q", title="Giá Trung Vị (tỷ VND)"),
+                    color=alt.value("#ff7f0e")
+                ).properties(height=300, width=None)
+                st.altair_chart(chart, use_container_width=True)
 
     else:
         st.warning("⚠️ Bộ lọc không có dữ liệu. Vui lòng điều chỉnh các bộ lọc để xem các visualizations.")
