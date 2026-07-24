@@ -1583,7 +1583,6 @@ The following table documents performance of earlier single-algorithm models on 
 
 | Criterion | TabPFN | XGBoost | LightGBM | CatBoost |
 | :---- | :---- | :---- | :---- | :---- |
-| **Historical MAPE** | 24.22% | 25.37% | N/A | N/A |
 | **Inference Latency** | Slow (~1s/pred) | Medium (~200ms) | Fast (~100ms) | Medium (~150ms) |
 | **Model Size** | Large (~500MB) | Medium (~50MB) | Small (~30MB) | Small (~40MB) |
 | **Production Stability** | Uncertain | Good | Excellent | Excellent |
@@ -1591,7 +1590,7 @@ The following table documents performance of earlier single-algorithm models on 
 
 *Table 12A. Algorithm Comparison for Production Selection*
 
-**Rationale for Final Selection:** While TabPFN achieved the best single-model accuracy on the full dataset (24.22% MAPE), it was rejected for production due to slow inference latency (~1s/prediction), large model size, and uncertainty around production stability. LightGBM, XGBoost, and CatBoost were selected as the final 3-model ensemble for their fast inference (~100-200ms), small model sizes (~30-50MB total), excellent production stability, and complementary strengths in feature handling. The ensemble approach (averaging predictions from all 3 models) compensates for any individual model's weaknesses and provides robustness.
+**Rationale for Final Selection:** Although TabPFN achieved the best single-model accuracy on the full dataset (24.22% MAPE, see Table 12), it was rejected for production due to prohibitive inference latency (~1s/prediction), large model size (~500MB), and uncertain production stability. LightGBM, XGBoost, and CatBoost were selected as the final 3-model ensemble for their superior production characteristics: fast inference latency (~100-200ms), small model footprints (~30-50MB total), excellent stability, and complementary strengths in categorical feature handling. The ensemble approach (equal averaging of predictions) provides robustness by compensating for individual model weaknesses.
 
 **Key Achievement:** The low-price tier (0–5B VND) achieved a MAPE of **10.48%**, falling within 0.48 percentage points of the project's < 10% target. This near-achievement demonstrates the segmentation strategy's effectiveness for budget-conscious buyers, the primary market segment in Vietnam's residential real estate.
 
