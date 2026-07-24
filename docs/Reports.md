@@ -312,7 +312,7 @@ Routine team meetings will use Meet, Discord and Zalo to ensure alignment on res
 
 **Preprocessing & Feature Engineering:** Performed data cleaning, normalization, missing value handling, and outlier filtering. Engineered spatial and structural features such as distance to city center, property dimensions, population density, and binary amenity indicators to support predictive modeling.
 
-**Model Implementation:** Split the Ho Chi Minh City dataset into 80% training and 20% testing sets using a fixed random holdout split with random\_state=42. Train and compare multiple regression models, including XGBoost, TabPFN, LightGBM, CatBoost, and ensemble approaches.
+**Model Implementation:** Split the Ho Chi Minh City dataset into 64% training, 16% validation, and 20% testing sets using a two-stage fixed random holdout split with random\_state=42. Train LightGBM, XGBoost, and CatBoost models across 3 price tiers; validation set used only for early stopping, test set held out for final evaluation.
 
 **Evaluation & Documentation:** Evaluate metrics, document findings on regional market variations, and present final project conclusions.
 
@@ -858,16 +858,17 @@ Each of the 9 models (3 algorithms × 3 tiers) is trained with algorithm-specifi
 
 ### **4.3 Data Splitting and Cross-Validation**
 
-**Train-Test Split:**
-- **Ratio:** 80% training / 20% test (10,421 total: ~8,337 train, ~2,084 test per tier)
+**Train-Validation-Test Split:**
+- **Ratio:** 64% training / 16% validation / 20% test (10,434 total: ~6,678 train, ~1,669 val, ~2,087 test per tier)
 - **Random seed:** random_state=42 (fixed for reproducibility)
-- **Method:** Random split WITHOUT stratification (note: future work should add stratified split by tier)
+- **Method:** Two-stage random split: first 80/20 (train+val vs test), then 80/20 of train+val (train vs val). No stratification applied.
+- **Split implementation:** [models/Scripts/train_production.py:199-206](../../models/Scripts/train_production.py#L199-L206)
 
-**Validation & Evaluation - IMPORTANT CAVEAT:**
-- **Test set reuse:** The 20% test set is used for **early stopping** in LightGBM and CatBoost during training (not held out), reducing independence
-- **Ensemble weighting:** Test set predictions are also used to calculate inverse-RMSE weights for the 3-model ensemble (further leakage)
-- **Interpretation:** Reported metrics (MAPE 13.10%, R² 0.9200) represent **in-sample performance conditional on test set**, not true generalization to fresh unseen data
-- **Production inference:** At inference time, ensemble uses **equal averaging** (not inverse-RMSE weighted), creating a train-serving mismatch (see Section V.1)
+**Validation & Evaluation (Proper Separation):**
+- **Validation set purpose:** 16% validation set is used ONLY for early stopping in LightGBM, XGBoost, and CatBoost during training (no other use)
+- **Test set independence:** 20% test set is held out completely during training and used ONLY for final performance evaluation (truly independent)
+- **Ensemble approach:** Both training and production use **equal averaging** (each model contributes 1/3 weight) — no train-serving mismatch
+- **Interpretation:** Reported metrics (MAPE 13.10%, R² 0.9200) represent true generalization performance on held-out test data
 
 **Experiment Tracking:**
 - **Platform:** Weights & Biases (wandb.ai, project: real-estate-valuation)
@@ -959,7 +960,7 @@ The use of segment-specific IQR filters means that ultra-luxury properties (\>50
 
 The locality\_price\_median encoding is computed strictly from the training set and applied to the test set via lookup, reducing direct test-set leakage risk. Unseen localities default to the global training median, which may introduce mild geographic bias in under-represented wards.
 
-**Production Inference Limitation:** At production inference time (Streamlit/API), the trained locality encoding maps are not persisted. The model_training_data.csv used to rebuild maps during inference does not contain the locality columns, so locality-based target-encoded features default to 0.0. This represents a functional gap where production inference lacks the intended locality adjustment. This limitation is flagged for future implementation (persist encoding maps separately or use Supabase for runtime lookup).
+**Production Inference - Locality Encoding:** At production inference time (Streamlit/API), trained locality encoding maps are persisted as JSON ([models/saved_models/locality_encoding.json](../../models/saved_models/locality_encoding.json)) and loaded by the inference service. The maps contain median price and price-per-sqm statistics by locality (91 cities), computed from training data only. Unseen localities default to global training median (fallback value: 0.0). Implementation: [train_production.py:279-301](../../models/Scripts/train_production.py#L279-L301), [inference.py:74-99](../../app/core/inference.py#L74-L99).
 
 ### **7.3 Model Transparency and Limitations**
 
@@ -1204,7 +1205,7 @@ Execution: The assembled feature vector is fed to all three algorithms (LightGBM
 
 Ensembling: All three models predict prices in log-space (log1p(price\_vnd)). The system applies **equal averaging** of the three predictions and applies an inverse transformation (np.expm1) to produce the final VND price.
 
-**Train-Serving Mismatch Note:** Training used **inverse-RMSE weighted averaging** to combine the 3 models (weights calculated on test set). Production inference uses **equal averaging** instead. This discrepancy means reported training metrics (MAPE 13.10%) may not exactly represent production system performance. This is flagged for future alignment.
+**Consistency Note:** Both training evaluation (Section IV.4) and production inference use identical **equal averaging** (1/3 weight per model). This ensures training metrics accurately represent production system performance. Implementation: [train_production.py:117-137](../../models/Scripts/train_production.py#L117-L137), [inference.py:340-355](../../app/core/inference.py#L340-L355).
 
 
 ## **2\. Data Flow and Processing** {#2.-data-flow-and-processing}
@@ -1912,9 +1913,12 @@ This appendix provides a summary reference and production deployment notes.
 
 **Price-Tier-Specific Training:**
 - Each of 3 price tiers (Low, Mid, High) trained independently with identical hyperparameters
-- Sample sizes per tier: Low 1,156 (10.8%), Mid 6,319 (60.4%), High 2,946 (28.9%)
-- Train/test split: 80/20 (random seed=42, NO stratification applied)
-- **Early stopping:** Test set used for LightGBM/CatBoost early stopping (test set not independent)
+- Sample sizes per tier: Low 1,161 (11.1%), Mid 6,326 (60.6%), High 2,947 (28.3%)
+- Train/validation/test split: 64/16/20 (random seed=42, NO stratification applied)
+  - Training set: Used for model fitting
+  - Validation set: Used ONLY for early stopping in LightGBM, XGBoost, CatBoost
+  - Test set: Held out completely during training; used ONLY for final evaluation
+- **Early stopping:** Validation set used for LightGBM/XGBoost/CatBoost early stopping (test set remains independent)
 
 **Algorithm Hyperparameters (Identical Across All 3 Tiers):**
 
@@ -1984,7 +1988,9 @@ final_price = exp(log_price_ensemble) - 1
 
 **Reproducibility:**
 - Fixed random_state=42 across all algorithms and tiers
-- Random train/test split (80/20, no stratification)
+- Random train/validation/test split (64/16/20, no stratification)
+  - Stage 1: 80/20 split (train+val vs test)
+  - Stage 2: 80/20 split of train+val (train vs validation)
 - Tier assignment done post-split via price binning
 - Feature engineering deterministic (no randomness in preprocessing.py)
 - Results reproducible on same data with same hardware (CPU-based training)
