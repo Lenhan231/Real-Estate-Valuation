@@ -1,15 +1,17 @@
 """
 PRODUCTION MODEL: Price-Only Ensemble (3 Price Tiers × 3 Models)
 =========================================================================
-Final production-ready training script.
+Final production-ready training script (v2.6 - LOCKED).
 - Strategy: Price segmentation only (Low/Mid/High)
 - Models: LightGBM + XGBoost + CatBoost per tier
-- Performance: 13.25% MAPE, 0.9164 R²
-- Training time: ~55 seconds
-- Complexity: Simple, maintainable, fast
+- Features: 79 from CSV + 2 locality encoding at inference = 81 total model inputs
+- Performance: 13.43% MAPE, 0.9159 R² (with proper 64/16/20 train/val/test split)
+- Training time: ~116 seconds (efficient)
+- Status: Production LOCKED - Proper train/val/test separation implemented
 """
 
 import argparse
+import json
 import numpy as np
 import pandas as pd
 import sys
@@ -26,6 +28,13 @@ from xgboost import XGBRegressor
 import joblib
 import time
 
+# W&B for experiment tracking (optional)
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+
 from shared import preprocess, add_locality_features, mean_absolute_percentage_error
 from shared import plot_feature_importance, plot_pred_vs_actual
 
@@ -34,8 +43,12 @@ DATA_DIR = PROJECT_ROOT / "models" / "data"
 MODEL_DIR = PROJECT_ROOT / "models" / "saved_models"
 PLOT_DIR = MODEL_DIR / "plots"
 
-def train_ensemble_3models(X_train, y_train, X_test, y_test, price_tier):
-    """Train LightGBM, CatBoost, and XGBoost with early stopping."""
+def train_ensemble_3models(X_train, y_train, X_val, y_val, price_tier):
+    """Train LightGBM, CatBoost, and XGBoost with validation-based early stopping.
+
+    Uses separate validation set (not test set) for early stopping to avoid data leakage.
+    Test set remains untouched for unbiased final evaluation.
+    """
     try:
         from catboost import CatBoostRegressor
     except ImportError:
@@ -44,81 +57,83 @@ def train_ensemble_3models(X_train, y_train, X_test, y_test, price_tier):
     models_dict = {}
     val_errors = {}
 
-    # Hyperparameters optimized via Phase 1 tuning (2026-07-21)
+    # Hyperparameters - Original v2.6 (stable, well-tuned, no per-tier variation)
+    # Tested: Per-tier tuning, weighted loss → both hurt performance
+    # Decision: Keep unified hyperparameters (13.10% MAPE optimal)
     lgb_params = {
-        "n_estimators": 1000, "max_depth": 8, "learning_rate": 0.05,  # ↑ LR from 0.03
+        "n_estimators": 1000, "max_depth": 8, "learning_rate": 0.05,
         "subsample": 0.8, "colsample_bytree": 0.8, "reg_alpha": 0.1,
         "reg_lambda": 1.0, "random_state": 42, "n_jobs": -1, "verbose": -1,
     }
 
     xgb_params = {
-        "n_estimators": 1500, "max_depth": 8, "learning_rate": 0.03,  # ↑ N_est from 1000
+        "n_estimators": 1500, "max_depth": 8, "learning_rate": 0.03,
         "subsample": 0.8, "colsample_bytree": 0.8, "random_state": 42, "n_jobs": -1,
     }
 
     cb_params = {
-        "iterations": 1500, "depth": 8, "learning_rate": 0.05, "loss_function": "RMSE",  # ↑ All three
+        "iterations": 1500, "depth": 8, "learning_rate": 0.05, "loss_function": "RMSE",
         "verbose": 0, "random_seed": 42, "early_stopping_rounds": 50,
     }
 
-    # Train LightGBM
+    # Train LightGBM (use validation set for early stopping, not test set)
     model_lgb = LGBMRegressor(**lgb_params)
-    eval_set_lgb = [(X_test, y_test)] if len(X_test) > 0 else None
-    callbacks_lgb = [lgb_early_stopping(50), log_evaluation(period=0)] if len(X_test) > 0 else []
+    eval_set_lgb = [(X_val, y_val)] if len(X_val) > 0 else None
+    callbacks_lgb = [lgb_early_stopping(50), log_evaluation(period=0)] if len(X_val) > 0 else []
     model_lgb.fit(X_train, y_train, eval_set=eval_set_lgb, callbacks=callbacks_lgb)
     models_dict["lgbm"] = model_lgb
 
-    # Train XGBoost
+    # Train XGBoost (use validation set for early stopping)
     model_xgb = XGBRegressor(**xgb_params)
-    if len(X_test) > 0:
-        model_xgb.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
+    if len(X_val) > 0:
+        model_xgb.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
     else:
         model_xgb.fit(X_train, y_train, verbose=False)
     models_dict["xgb"] = model_xgb
 
-    # Train CatBoost
+    # Train CatBoost (use validation set for early stopping)
     model_cb = None
     if CatBoostRegressor is not None:
         model_cb = CatBoostRegressor(**cb_params)
-        if len(X_test) > 0:
-            model_cb.fit(X_train, y_train, eval_set=(X_test, y_test))
+        if len(X_val) > 0:
+            model_cb.fit(X_train, y_train, eval_set=(X_val, y_val))
         else:
             model_cb.fit(X_train, y_train)
         models_dict["cb"] = model_cb
 
-    # Calculate validation errors for weighting
-    if len(X_test) > 0:
-        y_pred_lgb = model_lgb.predict(X_test)
-        y_pred_xgb = model_xgb.predict(X_test)
+    # Calculate validation errors for weighting (also on validation set, not test)
+    if len(X_val) > 0:
+        y_pred_lgb = model_lgb.predict(X_val)
+        y_pred_xgb = model_xgb.predict(X_val)
 
-        val_errors["lgbm"] = np.sqrt(mean_squared_error(y_test, y_pred_lgb))
-        val_errors["xgb"] = np.sqrt(mean_squared_error(y_test, y_pred_xgb))
+        val_errors["lgbm"] = np.sqrt(mean_squared_error(y_val, y_pred_lgb))
+        val_errors["xgb"] = np.sqrt(mean_squared_error(y_val, y_pred_xgb))
 
         if model_cb is not None:
-            y_pred_cb = model_cb.predict(X_test)
-            val_errors["cb"] = np.sqrt(mean_squared_error(y_test, y_pred_cb))
+            y_pred_cb = model_cb.predict(X_val)
+            val_errors["cb"] = np.sqrt(mean_squared_error(y_val, y_pred_cb))
 
     return models_dict, val_errors
 
 def ensemble_predictions(models_dict, X_test, val_errors):
-    """Generate weighted ensemble predictions."""
+    """Generate equal-weight ensemble predictions (matching production inference).
+
+    Changed from inverse-RMSE weighting to equal averaging for consistency between
+    training evaluation and production serving. All 3 models contribute equally.
+    """
     predictions = {}
 
     for model_name, model in models_dict.items():
         predictions[model_name] = model.predict(X_test)
 
-    # Calculate weights based on inverse RMSE
-    if val_errors:
-        total_error = sum(1.0 / (e + 1e-6) for e in val_errors.values())
-        weights = {name: (1.0 / (val_errors.get(name, 1.0) + 1e-6)) / total_error
-                   for name in predictions.keys()}
-    else:
-        weights = {name: 1.0 / len(predictions) for name in predictions.keys()}
+    # Equal weighting for all models (matches production inference at inference.py:349)
+    n_models = len(predictions)
+    weights = {name: 1.0 / n_models for name in predictions.keys()}
 
-    # Weighted average
+    # Simple equal average
     ensemble_pred = np.zeros_like(predictions[list(predictions.keys())[0]])
     for model_name, pred in predictions.items():
-        ensemble_pred += pred * weights.get(model_name, 1.0 / len(predictions))
+        ensemble_pred += pred / n_models
 
     return ensemble_pred, weights
 
@@ -126,7 +141,28 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, default="production", help="Dataset name")
     parser.add_argument("--data-source", type=str, choices=["supabase", "local"], default="supabase")
+    parser.add_argument("--wandb", action="store_true", help="Log to Weights & Biases")
     args = parser.parse_args()
+
+    # Initialize W&B (optional, for experiment tracking)
+    if args.wandb:
+        if WANDB_AVAILABLE:
+            try:
+                wandb.init(
+                    project="real-estate-valuation",
+                    name="v2.6-production",
+                    config={
+                        "model_type": "3-tier ensemble",
+                        "features": 78,
+                        "tiers": ["low (0-5B)", "mid (5-20B)", "high (20B+)"],
+                        "algorithms": ["LightGBM", "XGBoost", "CatBoost"],
+                    }
+                )
+                print("✓ W&B logging enabled")
+            except Exception as e:
+                print(f"⚠️  W&B init failed: {e}")
+        else:
+            print("⚠️  wandb not installed. Install with: pip install wandb")
 
     print("=" * 70)
     print("PRODUCTION MODEL: Price-Only Ensemble (3 Tiers × 3 Models)")
@@ -159,21 +195,29 @@ def main():
     X_with_target.to_csv(processed_data_dir / "model_training_data.csv", index=False)
     print(f"  ✓ Saved training data ({len(X)} rows × {X.shape[1]} features)")
 
-    # Train/test split
-    print("\n[3/5] Train/test split (80/20)...")
-    train_idx, test_idx = train_test_split(X.index, test_size=0.2, random_state=42)
-    X_train, X_test = X.loc[train_idx], X.loc[test_idx]
-    y_train, y_test = y.loc[train_idx], y.loc[test_idx]
-    y_log_train, y_log_test = y_log.loc[train_idx], y_log.loc[test_idx]
+    # Train/val/test split (64% train, 16% val for early stopping, 20% test)
+    print("\n[3/5] Train/val/test split (64/16/20)...")
+    # First split: 80% train+val, 20% test
+    temp_idx, test_idx = train_test_split(X.index, test_size=0.2, random_state=42)
+    # Second split: 80% train, 20% val (of the 80%)
+    train_idx, val_idx = train_test_split(temp_idx, test_size=0.2, random_state=42)
 
-    X_train, X_test = add_locality_features(X_train, X_test, df, train_idx, test_idx, y_train)
+    X_train, X_val, X_test = X.loc[train_idx], X.loc[val_idx], X.loc[test_idx]
+    y_train, y_val, y_test = y.loc[train_idx], y.loc[val_idx], y.loc[test_idx]
+    y_log_train, y_log_val, y_log_test = y_log.loc[train_idx], y_log.loc[val_idx], y_log.loc[test_idx]
 
+    # Add locality features (use train+val to compute stats, apply to all)
+    X_train, X_val = add_locality_features(X_train, X_val, df, train_idx, val_idx, y_train)
+    _, X_test = add_locality_features(X_train, X_test, df, train_idx, test_idx, y_train)
+
+    # Drop text columns
     drop_text = [c for c in ['locality', 'description'] if c in X_train.columns]
     if drop_text:
         X_train = X_train.drop(columns=drop_text)
+        X_val = X_val.drop(columns=drop_text)
         X_test = X_test.drop(columns=drop_text)
 
-    print(f"  ✓ Train: {X_train.shape[0]} | Test: {X_test.shape[0]}")
+    print(f"  ✓ Train: {X_train.shape[0]} | Val: {X_val.shape[0]} | Test: {X_test.shape[0]}")
 
     meta["features"] = list(X_train.columns)
     feature_names = meta["features"]
@@ -188,8 +232,10 @@ def main():
     BIN_LABELS = ['low', 'mid', 'high']
 
     train_prices = np.expm1(y_log_train)
+    val_prices = np.expm1(y_log_val)
     test_prices = np.expm1(y_log_test)
     train_bins = pd.cut(train_prices, bins=BINS_VND, labels=BIN_LABELS)
+    val_bins = pd.cut(val_prices, bins=BINS_VND, labels=BIN_LABELS)
     test_bins = pd.cut(test_prices, bins=BINS_VND, labels=BIN_LABELS)
 
     models = {}
@@ -198,10 +244,13 @@ def main():
     t0 = time.time()
     for price_bin in BIN_LABELS:
         train_mask = (train_bins == price_bin)
+        val_mask = (val_bins == price_bin)
         test_mask = (test_bins == price_bin)
 
         X_tr_b = X_train[train_mask]
         y_tr_b = y_log_train[train_mask]
+        X_val_b = X_val[val_mask]
+        y_val_b = y_log_val[val_mask]
         X_te_b = X_test[test_mask]
         y_te_b = y_log_test[test_mask]
 
@@ -209,9 +258,9 @@ def main():
             print(f"  Skipping tier {price_bin} (too few samples)")
             continue
 
-        print(f"  Training {price_bin} tier: {len(X_tr_b)} train, {len(X_te_b)} test")
+        print(f"  Training {price_bin} tier: {len(X_tr_b)} train, {len(X_val_b)} val, {len(X_te_b)} test")
 
-        models_dict, val_errors = train_ensemble_3models(X_tr_b, y_tr_b, X_te_b, y_te_b, price_bin)
+        models_dict, val_errors = train_ensemble_3models(X_tr_b, y_tr_b, X_val_b, y_val_b, price_bin)
 
         if len(X_te_b) > 0:
             y_log_pred_b, weights = ensemble_predictions(models_dict, X_te_b, val_errors)
@@ -227,6 +276,29 @@ def main():
         models[f"{price_bin}"] = models_dict
 
     print(f"  ✓ Training complete ({time.time() - t0:.1f}s)")
+
+    # Save locality encoding maps for inference
+    print("  Saving locality encoding maps...")
+    if 'locality' in df.columns:
+        locality_price_map = df.loc[train_idx].groupby('locality')['price_vnd'].median().to_dict()
+        train_data = df.loc[train_idx].copy()
+        train_data['price_per_sqm'] = train_data['price_vnd'] / (train_data['area_m2'] + 1)
+        locality_sqm_map = train_data.groupby('locality')['price_per_sqm'].median().to_dict()
+
+        global_median = float(y_train.median())
+        global_sqm = float((df.loc[train_idx, 'price_vnd'] / (df.loc[train_idx, 'area_m2'] + 1)).median())
+
+        locality_stats = {
+            'price_median': {str(k): float(v) for k, v in locality_price_map.items()},
+            'price_per_sqm': {str(k): float(v) for k, v in locality_sqm_map.items()},
+            'global_price_median': float(global_median),
+            'global_price_per_sqm': float(global_sqm)
+        }
+
+        locality_path = MODEL_DIR / 'locality_encoding.json'
+        with open(locality_path, 'w') as f:
+            json.dump(locality_stats, f, indent=2)
+        print(f"  ✓ Locality maps saved to {locality_path}")
 
     # Evaluation
     print("\n[5/5] Evaluating...")
@@ -247,6 +319,44 @@ def main():
     print(f"Global MAE:   {mae/1e9:.2f} Billion VND")
     print(f"Global RMSE:  {rmse/1e9:.2f} Billion VND")
     print("=" * 70)
+
+    # Save metrics to JSON
+    metrics_dict = {
+        "global": {
+            "mape_percent": round(mape, 2),
+            "r2": round(r2, 4),
+            "mae_vnd": round(mae, 0),
+            "mae_billion_vnd": round(mae/1e9, 2),
+            "rmse_vnd": round(rmse, 0),
+            "rmse_billion_vnd": round(rmse/1e9, 2),
+            "test_samples": len(global_y_test)
+        },
+        "dataset": {
+            "total_samples": len(X),
+            "features": len(feature_names),
+            "train_samples": len(X_train),
+            "validation_samples": len(X_val),
+            "test_samples": len(X_test),
+            "split_ratio": "64/16/20"
+        }
+    }
+
+    metrics_path = MODEL_DIR / "metrics.json"
+    with open(metrics_path, 'w') as f:
+        json.dump(metrics_dict, f, indent=2)
+    print(f"\n✓ Metrics saved to {metrics_path}")
+
+    # Log to W&B
+    if args.wandb and WANDB_AVAILABLE:
+        try:
+            wandb.log({
+                "mape": mape,
+                "mae": mae,
+                "r2": r2,
+                "rmse": rmse,
+            })
+        except Exception as e:
+            print(f"⚠️  W&B logging failed: {e}")
 
     PLOT_DIR.mkdir(parents=True, exist_ok=True)
 

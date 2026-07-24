@@ -1,0 +1,50 @@
+======================================================================
+PRODUCTION MODEL: Price-Only Ensemble (3 Tiers × 3 Models)
+======================================================================
+
+[1/5] Loading data...
+[Supabase] Fetching data from table: Raw_Features
+[Supabase] Fetched 12832 rows from Raw_Features
+
+  ✓ 12832 records from Supabase
+
+[2/5] Preprocessing...
+  ✓ Saved training data (10434 rows × 79 features)
+
+[3/5] Train/val/test split (64/16/20)...
+  ✓ Train: 6677 | Val: 1670 | Test: 2087
+
+[4/5] Training Price-Only Ensemble (3 tiers)...
+  Training low tier: 726 train, 184 val, 251 test
+Training until validation scores don't improve for 50 rounds
+Early stopping, best iteration is:
+[83]	valid_0's l2: 0.0295193
+  Training mid tier: 4082 train, 992 val, 1252 test
+Training until validation scores don't improve for 50 rounds
+Early stopping, best iteration is:
+[314]	valid_0's l2: 0.0370957
+  Training high tier: 1869 train, 494 val, 584 test
+Training until validation scores don't improve for 50 rounds
+Early stopping, best iteration is:
+[160]	valid_0's l2: 0.0304631
+  ✓ Training complete (156.1s)
+  Saving locality encoding maps...
+  ✓ Locality maps saved to C:\Users\nhanl\OneDrive\Desktop\School\DSP391m\Real-Estate-Valuation\models\saved_models\locality_encoding.json
+
+[5/5] Evaluating...
+
+======================================================================
+PRODUCTION MODEL RESULTS - Price-Only Ensemble
+======================================================================
+Global MAPE:  13.43%
+Global R²:    0.9159
+Global MAE:   2.18 Billion VND
+Global RMSE:  3.46 Billion VND
+======================================================================
+
+✓ Metrics saved to C:\Users\nhanl\OneDrive\Desktop\School\DSP391m\Real-Estate-Valuation\models\saved_models\metrics.json
+✓ Plots saved to C:\Users\nhanl\OneDrive\Desktop\School\DSP391m\Real-Estate-Valuation\models\saved_models\plots
+
+✅ Production model training complete!
+📊 Models saved to: C:\Users\nhanl\OneDrive\Desktop\School\DSP391m\Real-Estate-Valuation\models\saved_models
+📁 Data saved to: C:\Users\nhanl\OneDrive\Desktop\School\DSP391m\Real-Estate-Valuation\data\processed

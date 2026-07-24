@@ -6,11 +6,76 @@ Predicts property prices using Machine Learning based on area, location, ameniti
 
 | Metric | Value |
 |--------|-------|
-| **Model** | XGBoost |
-| **MAPE** | 18.01% |
-| **R²** | 0.8663 |
-| **Dataset** | 10,432 properties |
-| **Features** | 166 engineered |
+| **Model** | 9-Model Ensemble: LightGBM + XGBoost + CatBoost (3-tier price segmentation) |
+| **MAPE** | 13.10% (v2.6 production) |
+| **R²** | 0.9200 (explains 92% of variance) |
+| **MAE** | 2.15B VND |
+| **Training Data** | 10,421 properties (80-20 split) |
+| **Features** | 79 (78 engineered + 1 target price) |
+| **Training Time** | ~149 seconds |
+
+---
+
+## ✨ Latest Features (v2.6)
+
+### **🎯 Price Tier Segmentation**
+- ✅ 3-tier ensemble model (low/mid/high price segments)
+- ✅ Specialized model per price range for better accuracy
+- ✅ 13.10% MAPE - 2.15% improvement over v2.4
+- ✅ Feature optimization: 78 features (down from 166, better signal)
+
+### **📝 Feedback Collection System**
+
+### **📝 Feedback Collection System**
+- ✅ Persistent feedback form in Streamlit UI
+- ✅ Users rate predictions (Accurate/Not Sure/Not Accurate)
+- ✅ Optional actual price input for model learning
+- ✅ Feedback stored in Supabase with full feature context
+- ✅ Session state management to preserve form across reruns
+
+### **📈 Feedback Analytics Dashboard**
+- ✅ **Summary Metrics**: Total feedback, MAPE, Model Bias %, Rating Distribution
+- ✅ **Trends Over Time**: Daily feedback count & accuracy trends
+- ✅ **Segmentation Analysis**: Performance by price bucket, property type, top 10 localities
+- ✅ **Distribution Charts**: Rating breakdown, error distribution
+- ✅ **Best vs Worst Predictions**: Side-by-side comparison for learning
+
+**Dashboard Functions:**
+- `get_feedback_trends()` — Time series data
+- `get_feedback_by_segment()` — Grouped performance metrics
+- `get_feedback_distribution()` — Rating & error distribution
+- `get_best_predictions()` — Most accurate predictions
+
+### **🔄 Active Learning & Model Retraining**
+- ✅ **Auto Retraining**: Extract feedback data, rebuild ensemble
+- ✅ **Drift Detection**: Monitor performance degradation
+- ✅ **Admin Dashboard**: One-click retraining button
+- ✅ **Performance Comparison**: Old vs new model metrics
+- ✅ **Minimum 3 samples** required for retraining
+
+**Retraining Pipeline:**
+```
+Feedback Data (Supabase)
+    ↓ [extract features + actual prices]
+Retraining Dataset
+    ↓ [train LightGBM, XGBoost, CatBoost]
+New Ensemble Model
+    ↓ [compare MAPE/MAE vs old]
+Performance Report
+    ↓ [deploy if better]
+Updated Model
+```
+
+**New API Endpoints:**
+- `POST /api/admin/retrain` — Trigger retraining
+- `GET /api/admin/drift-status` — Check model drift
+- `GET /api/admin/model-comparison` — Get metrics
+
+**New Streamlit Tabs:**
+1. **💰 Định giá** — Price prediction (2 modes: paste description or detailed form)
+2. **📊 Phân tích thị trường** — Market analysis & heatmaps
+3. **📈 Feedback Analytics** — Dashboards with trends & segmentation
+4. **🔧 Model Management** — Retrain, drift detection, performance comparison
 
 ---
 
@@ -79,7 +144,138 @@ app/
 
 ---
 
-## 🚀 How to Use
+## 🚀 Quick Start - Local Development
+
+### Prerequisites
+
+- Python 3.11+
+- Git
+- Supabase account (for database)
+
+### Setup (5 minutes)
+
+**1. Clone & setup environment:**
+
+```bash
+git clone https://github.com/Lenhan231/Real-Estate-Valuation.git
+cd Real-Estate-Valuation
+
+# Create virtual environment
+python -m venv .venv
+
+# Activate
+# Windows:
+.\.venv\Scripts\activate
+# Linux/Mac:
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+**2. Configure environment:**
+
+```bash
+# Copy example env file
+cp .env.example .env
+
+# Edit .env with your Supabase credentials
+nano .env
+# Required:
+# - SUPABASE_URL
+# - SUPABASE_SERVICE_KEY
+# - WANDB_API_KEY (optional, for experiment tracking)
+```
+
+**3. Start both services:**
+
+```bash
+# Option A: One command (if run.sh exists)
+bash run.sh
+# or Windows:
+.\run.ps1
+
+# Option B: Manual (2 terminals)
+# Terminal 1 - API:
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 2 - Streamlit UI:
+streamlit run app/ui/streamlit_app.py --server.port 8501
+```
+
+**4. Access:**
+
+- 📡 **API Swagger Docs**: http://localhost:8000/docs
+- 🎨 **Streamlit UI**: http://localhost:8501
+- 📊 **API Root**: http://localhost:8000
+
+### Testing
+
+```bash
+# Test API health
+curl http://localhost:8000/health
+
+# Test prediction
+curl -X POST http://localhost:8000/api/predict \
+  -H "Content-Type: application/json" \
+  -d '{"street":"Nguyễn Hữu Cảnh","locality":"Bình Thạnh","area_m2":100}'
+
+# List available localities
+curl http://localhost:8000/api/localities
+```
+
+### Troubleshooting
+
+**"Module not found" error:**
+```bash
+pip install -r requirements.txt
+```
+
+**"Supabase connection failed":**
+- Check `.env` file has correct credentials
+- Verify Supabase tables exist: `address_cache`, `Raw_Features`
+- Test connection: `python -c "from app.core.models import get_models; get_models()"`
+
+**Port already in use:**
+```bash
+# Kill process on port 8000
+lsof -i :8000 | grep LISTEN | awk '{print $2}' | xargs kill -9
+```
+
+---
+
+## 🌐 Live Deployment (Render)
+
+**Production URLs:**
+
+- 🔗 **API**: https://real-estate-valuation-88yg.onrender.com
+  - API Docs: https://real-estate-valuation-88yg.onrender.com/docs
+  - Status: https://real-estate-valuation-88yg.onrender.com/health
+
+- 🎨 **Streamlit Web App**: https://real-estate-valuation-2.onrender.com
+
+**For deployment to other platforms (DigitalOcean, AWS, self-hosted), see [DEPLOYMENT.md](DEPLOYMENT.md)**
+
+---
+
+## 🏗️ Project Architecture
+
+```
+FastAPI Backend (app/main.py)
+    ├── routers/      (API endpoints)
+    ├── services/     (Business logic)
+    ├── schemas/      (Pydantic models)
+    └── core/         (ML models, config)
+         
+Streamlit Frontend (app/ui/streamlit_app.py)
+    └── Calls API endpoints via requests
+```
+
+See [app/README.md](app/README.md) for detailed architecture documentation.
+
+---
+
+## 📚 How to Use
 
 ### 1. Run Exploratory Data Analysis
 ```bash

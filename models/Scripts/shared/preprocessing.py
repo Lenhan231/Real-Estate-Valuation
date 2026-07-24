@@ -44,9 +44,8 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
         df["post_day_year"] = post_day_dt.dt.year
         df["post_day_month"] = post_day_dt.dt.month
         df["post_day_day"] = post_day_dt.dt.day
-
-        if df["post_day_year"].nunique() == 1:
-            df = df.drop("post_day_year", axis=1)
+        # NOTE: Keep post_day_year even if uniform in training data
+        # In production, year affects prices (inflation, market trends)
 
     # ===== LOCALITY FEATURES =====
     if "locality_square" in df.columns:
@@ -269,12 +268,14 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
     # Rationale: Polynomial features (area², distance²) capture non-linearity → better MAPE
     # Result: 64 base + 14 polynomial/interaction = ~78 features
     # Performance: 13.10% MAPE, 0.9200 R² (BEST)
+    # Note: v2.7 test removed 24 "low-impact" features → MAPE worsened to 13.20%
+    #       Decision: Those features provide subtle signal in ensemble; keep all 78
 
     low_impact_features = [
         'kitchen_bin_False', 'dining_room_bin_True', 'perimeter_m_missing',
         'direction_dong', 'direction_tay_bac', 'nearest_mall_km_missing',
         'length_m_missing', 'kitchen_bin_True', 'direction_tay_nam',
-        'post_day_year', 'direction_bac', 'direction_tay',
+        'direction_bac', 'direction_tay',
         'nearest_hospital_km_missing', 'terrace_bin_nan', 'kitchen_bin_nan',
         'dining_room_bin_nan', 'property_type_nan', 'legal_status_nan',
         'legal_status_giấy_phép_xd', 'distance_to_center_km_missing',
@@ -282,6 +283,7 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
         'listing_type_nan', 'listing_type_can_ban', 'direction_nan',
         'nearest_marketplace_km_missing', 'nearest_supermarket_km_missing',
         'car_parking_bin_nan'
+        # NOTE: Removed 'post_day_year' - year is important for price trends
     ]
     features_df = features_df.drop(columns=[c for c in low_impact_features if c in features_df.columns])
 

@@ -1,0 +1,42 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.Python
+env/
+venv/
+*.egg
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+data/raw/
+data/external/
+.env.local
+streamlit.log
+test_feedback.py
+.pytest_cache
+htmlcov/
+coverage.xml
+.wandb/
+
+# Documentation
+*.md
+docs/
+
+# Tests (optional - remove if you want to include tests)
+tests/

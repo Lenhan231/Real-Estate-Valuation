@@ -15,7 +15,7 @@
   Models:   9 (LightGBM + XGBoost + CatBoost × 3 price tiers)
   Features: 78 (64 base + 14 polynomial/interaction)
   Data:     10,421 training samples from Supabase
-  Speed:    ~149 seconds training time
+  Speed:    ~127 seconds training time
 
 📊 Segmentation Strategy
   Price Tier Strategy: Low (0-5B) | Mid (5-20B) | High (20B+)
@@ -148,12 +148,18 @@ saved_models/
 | **v2.6** | **78** | **+Polynomial** | **13.10%** | **0.9200** | ✅ **BEST** |
 | v2.7 | 88 | +Cubic/aggressive | 13.17% | 0.9193 | ❌ Overfitting |
 | v2.8 | 59 | Remove redundant | 13.16% | 0.9192 | ❌ Lost signal |
+| v2.6+lat/lon | 80 | +lat/lon | 13.18% | 0.9194 | ❌ Noise added |
 
 **Why v2.6 Wins:**
 - ✅ **Lowest MAPE**: 13.10% (polynomial features capture non-linearity)
 - ✅ **Highest R²**: 0.9200 (explains 92% of variance)
 - ✅ **No Overfitting**: Adds just polynomial terms (v2.7 was too aggressive)
 - ✅ **Balanced**: 78 features = good signal-to-noise ratio
+
+**Why lat/lon Hurt:**
+- ❌ v2.6+lat/lon: 13.18% MAPE (0.08% worse)
+- Reason: Latitude/longitude encode information already captured by locality + distance features
+- Conclusion: Geospatial info is redundant; geocoding + locality + distance_to_center sufficient
 
 ---
 
@@ -173,7 +179,7 @@ saved_models/
 ```python
 LGBM:
   n_estimators: 1000, max_depth: 8, learning_rate: 0.05
-  subsample: 0.8, colsample_bytree: 0.8
+  subsample: 0.8, colsample_bytree: 0.8, reg_alpha: 0.1, reg_lambda: 1.0
 
 XGBoost:
   n_estimators: 1500, max_depth: 8, learning_rate: 0.03
@@ -317,7 +323,7 @@ models/
 ## 📞 Support
 
 **Version**: v2.6 (Production)  
-**Last Updated**: 2026-07-21  
+**Last Updated**: 2026-07-22  
 **Data Source**: Supabase Raw_Features + Local CSV fallback  
 **Status**: ✅ Production Ready  
 

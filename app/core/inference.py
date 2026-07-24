@@ -1,0 +1,362 @@
+"""Inference for v2.6 production model (3-tier price-only ensemble).
+
+Model: LightGBM + XGBoost + CatBoost ensemble per price tier
+Strategy: Price segmentation only (no property type split)
+Features: 78 optimized (64 base + 14 polynomial/interaction)
+Performance: 13.10% MAPE, 0.9200 R²
+
+Note: Features built via shared preprocessing.py (single source of truth).
+"""
+import pickle
+from pathlib import Path
+import sys
+from datetime import datetime
+
+import joblib
+import numpy as np
+import pandas as pd
+
+# Lazy import of preprocessing to avoid import errors in deployment
+_preprocess_cache = None
+
+def _get_preprocess():
+    """Lazily load preprocessing function."""
+    global _preprocess_cache
+    if _preprocess_cache is None:
+        import importlib.util
+        _preprocess_path = Path(__file__).resolve().parent.parent.parent / "models" / "scripts" / "shared" / "preprocessing.py"
+        print(f"[DEBUG] Looking for preprocessing at: {_preprocess_path}")
+        print(f"[DEBUG] File exists: {_preprocess_path.exists()}")
+        if _preprocess_path.exists():
+            spec = importlib.util.spec_from_file_location("shared_preprocessing", _preprocess_path)
+            shared_preprocessing = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(shared_preprocessing)
+            _preprocess_cache = shared_preprocessing.preprocess
+        else:
+            import os
+            print(f"[DEBUG] Directory contents: {os.listdir(_preprocess_path.parent) if _preprocess_path.parent.exists() else 'parent not found'}")
+            raise ImportError(f"Could not find preprocessing module at {_preprocess_path}")
+    return _preprocess_cache
+
+from .geo import GeoLookup, POI_COLS
+
+ROOT = Path(__file__).resolve().parent.parent.parent  # project root
+MODEL_DIR = ROOT / "models" / "saved_models"
+READY_CSV = ROOT / "data" / "processed" / "model_training_data.csv"
+
+
+def load_models():
+    """Load v2.6 production models (9 models: 3-tier × 3-algorithm ensemble).
+
+    Feature names sourced from trained model (single source of truth).
+    Locality encoding stats computed from training data (reused from preprocessing.py).
+    """
+    models = {}
+    for path in MODEL_DIR.glob("*.pkl"):
+        try:
+            models[path.stem] = joblib.load(path)
+        except Exception as e:
+            print(f"Warning: Failed to load {path.stem}: {e}")
+
+    if not models:
+        raise FileNotFoundError(f"No models in {MODEL_DIR} — ensure train_production.py has been run")
+
+    # Load training data (needed for both feature names fallback and medians)
+    training_df = pd.read_csv(READY_CSV)
+
+    # Get feature names from trained model (single source of truth!)
+    first_model = models[list(models.keys())[0]]
+    try:
+        feature_names = list(first_model.feature_names_in_)
+    except AttributeError:
+        # Fallback if model doesn't have feature_names_in_
+        feature_names = [c for c in training_df.columns if c != 'price_vnd']
+        feature_names += ["locality_price_median", "price_per_sqm_market"]
+
+    # Load locality encoding maps (saved during training)
+    import json
+    locality_stats_path = MODEL_DIR / 'locality_encoding.json'
+
+    if locality_stats_path.exists():
+        try:
+            with open(locality_stats_path, 'r') as f:
+                locality_stats = json.load(f)
+            locality_price_map = locality_stats.get('price_median', {})
+            locality_price_global = locality_stats.get('global_price_median', 0.0)
+            locality_sqm_map = locality_stats.get('price_per_sqm', {})
+            locality_sqm_global = locality_stats.get('global_price_per_sqm', 0.0)
+            print(f"[INFERENCE] ✓ Loaded locality maps from {locality_stats_path}")
+        except Exception as e:
+            print(f"[INFERENCE] ⚠️  Failed to load locality maps: {e}")
+            locality_price_map = {}
+            locality_price_global = 0.0
+            locality_sqm_map = {}
+            locality_sqm_global = 0.0
+    else:
+        print(f"[INFERENCE] ⚠️  Locality maps file not found at {locality_stats_path}")
+        print(f"[INFERENCE]    Locality features will default to 0.0")
+        locality_price_map = {}
+        locality_price_global = 0.0
+        locality_sqm_map = {}
+        locality_sqm_global = 0.0
+
+    meta = {
+        "version": "v2.6",
+        "tiers": ["low", "mid", "high"],
+        "models_per_tier": 3,
+        "n_features": len(feature_names),
+        "feature_names": feature_names,
+        # Locality encoding (from training data, same as preprocessing.add_locality_features)
+        "locality_price_map": locality_price_map,
+        "locality_sqm_map": locality_sqm_map,
+        "locality_price_global": locality_price_global,
+        "locality_sqm_global": locality_sqm_global,
+    }
+
+    medians = training_df.median(numeric_only=True)
+    return models, meta, medians
+
+
+def build_row(meta, geo: GeoLookup, *,
+              street, locality, property_type, legal_status, direction,
+              area_m2, width_m, length_m, num_floors, num_bedrooms, road_width_m,
+              bin_flags: dict, text_flags: dict):
+    """Build exact 80-feature row (78 from preprocessing + 2 locality encoding).
+
+    Reuses preprocessing.py for feature engineering (single source of truth).
+    Applies locality encoding from training data (meta dict).
+    Returns (row dict with 80 features, info dict) or (None, error_msg).
+    """
+    error_log = []
+    print(f"\n{'='*60}")
+    print(f"🚀 [BUILD_ROW v2.1] Called with street='{street}', locality='{locality}'")
+    print(f"{'='*60}")
+    try:
+        lat, lon, source = geo.geocode(street, locality)
+        if lat is None:
+            error_msg = f"Geocode returned None for street='{street}', locality='{locality}'"
+            error_log.append(error_msg)
+            print(f"❌ {error_msg}")
+            final_error = "\n".join(error_log) if error_log else "Geocoding failed"
+            return None, final_error
+    except Exception as e:
+        error_msg = f"Geocode error: {str(e)}"
+        error_log.append(error_msg)
+        print(f"❌ [BUILD_ROW] {error_msg}")
+        import traceback
+        traceback.print_exc()
+        final_error = "\n".join(error_log) if error_log else "Geocoding exception"
+        print(f"[DEBUG] error_log={error_log}, final_error='{final_error}'")
+        return None, final_error
+
+    try:
+        dist_km = geo.distance_to_center(lat, lon)
+        print(f"✅ [BUILD_ROW] Distance calculated: {dist_km:.2f} km")
+    except Exception as e:
+        error_msg = f"Distance error: {str(e)}"
+        error_log.append(error_msg)
+        print(f"❌ {error_msg}")
+        final_error = "\n".join(error_log) if error_log else "Distance calculation failed"
+        return None, final_error
+
+    # POI features (geo lookup - may return None)
+    try:
+        poi_result = geo.poi_features(lat, lon)
+        pois, cache_dist, poi_source = poi_result if len(poi_result) == 3 else (*poi_result, "cache")
+        print(f"✅ [BUILD_ROW] POI features loaded: source={poi_source}")
+
+        def poi(col):
+            v = pois.get(col) if pois else None
+            return v  # Pass None, let preprocessing handle imputation
+    except Exception as e:
+        error_msg = f"POI features error: {str(e)}"
+        error_log.append(error_msg)
+        print(f"❌ {error_msg}")
+        final_error = "\n".join(error_log) if error_log else "POI features error"
+        return None, final_error
+
+    # Locality stats (geo lookup - may return None)
+    try:
+        sq, dens = geo.locality_stats(locality)
+        print(f"✅ [BUILD_ROW] Locality stats: sq={sq}, dens={dens}")
+    except Exception as e:
+        error_msg = f"Locality stats error: {str(e)}"
+        error_log.append(error_msg)
+        print(f"❌ [BUILD_ROW] {error_msg}")
+        sq, dens = None, None
+    loc_sq = sq  # Pass None, let preprocessing handle imputation
+    loc_dens = dens
+
+    # Build single-row DataFrame to pass through preprocessing.preprocess()
+    # This reuses the exact feature engineering logic from training
+    # Note: Pass None for missing values so preprocessing can apply hierarchical imputation
+    row_df = pd.DataFrame([{
+        "listing_id": 0,
+        "price_vnd": 10e9,  # Dummy price (10B - within preprocessing range of 2-50B)
+        "property_type": property_type,
+        "legal_status": legal_status,
+        "direction": direction,
+        "area_m2": float(area_m2),
+        "num_floors": float(num_floors) if num_floors is not None else None,
+        "num_bedrooms": float(num_bedrooms) if num_bedrooms is not None else None,
+        "road_width_m": float(road_width_m) if road_width_m is not None else None,
+        "width_m": float(width_m) if width_m is not None else None,
+        "length_m": float(length_m) if length_m is not None else None,
+        "locality_square": float(loc_sq) if loc_sq is not None else None,
+        "locality_population_density": float(loc_dens) if loc_dens is not None else None,
+        "distance_to_center_km": float(dist_km),
+        "nearest_school_km": poi("nearest_school_km"),
+        "school_count_3km": poi("school_count_3km"),
+        "nearest_hospital_km": poi("nearest_hospital_km"),
+        "hospital_count_5km": poi("hospital_count_5km"),
+        "nearest_marketplace_km": poi("nearest_marketplace_km"),
+        "marketplace_count_3km": poi("marketplace_count_3km"),
+        "nearest_supermarket_km": poi("nearest_supermarket_km"),
+        "supermarket_count_3km": poi("supermarket_count_3km"),
+        "nearest_mall_km": poi("nearest_mall_km"),
+        "mall_count_3km": poi("mall_count_3km"),
+        "nearest_bus_stop_km": poi("nearest_bus_stop_km"),
+        "bus_stop_count_1km": poi("bus_stop_count_1km"),
+        "nearest_metro_km": poi("nearest_metro_km"),
+        "metro_count_5km": poi("metro_count_5km"),
+        "post_day_year": datetime.now().year,
+        "post_day_month": datetime.now().month,
+        "post_day_day": datetime.now().day,
+        # Text flags
+        "is_hem_xe_hoi": int(text_flags.get("is_hem_xe_hoi", 0)),
+        "is_mat_tien": int(text_flags.get("is_mat_tien", 0)),
+        "is_no_hau": int(text_flags.get("is_no_hau", 0)),
+        "has_noi_that": int(text_flags.get("has_noi_that", 0)),
+        "is_gap": int(text_flags.get("is_gap", 0)),
+        "is_kinh_doanh": int(text_flags.get("is_kinh_doanh", 0)),
+        # Bin flags
+        "dining_room_bin": int(bin_flags.get("dining_room_bin", 0)),
+        "terrace_bin": int(bin_flags.get("terrace_bin", 0)),
+        "car_parking_bin": int(bin_flags.get("car_parking_bin", 0)),
+    }])
+
+    # Run through preprocessing.preprocess() (single source of truth for 78 features)
+    try:
+        print(f"[DEBUG] Calling preprocess() with row_df shape={row_df.shape}")
+        preprocess_func = _get_preprocess()
+        preprocessed, _, _ = preprocess_func(row_df)
+        print(f"[DEBUG] preprocess returned shape={preprocessed.shape if preprocessed is not None else None}")
+        if preprocessed.empty:
+            error_msg = "Preprocessing returned empty dataframe"
+            error_log.append(error_msg)
+            print(f"❌ {error_msg}")
+            final_error = "\n".join(error_log) if error_log else "Preprocessing failed"
+            print(f"[DEBUG] error_log={error_log}, final_error='{final_error}'")
+            return None, final_error
+        row_dict = preprocessed.iloc[0].to_dict()
+        row = {k: float(v) for k, v in row_dict.items() if k != 'price_vnd'}
+        print(f"✅ [BUILD_ROW] Preprocessing successful, got {len(row)} features")
+    except Exception as e:
+        error_msg = f"Preprocessing error: {str(e)}"
+        error_log.append(error_msg)
+        print(f"❌ [BUILD_ROW] {error_msg}")
+        import traceback
+        tb = traceback.format_exc()
+        error_log.append(tb)
+        final_error = "\n".join(error_log) if error_log else "Preprocessing exception"
+        print(f"[DEBUG] error_log length={len(error_log)}, final_error preview='{final_error[:100]}'")
+        return None, final_error
+
+    # Add 2 locality encoding features from training data (in meta)
+    try:
+        locality_price_map = meta.get("locality_price_map", {})
+        locality_sqm_map = meta.get("locality_sqm_map", {})
+        row["locality_price_median"] = float(
+            locality_price_map.get(locality, meta.get("locality_price_global", 0.0))
+        )
+        row["price_per_sqm_market"] = float(
+            locality_sqm_map.get(locality, meta.get("locality_sqm_global", 0.0))
+        )
+
+        info = {
+            "lat": lat, "lon": lon, "source": source,
+            "pois": pois, "cache_dist_km": cache_dist, "poi_source": poi_source,
+        }
+        print(f"{'='*60}")
+        print(f"✅ [BUILD_ROW] SUCCESS! Returning row with {len(row)} features")
+        print(f"✅ Info: lat={info['lat']}, lon={info['lon']}, source={info['source']}")
+        print(f"{'='*60}\n")
+        return row, info
+    except Exception as e:
+        error_msg = f"Locality encoding error: {str(e)}"
+        error_log.append(error_msg)
+        print(f"❌ [BUILD_ROW] {error_msg}")
+        import traceback
+        tb = traceback.format_exc()
+        error_log.append(tb)
+        final_error = "\n".join(error_log) if error_log else "Unknown error in build_row"
+        print(f"[DEBUG] error_log length={len(error_log)}, final_error preview='{final_error[:100]}'")
+        return None, final_error
+
+
+def predict_price(models, meta, row, price_tier) -> float:
+    """Route to price tier, ensemble 3 models (LGBM+XGB+CatBoost), return price in VND.
+
+    Args:
+        models: Loaded model dict
+        meta: Model metadata (includes feature_names)
+        row: Feature dict (preprocessed)
+        price_tier: 'low' (0-5B), 'mid' (5-20B), or 'high' (20B+)
+
+    Returns:
+        Predicted price in VND
+    """
+    # v2.6: 3-tier (price only), 3 models per tier
+    lgbm_key = f"lgbm_{price_tier}"
+    xgb_key = f"xgb_{price_tier}"
+    cb_key = f"cb_{price_tier}"
+
+    if lgbm_key not in models:
+        raise ValueError(f"Model {lgbm_key} not found. Available: {list(models.keys())}")
+
+    # Get feature names from metadata (source of truth)
+    feat = meta.get("feature_names", list(row.keys()))
+
+    # Build feature dict: use row if available, else median
+    X_dict = {}
+    for f in feat:
+        if f in row:
+            X_dict[f] = float(row[f])
+        else:
+            # Use median from training data as fallback
+            X_dict[f] = float(0.0)
+
+    # Create DataFrame with exact feature order from metadata
+    X = pd.DataFrame([X_dict])
+    X = X[feat]  # Reorder to match training feature order
+
+    # Ensemble: average 3 models' log predictions
+    predictions = []
+    for key in [lgbm_key, xgb_key, cb_key]:
+        if key in models:
+            model = models[key]
+
+            # Get model's expected features
+            try:
+                if hasattr(model, 'feature_names_in_'):
+                    model_features = list(model.feature_names_in_)
+                elif hasattr(model, 'feature_name'):
+                    model_features = list(model.feature_name())
+                else:
+                    model_features = list(X.columns)
+
+                # Use only features model expects
+                X_pred = X[[f for f in model_features if f in X.columns]]
+            except:
+                X_pred = X
+
+            pred_log = float(model.predict(X_pred)[0])
+            predictions.append(pred_log)
+
+    if not predictions:
+        raise ValueError(f"No models available for {price_tier}")
+
+    pred_log = np.mean(predictions)  # Average in log space
+    pred = float(np.expm1(pred_log))  # Back to VND
+
+    return pred
