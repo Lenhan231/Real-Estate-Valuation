@@ -1579,6 +1579,20 @@ The following table documents performance of earlier single-algorithm models on 
 
 *Table 12. Historical Baseline: Single-Model Performance (Deprecated - Replaced by 9-Model Ensemble)*
 
+**Algorithm Selection Criteria (v2.6 Final Ensemble):**
+
+| Criterion | TabPFN | XGBoost | LightGBM | CatBoost |
+| :---- | :---- | :---- | :---- | :---- |
+| **Historical MAPE** | 24.22% | 25.37% | N/A | N/A |
+| **Inference Latency** | Slow (~1s/pred) | Medium (~200ms) | Fast (~100ms) | Medium (~150ms) |
+| **Model Size** | Large (~500MB) | Medium (~50MB) | Small (~30MB) | Small (~40MB) |
+| **Production Stability** | Uncertain | Good | Excellent | Excellent |
+| **Categorical Handling** | Standard | Poor | Good | Best |
+
+*Table 12A. Algorithm Comparison for Production Selection*
+
+**Rationale for Final Selection:** While TabPFN achieved the best single-model accuracy on the full dataset (24.22% MAPE), it was rejected for production due to slow inference latency (~1s/prediction), large model size, and uncertainty around production stability. LightGBM, XGBoost, and CatBoost were selected as the final 3-model ensemble for their fast inference (~100-200ms), small model sizes (~30-50MB total), excellent production stability, and complementary strengths in feature handling. The ensemble approach (averaging predictions from all 3 models) compensates for any individual model's weaknesses and provides robustness.
+
 **Key Achievement:** The low-price tier (0–5B VND) achieved a MAPE of **10.48%**, falling within 0.48 percentage points of the project's < 10% target. This near-achievement demonstrates the segmentation strategy's effectiveness for budget-conscious buyers, the primary market segment in Vietnam's residential real estate.
 
 ### **1.2 Analysis and Interpretation**
