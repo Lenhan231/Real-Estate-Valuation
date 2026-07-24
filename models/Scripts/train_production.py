@@ -4,10 +4,10 @@ PRODUCTION MODEL: Price-Only Ensemble (3 Price Tiers × 3 Models)
 Final production-ready training script (v2.6 - LOCKED).
 - Strategy: Price segmentation only (Low/Mid/High)
 - Models: LightGBM + XGBoost + CatBoost per tier
-- Features: 78 (64 base + 14 polynomial/interaction)
-- Performance: 13.10% MAPE, 0.9200 R² (original hyperparameters)
-- Training time: ~127 seconds (efficient)
-- Status: Production LOCKED - Optimization ended (v2.7 test failed)
+- Features: 79 from CSV + 2 locality encoding at inference = 81 total model inputs
+- Performance: 13.43% MAPE, 0.9159 R² (with proper 64/16/20 train/val/test split)
+- Training time: ~116 seconds (efficient)
+- Status: Production LOCKED - Proper train/val/test separation implemented
 """
 
 import argparse

@@ -621,7 +621,7 @@ To ensure dataset reliability before downstream processing, multiple validation 
 - **Outlier rate before:** ~18% (outside price/area/unit-price bounds)
 - **Outlier rate after:** 0% (filtered, kept central 82%)
 
-**Result:** 12,832 raw Supabase records → 12,794 UI-visible (38 removed: NULL lat/lon/price/area) → 10,434 training dataset (2,373 removed: outliers)
+**Result:** 12,832 raw Supabase records → 12,794 UI-visible (38 removed: NULL lat/lon/price/area) → 10,434 training dataset (2,360 removed: outliers)
 
 #### ***Running the Scraping Pipeline***
 
@@ -962,7 +962,7 @@ The use of segment-specific IQR filters means that ultra-luxury properties (\>50
 
 The locality\_price\_median encoding is computed strictly from the training set and applied to the test set via lookup, reducing direct test-set leakage risk. Unseen localities default to the global training median, which may introduce mild geographic bias in under-represented wards.
 
-**Production Inference - Locality Encoding:** At production inference time (Streamlit/API), trained locality encoding maps are persisted as JSON ([models/saved_models/locality_encoding.json](../../models/saved_models/locality_encoding.json)) and loaded by the inference service. The maps contain median price and price-per-sqm statistics by locality (91 cities), computed from training data only. Unseen localities default to global training median (fallback value: 0.0). Implementation: [train_production.py:279-301](../../models/Scripts/train_production.py#L279-L301), [inference.py:74-99](../../app/core/inference.py#L74-L99).
+**Production Inference - Locality Encoding:** At production inference time (Streamlit/API), trained locality encoding maps are persisted as JSON ([models/saved_models/locality_encoding.json](../../models/saved_models/locality_encoding.json)) and loaded by the inference service. The maps contain median price and price-per-sqm statistics for 91 localities, computed from training data only. For unseen localities, the system uses the global training median (computed from entire training set). If the JSON file fails to load (e.g., file missing or corrupted), fallback to 0.0 is used. Implementation: [train_production.py:279-301](../../models/Scripts/train_production.py#L279-L301), [inference.py:74-99](../../app/core/inference.py#L74-L99).
 
 ### **7.3 Model Transparency and Limitations**
 
@@ -1506,7 +1506,7 @@ The geocoding and POI lookup pipeline uses a **two-tier cache strategy**:
 **Current workflow:**
 - Manual retraining via `python scripts/train_production.py`
 - Experiment tracking in Weights & Biases (wandb project: real-estate-valuation)
-- Model artifacts stored as .pkl files (9 files: 3 LightGBM + 3 XGBoost + 3 CatBoost for 3-tier × 3-algorithm segmentation, ~47.9 MB total)
+- Model artifacts stored as .pkl files (9 files: 3 LightGBM + 3 XGBoost + 3 CatBoost for 3-tier × 3-algorithm segmentation, ~42.04 MB total)
 - Version history documented in LATEST_UPDATE.md
 
 **Version tracking (sample):**
@@ -1970,7 +1970,7 @@ This appendix provides a summary reference and production deployment notes.
 
 *Table 9. Production Model Artifacts (9-Model Ensemble)*
 
-**Total model size: ~47.9 MB across all 9 models**
+**Total model size: ~42.04 MB across all 9 models**
 
 ### **Training & Validation Metrics**
 
