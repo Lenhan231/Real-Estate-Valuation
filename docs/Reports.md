@@ -680,7 +680,12 @@ The final model input consists of **79 engineered features** across 7 categories
 
 *Table 7A. Feature Categories and Counts (79 Total Features)*
 
-**Note on Feature Count:** The 79 figures refers to features in the preprocessed CSV (models/data/alonhadat_features_cleaned.csv). At inference time, the system also loads 2 locality encoding features (locality_price_median, price_per_sqm_market) from the trained JSON statistics (models/saved_models/locality_encoding.json), resulting in **81 total model inputs** to the ensemble. See Section V.1 and [inference.py:340-355](../../app/core/inference.py#L340-L355) for implementation.
+**Note on Feature Count:** 
+- **Training/CSV**: 79 engineered features (output of preprocessing.py 6-phase pipeline)
+- **Runtime Inference**: 79 + 2 locality encoding features = **81 total model inputs**
+  - 2 locality features (locality_price_median, price_per_sqm_market) loaded from trained JSON statistics at inference time
+- All 79 features persisted in models/data/alonhadat_features_cleaned.csv; locality encoding stats in models/saved_models/locality_encoding.json
+- See Section V.1 and [inference.py:340-355](../../app/core/inference.py#L340-L355) for implementation.
 
 **Feature Engineering Pipeline**: All features are derived via **models/scripts/shared/preprocessing.py** (6-phase pipeline) and **app/core/inference.py** (production inference). Raw features from scraped data pass through:
 - Phase 1: Outlier filtering → Phase 2: Temporal extraction → Phase 3: Numeric imputation → Phase 4: Dimension features → Phase 5: Amenity engineering → Phase 6: Text-based extraction
@@ -1506,7 +1511,7 @@ The geocoding and POI lookup pipeline uses a **two-tier cache strategy**:
 **Current workflow:**
 - Manual retraining via `python scripts/train_production.py`
 - Experiment tracking in Weights & Biases (wandb project: real-estate-valuation)
-- Model artifacts stored as .pkl files (9 files: 3 LightGBM + 3 XGBoost + 3 CatBoost for 3-tier × 3-algorithm segmentation, ~42.04 MB total)
+- Model artifacts stored as .pkl files (9 files: 3 LightGBM + 3 XGBoost + 3 CatBoost for 3-tier × 3-algorithm segmentation, ~35.99 MiB total)
 - Version history documented in LATEST_UPDATE.md
 
 **Version tracking (sample):**
@@ -1567,6 +1572,8 @@ The final 9-model (3-tier × 3-algorithm) ensemble was evaluated on a test set (
 | **High** | 20B+ VND | **16.45%** | 0.8950 | 3.80B | ~2,700 |
 
 *Table 11. Per-Tier Model Performance (3-Tier Price Segmentation)*
+
+**Note on Per-Tier Metrics:** The per-tier MAPE values (10.48%, 12.80%, 16.45%) represent historical performance but lack explicit verification in the current v2.6 training output (which persists only global metrics to metrics.json). These numbers should be treated as reference values from prior experiments. Global metrics (MAPE 13.43%, R² 0.9159) are fully verified and reproducible. For production use, rely on global metrics; per-tier evaluation would require enhanced training script output (future enhancement).
 
 **Historical Baseline Comparisons (Pre-Ensemble Architecture):**
 
@@ -1970,7 +1977,7 @@ This appendix provides a summary reference and production deployment notes.
 
 *Table 9. Production Model Artifacts (9-Model Ensemble)*
 
-**Total model size: ~42.04 MB across all 9 models**
+**Total model size: ~35.99 MiB across all 9 models**
 
 ### **Training & Validation Metrics**
 
@@ -2221,7 +2228,7 @@ docker-compose logs -f  # Monitor
 | Deduplication | 11,000 raw | 10,432 unique | <1 min | — |
 | Geocoding | 10,432 | 3,202 with coords | 10-20 min | 90% reduction 2nd run |
 | POI lookup | 3,202 | + 14 POI features | 15-30 min | 95% reduction 2nd run |
-| Feature engineering | Raw + POI | 78 features | 5-10 min | N/A |
+| Feature engineering | Raw + POI | 79 features | 5-10 min | N/A |
 | **Total ETL time** | — | Model-ready data | ~60-90 min | — |
 
 ---
