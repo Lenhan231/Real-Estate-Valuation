@@ -1277,12 +1277,12 @@ The system is deployed as a production-ready containerized application with mult
 | **Docker Compose** | `.deployment/docker-compose.yml` | 8000 + 8501 | Orchestration | Local dev environment with both services networked together |
 
 **Key Features:**
-- ✅ Multi-stage Docker builds (builder → runtime, ~30-40% size reduction)
-- ✅ Non-root user execution (security hardening)
-- ✅ Health checks via /health endpoint (for both FastAPI + Streamlit)
-- ✅ Dynamic port configuration via PORT environment variable
-- ✅ Explicit stderr logging with flush (catches startup errors on Render free tier)
-- ✅ Comprehensive startup diagnostics (model loading verification, Supabase connectivity)
+-  Multi-stage Docker builds (builder → runtime, ~30-40% size reduction)
+-  Non-root user execution (security hardening)
+-  Health checks via /health endpoint (for both FastAPI + Streamlit)
+-  Dynamic port configuration via PORT environment variable
+-  Explicit stderr logging with flush (catches startup errors on Render free tier)
+-  Comprehensive startup diagnostics (model loading verification, Supabase connectivity)
 
 **Render-Specific Optimizations:**
 - Startup shell script (`scripts/startup.sh`): Proper signal handling via `exec` to replace shell process
@@ -1431,11 +1431,11 @@ All BI dashboard visualizations use **Altair** for reliable rendering across bro
 | **Amenities Impact** | Multi-bar | `alt.Chart().mark_bar()` | Floor count & area size comparison |
 
 **Why Altair:**
-- ✅ Reliable across Streamlit versions (vs deprecated st.bar_chart/st.scatter_chart)
-- ✅ Interactive tooltips & hover
-- ✅ Theme-aware (light/dark mode support)
-- ✅ Browser-native rendering (no external CDN calls)
-- ✅ Respects all active filters (property type, locality, date range)
+-  Reliable across Streamlit versions (vs deprecated st.bar_chart/st.scatter_chart)
+-  Interactive tooltips & hover
+-  Theme-aware (light/dark mode support)
+-  Browser-native rendering (no external CDN calls)
+-  Respects all active filters (property type, locality, date range)
 
 **Chart Features:**
 ```python
@@ -1466,10 +1466,10 @@ st.altair_chart(
 ### **3.6 Performance & Scaling**
 
 **Render Free Tier Limitations:**
-- ✅ Single worker (no multi-threading)
-- ✅ 512MB RAM (tight for model loading)
-- ✅ Auto-sleep after 15 minutes inactivity (cold start ~30s)
-- ✅ Shared CPU (no guaranteed resources)
+-  Single worker (no multi-threading)
+-  512MB RAM (tight for model loading)
+-  Auto-sleep after 15 minutes inactivity (cold start ~30s)
+-  Shared CPU (no guaranteed resources)
 
 **Optimization:**
 - Load all 9 models on startup (not lazy) to avoid mid-prediction timeouts
@@ -1958,15 +1958,15 @@ This appendix provides a summary reference and production deployment notes.
 
 | Filename | Algorithm | Tier | Size | Format | Status |
 | :---- | :---- | :---- | :---- | :---- | :---- |
-| `lgbm_low.pkl` | LightGBM | Low (0-5B) | ~12MB | joblib | ✅ Production |
-| `lgbm_mid.pkl` | LightGBM | Mid (5-20B) | ~14MB | joblib | ✅ Production |
-| `lgbm_high.pkl` | LightGBM | High (>20B) | ~10MB | joblib | ✅ Production |
-| `xgb_low.pkl` | XGBoost | Low | ~13MB | joblib | ✅ Production |
-| `xgb_mid.pkl` | XGBoost | Mid | ~15MB | joblib | ✅ Production |
-| `xgb_high.pkl` | XGBoost | High | ~11MB | joblib | ✅ Production |
-| `cb_low.pkl` | CatBoost | Low | ~11MB | joblib | ✅ Production |
-| `cb_mid.pkl` | CatBoost | Mid | ~13MB | joblib | ✅ Production |
-| `cb_high.pkl` | CatBoost | High | ~9MB | joblib | ✅ Production |
+| `lgbm_low.pkl` | LightGBM | Low (0-5B) | ~12MB | joblib |  Production |
+| `lgbm_mid.pkl` | LightGBM | Mid (5-20B) | ~14MB | joblib |  Production |
+| `lgbm_high.pkl` | LightGBM | High (>20B) | ~10MB | joblib |  Production |
+| `xgb_low.pkl` | XGBoost | Low | ~13MB | joblib |  Production |
+| `xgb_mid.pkl` | XGBoost | Mid | ~15MB | joblib |  Production |
+| `xgb_high.pkl` | XGBoost | High | ~11MB | joblib |  Production |
+| `cb_low.pkl` | CatBoost | Low | ~11MB | joblib |  Production |
+| `cb_mid.pkl` | CatBoost | Mid | ~13MB | joblib |  Production |
+| `cb_high.pkl` | CatBoost | High | ~9MB | joblib |  Production |
 
 *Table 9. Production Model Artifacts (9-Model Ensemble)*
 
