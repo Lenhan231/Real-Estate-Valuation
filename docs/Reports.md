@@ -308,7 +308,7 @@ Routine team meetings will use Meet, Discord and Zalo to ensure alignment on res
 
 ### **2.1 WBS**
 
-**Data Acquisition:** 12,832 raw listing records were collected from Alonhadat.com via automated scraping. After UI validation and deduplication, 12,794 records were retained in the Supabase database. Following preprocessing pipeline (6 phases: outlier detection → temporal engineering → numeric imputation → dimensional features → amenity aggregation → text extraction), a final set of 10,421 records met quality thresholds (price bounds 2.0B-50.0B VND, area bounds 15-500m²) and were used for model training/evaluation. The 2,373-record gap (12,794 → 10,421) resulted from NULL values in critical structural columns and tier-specific outlier filtering during preprocessing phase.
+**Data Acquisition:** 12,832 raw listing records were collected from Alonhadat.com via automated scraping. After UI validation and deduplication, 12,794 records were retained in the Supabase database. Following preprocessing pipeline (6 phases: outlier detection → temporal engineering → numeric imputation → dimensional features → amenity aggregation → text extraction), a final set of 10,434 records met quality thresholds (price bounds 2.0B-50.0B VND, area bounds 15-500m²) and were used for model training/evaluation. The 2,360-record gap (12,794 → 10,434) resulted from NULL values in critical structural columns and tier-specific outlier filtering during preprocessing phase.
 
 **Preprocessing & Feature Engineering:** Performed data cleaning, normalization, missing value handling, and outlier filtering. Engineered spatial and structural features such as distance to city center, property dimensions, population density, and binary amenity indicators to support predictive modeling.
 
@@ -471,7 +471,7 @@ Multiple model architectures were compared for predictive performance using Weig
 
 The dataset lacks several key structural attributes, including house age, property condition, and reliable direction information. Although listing dates are available, the observation period is not sufficiently long or consistent to support reliable longitudinal market-trend forecasting. These limitations contribute to residual variance and restrict the scope of trend analysis.
 
-Most automated valuation systems primarily provide point estimates and offer limited communication of prediction uncertainty. Historical global baseline models (TabPFN v2.5: ~24% MAPE) substantially improved with price-tier segmentation and outlier filtering (~13.10% MAPE in final ensemble), a ~46% error reduction demonstrating that market heterogeneity drives prediction difficulty. The current application displays an indicative MAPE-based error range around each prediction, based on the final model’s global MAPE. This range is not a statistically calibrated confidence interval. TabPFN was evaluated using point predictions and standard regression metrics; posterior predictive uncertainty was not explicitly analysed in the current prototype.
+Most automated valuation systems primarily provide point estimates and offer limited communication of prediction uncertainty. Historical global baseline models (TabPFN v2.5: ~24% MAPE) substantially improved with price-tier segmentation and outlier filtering (~13.43% MAPE in final ensemble), a ~46% error reduction demonstrating that market heterogeneity drives prediction difficulty. The current application displays an indicative MAPE-based error range around each prediction, based on the final model’s global MAPE. This range is not a statistically calibrated confidence interval. TabPFN was evaluated using point predictions and standard regression metrics; posterior predictive uncertainty was not explicitly analysed in the current prototype.
 
 ## **7\. Justification for the Project** {#7.-justification-for-the-project}
 
@@ -521,7 +521,7 @@ The data collection pipeline systematically acquired Vietnamese real estate prop
 - **Raw listings collected:** ~15,000 initial links from Alonhadat.com
 - **Supabase database:** 12,832 records in Raw_Features table
 - **UI analysis dataset:** 12,794 records (38-record gap due to NULL values in critical columns: lat, lon, price_vnd, area_m2)
-- **Model training dataset:** 10,421 properties after strict outlier filtering (price 2-50B VND, area 15-500m², unit price 30-800M VND/m²)
+- **Model training dataset:** 10,434 properties after strict outlier filtering (price 2-50B VND, area 15-500m², unit price 30-800M VND/m²)
 
 The dataset covers residential properties (frontage houses and alley houses) exclusively in Ho Chi Minh City, collected via a two-stage web scraping pipeline and subsequently synchronized to Supabase PostgreSQL cloud database for persistent storage and cross-session access.
 
@@ -611,7 +611,7 @@ To ensure dataset reliability before downstream processing, multiple validation 
 **Validation Timing:**
 - **Raw data ingestion:** Price/area bounds applied during scraping validation (pre-database)
 - **Preprocessing phase:** All 6 validation steps (Phase 1-6) applied before feature engineering
-- **Model training:** Final filtered dataset (~10,421 samples) used for train/test split
+- **Model training:** Final filtered dataset (~10,434 samples) used for train/test split
 
 **Quality Metrics Post-Validation:**
 - **NULL rate before:** ~15-20% across numeric columns (raw scraped data)
@@ -621,7 +621,7 @@ To ensure dataset reliability before downstream processing, multiple validation 
 - **Outlier rate before:** ~18% (outside price/area/unit-price bounds)
 - **Outlier rate after:** 0% (filtered, kept central 82%)
 
-**Result:** 12,832 raw Supabase records → 12,794 UI-visible (38 removed: NULL lat/lon/price/area) → 10,421 training dataset (2,373 removed: outliers)
+**Result:** 12,832 raw Supabase records → 12,794 UI-visible (38 removed: NULL lat/lon/price/area) → 10,434 training dataset (2,373 removed: outliers)
 
 #### ***Running the Scraping Pipeline***
 
@@ -656,7 +656,7 @@ The raw scraped data undergoes a comprehensive 6-phase preprocessing workflow im
 - **Missing-value indicators:** Binary columns (width_m_missing, perimeter_m_missing) preserve information loss signals
 - **No target leakage:** Fixed area-segment bins prevent data leakage during cross-validation
 
-The preprocessed dataset of **10,421 records** is persisted to **data/processed/model_training_data.csv** and synchronized to **Supabase Raw_Features table** for cross-session access and BI dashboard queries.
+The preprocessed dataset of **10,434 records** is persisted to **data/processed/model_training_data.csv** and synchronized to **Supabase Raw_Features table** for cross-session access and BI dashboard queries.
 
 
 ## **3\. Feature Selection and Engineering** {#3.-feature-selection-and-engineering}
@@ -679,6 +679,8 @@ The final model input consists of **79 engineered features** across 7 categories
 | **Missing Indicators** | 10 | Data quality signals | width_m_missing, length_m_missing, road_width_m_missing, perimeter_m_missing, shape_ratio_missing, nearest_metro_km_missing, nearest_hospital_km_missing + 3 others |
 
 *Table 7A. Feature Categories and Counts (79 Total Features)*
+
+**Note on Feature Count:** The 79 figures refers to features in the preprocessed CSV (models/data/alonhadat_features_cleaned.csv). At inference time, the system also loads 2 locality encoding features (locality_price_median, price_per_sqm_market) from the trained JSON statistics (models/saved_models/locality_encoding.json), resulting in **81 total model inputs** to the ensemble. See Section V.1 and [inference.py:340-355](../../app/core/inference.py#L340-L355) for implementation.
 
 **Feature Engineering Pipeline**: All features are derived via **models/scripts/shared/preprocessing.py** (6-phase pipeline) and **app/core/inference.py** (production inference). Raw features from scraped data pass through:
 - Phase 1: Outlier filtering → Phase 2: Temporal extraction → Phase 3: Numeric imputation → Phase 4: Dimension features → Phase 5: Amenity engineering → Phase 6: Text-based extraction
@@ -754,9 +756,9 @@ Higher-order features capture non-linear relationships and domain-specific patte
 The final production model uses **3-tier price-based segmentation** (simplified from earlier 2-property-type × 3-price experiments):
 
 **Price Tiers (Target Segments):**
-- **Low (0–5B VND):** 1,156 properties (11.1%); budget apartments, small houses
-- **Mid (5–20B VND):** 6,319 properties (60.6%); standard mid-range residential
-- **High (>20B VND):** 2,946 properties (28.3%); luxury, penthouse, large villas
+- **Low (0–5B VND):** 1,161 properties (11.1%); budget apartments, small houses
+- **Mid (5–20B VND):** 6,326 properties (60.6%); standard mid-range residential
+- **High (>20B VND):** 2,947 properties (28.3%); luxury, penthouse, large villas
 
 **Rationale for Price-Only Segmentation:**
 Historical 2×3=6-bucket experiments (property-type × price) showed that **price tier was the dominant driver** of predictive accuracy, while property-type (frontage vs alley) added model complexity without material accuracy gains. Tier-specific training captures the heterogeneous price dynamics and feature relationships (e.g., high-tier buyers value metro proximity more heavily), while simple price-tier routing eliminates the overhead of multi-dimensional bucketing.
@@ -868,7 +870,7 @@ Each of the 9 models (3 algorithms × 3 tiers) is trained with algorithm-specifi
 - **Validation set purpose:** 16% validation set is used ONLY for early stopping in LightGBM, XGBoost, and CatBoost during training (no other use)
 - **Test set independence:** 20% test set is held out completely during training and used ONLY for final performance evaluation (truly independent)
 - **Ensemble approach:** Both training and production use **equal averaging** (each model contributes 1/3 weight) — no train-serving mismatch
-- **Interpretation:** Reported metrics (MAPE 13.10%, R² 0.9200) represent true generalization performance on held-out test data
+- **Interpretation:** Reported metrics (MAPE 13.43%, R² 0.9159) represent true generalization performance on held-out test data
 
 **Experiment Tracking:**
 - **Platform:** Weights & Biases (wandb.ai, project: real-estate-valuation)
@@ -885,7 +887,7 @@ Each of the 9 models (3 algorithms × 3 tiers) is trained with algorithm-specifi
 - **Inference latency:** ~200-500ms per prediction (includes feature engineering + 3-model averaging)
 
 **Version History:**
-- **v2.6 (Current):** LightGBM + XGBoost + CatBoost 3-tier ensemble; MAPE 13.10%, R² 0.9200
+- **v2.6 (Current):** LightGBM + XGBoost + CatBoost 3-tier ensemble; MAPE 13.43%, R² 0.9159
 - **v2.5:** TabPFN experiments (MAPE 24.22% on global data; archived)
 - **v2.0-v2.4:** Earlier XGBoost/ensemble iterations (archived in git history)
 
@@ -905,7 +907,7 @@ Model performance is assessed on the held-out 20% test set using the following m
 
 ### **5.1 Evaluation Protocol and Interpretation**
 
-The reported global MAPE of 13.10% represents bucket-aware evaluation conditional on correct price-tier assignment. During evaluation, test samples are assigned to the Low, Mid, or High price tiers using their observed target prices. Therefore, the reported result measures prediction performance within known market segments and should not be interpreted as the end-to-end performance of an automatic price-tier routing system. In the current Streamlit application, the price tier is selected by the user.
+The reported global MAPE of 13.43% represents bucket-aware evaluation conditional on correct price-tier assignment. During evaluation, test samples are assigned to the Low, Mid, or High price tiers using their observed target prices. Therefore, the reported result measures prediction performance within known market segments and should not be interpreted as the end-to-end performance of an automatic price-tier routing system. In the current Streamlit application, the price tier is selected by the user.
 
 ## **6\. Implementation Plan** {#6.-implementation-plan}
 
@@ -964,7 +966,7 @@ The locality\_price\_median encoding is computed strictly from the training set 
 
 ### **7.3 Model Transparency and Limitations**
 
-* The model is presented as a reference price estimate, not a legally binding appraisal. The application explicitly communicates an indicative MAPE-based error range (currently ±13.10%) alongside each prediction. This range is not a statistically calibrated confidence interval.
+* The model is presented as a reference price estimate, not a legally binding appraisal. The application explicitly communicates an indicative MAPE-based error range (currently ±13.43%) alongside each prediction. This range is not a statistically calibrated confidence interval.
 
 * A Top 20 LightGBM feature-importance plot is generated for a representative mid-price alley-house bucket and logged to Weights & Biases.
 
@@ -1012,22 +1014,22 @@ API Response + Streamlit Display
 
 **Streamlit UI Tabs:**
 
-**Tab 1: 💰 Định Giá (Valuation)**
+**Tab 1: Định Giá (Valuation)**
 - **Quick Mode (Paste):** User pastes listing description → AI extracts features via `/api/parse` endpoint
 - **Detailed Mode (Manual):** 40+ form inputs across 4 sections:
-  1. 🗺️ Location & Address (street, locality confirmation)
-  2. 🏷️ Classification & Features (property type, legal status, direction, price tier)
-  3. 📐 Dimensions & Utilities (area, width, length, floors, bedrooms, road width)
-  4. ✨ Amenities (checkboxes: car parking, furnished, commercial use, etc.)
+  1. Location & Address (street, locality confirmation)
+  2. Classification & Features (property type, legal status, direction, price tier)
+  3. Dimensions & Utilities (area, width, length, floors, bedrooms, road width)
+  4. Amenities (checkboxes: car parking, furnished, commercial use, etc.)
 
-**Tab 2: 📊 Phân Tích Thị Trường (Market Analysis)**
+**Tab 2: Phân Tích Thị Trường (Market Analysis)**
 - Filters: Property type, locality, date range (multi-select)
 - 4 BI visualizations: Property type comparison, area vs price scatter, price distribution histogram, amenities impact
 
-**Tab 3: 📈 Feedback Analytics**
+**Tab 3: Feedback Analytics**
 - Prediction accuracy tracking, user feedback submission
 
-**Tab 4: 🔧 Model Management**
+**Tab 4: Model Management**
 - Model info (version, architecture, performance metrics)
 - Feature importance visualization (top 20 LightGBM features)
 
@@ -1038,7 +1040,7 @@ API Response + Streamlit Display
 1. User inputs street + locality (e.g., "Đường Đào Trí" + "Phường Phú Thuận")
 2. GeoLookup module checks:
    a. In-memory cache (session-scoped dict, zero latency)
-   b. Persistent CSV cache (data/cache/localities.csv, ~10MB)
+   b. Persistent CSV cache (data/cache/localities.csv or supabase, ~10MB)
    c. Nominatim API fallback (3-sec rate limit, cached result)
 3. Output: (lat, lon) coordinates + address confidence score
 ```
@@ -1132,7 +1134,7 @@ Returns:
 - Top 10 feature importances (from primary LightGBM model)
 - Individual model predictions (showing ensemble logic)
 - Confidence score (1.0 = high, 0.5 = low uncertainty)
-- MAPE-based error range (±13.10% global, ±10.48% for low tier)
+- MAPE-based error range (±13.43% global, ±10.48% for low tier)
 
 ### **1.6 API Integration (FastAPI Backend)**
 
@@ -1508,7 +1510,7 @@ The geocoding and POI lookup pipeline uses a **two-tier cache strategy**:
 - Version history documented in LATEST_UPDATE.md
 
 **Version tracking (sample):**
-- v2.6: LightGBM + XGBoost + CatBoost 3-tier ensemble (MAPE 13.10%, R² 0.9200) — Current production
+- v2.6: LightGBM + XGBoost + CatBoost 3-tier ensemble (MAPE 13.43%, R² 0.9159) — Current production
 - v2.5: Historical TabPFN experiments (MAPE 24.22%) — Archived
 - v2.0-v2.4: Earlier XGBoost/ensemble iterations — Archived
 
@@ -1543,16 +1545,16 @@ The geocoding and POI lookup pipeline uses a **two-tier cache strategy**:
 
 ### **1.1 Experimental Setup and Results**
 
-The final 9-model (3-tier × 3-algorithm) ensemble was evaluated on a test set (20% holdout, random_state=42) derived from a preprocessed dataset of **10,421 properties** in Ho Chi Minh City. **Note:** The test set was used for early stopping and ensemble weight calculation during training, so reported metrics represent in-sample performance rather than generalization to fully independent data (see Section IV.3 for details). The system uses four primary evaluation metrics for regression accuracy: Mean Absolute Percentage Error (MAPE), Coefficient of Determination (R²), Mean Absolute Error (MAE in VND billions), and Root Mean Squared Error (RMSE in VND billions).
+The final 9-model (3-tier × 3-algorithm) ensemble was evaluated on a test set (20% holdout, random_state=42) derived from a preprocessed dataset of **10,434 properties** in Ho Chi Minh City. The test set is held out completely during training: a separate 16% validation set is used ONLY for early stopping in LightGBM, XGBoost, and CatBoost, ensuring the test set remains independent for final evaluation (see Section IV.4 for details). The system uses four primary evaluation metrics for regression accuracy: Mean Absolute Percentage Error (MAPE), Coefficient of Determination (R²), Mean Absolute Error (MAE in VND billions), and Root Mean Squared Error (RMSE in VND billions).
 
 **Global Ensemble Performance (All Tiers Combined):**
 
 | Metric | Performance |
 | :---- | :---- |
-| **MAPE** | **13.10%** |
-| **R²** | **0.9200** |
-| **MAE** | **2.15B VND** |
-| **RMSE** | **3.41B VND** |
+| **MAPE** | **13.43%** |
+| **R²** | **0.9159** |
+| **MAE** | **2.18B VND** |
+| **RMSE** | **3.46B VND** |
 
 *Table 10. Final Model Performance (9-Model 3-Tier Ensemble - LightGBM + XGBoost + CatBoost)*
 
@@ -1624,7 +1626,7 @@ To improve model transparency, global feature-importance analysis was conducted 
 **Hypothesis:** The Vietnamese real estate market exhibits high price heterogeneity. A 3-tier price segmentation (low: 0-5B, mid: 5-20B, high: 20B+ VND) with tier-specific outlier filtering will substantially improve accuracy over single-global models.
 
 **Findings:** **STRONG SUPPORT** — The final 9-model (3-tier × 3-algorithm) ensemble achieved:
-- **Global MAPE:** 13.10% (R² = 0.9200)
+- **Global MAPE:** 13.43% (R² = 0.9159)
 - **Low-price tier:** 10.48% MAPE (R² = 0.9401) — within 0.48 pp of <10% target
 - **Mid-price tier:** 12.80% MAPE (R² = 0.9180)
 - **High-price tier:** 16.45% MAPE (R² = 0.8950) — data sparsity (~2,700 samples), luxury heterogeneity
@@ -1668,7 +1670,7 @@ TabPFN's historical advantage (24% vs 25% MAPE) was measured under earlier prepr
 
 While the project achieved a highly accurate and deployable system, several practical limitations were encountered:
 
-1. **Small, Geographically Narrow Dataset**: The final cleaned dataset contains only 10,421 properties concentrated exclusively in Ho Chi Minh City. This limits the system's ability to generalize to other major cities (like Hanoi or Da Nang) and thins the sample sizes in the high-price tier buckets.  
+1. **Small, Geographically Narrow Dataset**: The final cleaned dataset contains only 10,434 properties concentrated exclusively in Ho Chi Minh City. This limits the system's ability to generalize to other major cities (like Hanoi or Da Nang) and thins the sample sizes in the high-price tier buckets.  
 2. **Web Scraping Fragility**: As anticipated in the risk register, anti-bot measures and CAPTCHAs on the source website constrained the volume of data that could be collected in a given run, directly limiting the final dataset size.  
 3. **Limited longitudinal coverage**: Listing dates are available, but the collected observation period is not sufficiently long and consistent to support reliable longitudinal market-trend forecasting. Consequently, the model excels at cross-sectional valuation but cannot yet perform genuine longitudinal market trend forecasting.
 
@@ -1700,7 +1702,7 @@ The project successfully addressed the three research questions posed initially.
 
 * **RQ1 (Geospatial Compensation):** Partially confirmed. Engineered geospatial features (POI proximity, distance metrics) significantly improve prediction accuracy but do not fully replace missing structural attributes. Raw property area (area_m2) remains the dominant predictor across all model tiers, consistent with traditional hedonic pricing theory.
 
-* **RQ2 (Segmentation Impact):** Substantially supported by experimental results. Market segmentation by price tier (Low/Mid/High) combined with domain-aware outlier filtering achieves an ensemble R² of 0.9200 and global MAPE of 13.10%. The low-price segment achieves MAPE of 10.48%, approaching the <10% target. Historical experiments show that tier-specific outlier filtering reduces error by ~46% relative to global baseline models.
+* **RQ2 (Segmentation Impact):** Substantially supported by experimental results. Market segmentation by price tier (Low/Mid/High) combined with domain-aware outlier filtering achieves an ensemble R² of 0.9159 and global MAPE of 13.43%. The low-price segment achieves MAPE of 10.48%, approaching the <10% target. Historical experiments show that tier-specific outlier filtering reduces error by ~46% relative to global baseline models.
 
 * **RQ3 (Model Architecture):** TabPFN achieved lower MAPE than XGBoost in historical property-type split experiments (~24% vs ~25%). However, the final LightGBM-CatBoost ensemble was selected for production because it offers lower inference cost, straightforward model serialization, and seamless integration with the 3-tier price-based routing architecture. This represents an intentional trade-off between historical benchmark accuracy and deployment practicality.
 
@@ -1710,7 +1712,7 @@ Overall, the project delivered a working end-to-end pipeline (scraping → geosp
 
 ### **2.1 Contribution**
 
-The project provides evidence that market segmentation and domain-aware outlier handling can substantially improve valuation performance on heterogeneous Vietnamese real estate data. Global baseline models (TabPFN: ~24% MAPE) improved significantly with tier-based segmentation and stricter outlier filtering (final 9-model ensemble: 13.10% MAPE), a ~46% error reduction. The project also contributes a reusable geospatial feature pipeline that supplements, but does not fully replace, missing structural information in scraped property listings.
+The project provides evidence that market segmentation and domain-aware outlier handling can substantially improve valuation performance on heterogeneous Vietnamese real estate data. Global baseline models (TabPFN: ~24% MAPE) improved significantly with tier-based segmentation and stricter outlier filtering (final 9-model ensemble: 13.43% MAPE), a ~46% error reduction. The project also contributes a reusable geospatial feature pipeline that supplements, but does not fully replace, missing structural information in scraped property listings.
 
 The resulting web app and dashboard are usable artifacts, not just a benchmark. The comprehensive technical report (this document) serves as the research paper deliverable, documenting the full methodology, results, and insights suitable for publication at academic conferences or journals focused on real estate analytics, machine learning applications, or geospatial data science.
 
@@ -1734,7 +1736,7 @@ The team hopes this segmented-router approach and geospatial feature engineering
 
 ### **3.1 Limitations**
 
-* **Data scope:** The final dataset (10,421 properties, HCMC only) is small and geographically narrow, limiting generalization to other cities and thinning sample sizes in the mid/high-price tiers of the 3-tier ensemble.
+* **Data scope:** The final dataset (10,434 properties, HCMC only) is small and geographically narrow, limiting generalization to other cities and thinning sample sizes in the mid/high-price tiers of the 3-tier ensemble.
 
 * **Limited structural and longitudinal coverage:** House age and property condition are unavailable, while direction information is sparsely observed. Listing dates are available, but the collection period is insufficient for reliable trend forecasting. These limitations constrain the model’s explanatory power and preclude robust longitudinal market analysis.
 
@@ -1963,11 +1965,11 @@ This appendix provides a summary reference and production deployment notes.
 
 | Metric | Low Tier | Mid Tier | High Tier | Global |
 | :---- | :---- | :---- | :---- | :---- |
-| **MAPE (%)** | **10.48%** ⭐ | 12.80% | 16.45% | **13.10%** |
-| **R²** | **0.9401** ⭐ | 0.9180 | 0.8950 | **0.9200** |
-| **MAE (B VND)** | 0.85 | 1.95 | 3.80 | 2.15 |
-| **RMSE (B VND)** | 1.32 | 2.85 | 5.20 | 3.41 |
-| **Samples** | 1,156 | 6,319 | 2,946 | 10,421 |
+| **MAPE (%)** | **10.48%**  | 12.80% | 16.45% | **13.43%** |
+| **R²** | **0.9401**  | 0.9180 | 0.8950 | **0.9159** |
+| **MAE (B VND)** | 0.85 | 1.95 | 3.80 | 2.18 |
+| **RMSE (B VND)** | 1.32 | 2.85 | 5.20 | 3.46 |
+| **Samples** | 1,161 | 6,326 | 2,947 | 10,434 |
 
 *Table 10. Final Model Performance by Price Tier (v2.6)*
 
@@ -2034,12 +2036,12 @@ for tier in ["low", "mid", "high"]:
 
 ```
 Real-Estate-Valuation/
-├── 📄 Documentation (START HERE)
+├──  Documentation (START HERE)
 │   ├── README.md                     ← Project overview & quick start
 │   ├── DEPLOYMENT.md                 ← Complete deployment guide
 │   └── .github/ARCHITECTURE.md       ← Repository structure reference
 │
-├── 🔧 Configuration Files
+├──  Configuration Files
 │   ├── render.yaml                   ← Render platform config
 │   ├── Dockerfile                    ← Production API image
 │   ├── pytest.ini                    ← Testing configuration
@@ -2048,7 +2050,7 @@ Real-Estate-Valuation/
 │   ├── requirements.txt               ← Python dependencies
 │   └── requirements-dev.txt           ← Dev dependencies
 │
-├── 📦 Application Code
+├──  Application Code
 │   ├── app/                          ← FastAPI backend + Streamlit UI
 │   │   ├── main.py                   ← FastAPI application root
 │   │   ├── schemas/                  ← Pydantic models
@@ -2094,7 +2096,7 @@ Real-Estate-Valuation/
 │       ├── run.py                    ← Streamlit launcher
 │       └── README.md                 ← Docker documentation
 │
-├── 📚 Project Management
+├──  Project Management
 │   ├── .github/
 │   │   ├── ARCHITECTURE.md           ← This repo structure
 │   │   ├── workflows/                ← CI/CD pipelines
@@ -2105,7 +2107,7 @@ Real-Estate-Valuation/
 │       │   └── Reports.md            ← This capstone document
 │       └── (additional project docs)
 │
-└── 🔐 Environment (NOT in git)
+└──  Environment (NOT in git)
     ├── .env                          ← Local secrets
     ├── .env.example                  ← Template
     └── .venv/                        ← Virtual environment
@@ -2179,14 +2181,14 @@ docker-compose logs -f  # Monitor
 
 | Metric | Value | Target | Status |
 | ----- | ----- | ----- | ----- |
-| **Global R²** | 0.9200 | \>0.90 | ✅ Exceeded |
-| **Global MAPE** | 13.10% | \<10% | ⚠️ Very close |
-| **MAE** | 2.15B VND | N/A | — |
-| **RMSE** | 3.41B VND | N/A | — |
-| **Inference latency (avg)** | ~300ms | \<1s | ✅ Good |
-| **Model size (9 pkl files)** | ~40MB | N/A | ✅ Efficient |
-| **Training samples** | 10,421 | \>10,000 | ✅ Sufficient |
-| **Features per model** | 79 | 50-100 | ✅ Balanced |
+| **Global R²** | 0.9159 | \>0.90 |  Exceeded |
+| **Global MAPE** | 13.43% | \<10% |  Very close |
+| **MAE** | 2.18B VND | N/A | — |
+| **RMSE** | 3.46B VND | N/A | — |
+| **Inference latency (avg)** | ~300ms | \<1s |  Good |
+| **Model size (9 pkl files)** | ~40MB | N/A |  Efficient |
+| **Training samples** | 10,434 | \>10,000 |  Sufficient |
+| **Features per model** | 79 | 50-100 |  Balanced |
 
 ### **Feature Engineering Impact**
 
@@ -2215,11 +2217,11 @@ docker-compose logs -f  # Monitor
 
 | Platform | Cost | Setup Time | Scaling | Model Hosting | Data Hosting | Status |
 | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
-| **Render** | ~$20/month free tier | 5 min (auto-deploy) | Horizontal (containers) | ✅ Docker | ✅ Supabase | 🟢 Current |
-| **DigitalOcean** | $5-20/month droplet | 15 min (manual) | Manual (VPS scaling) | ✅ Docker | ✅ Managed DB | 🟡 Tested |
-| **AWS (EC2+RDS)** | $20-100+/month | 30 min (console) | Horizontal (ASG) | ✅ Docker/ECS | ✅ RDS | 🟡 Supported |
-| **Self-hosted VPS** | $10+/month | 20 min (ssh) | Manual | ✅ Docker | ✅ PostgreSQL | 🟡 Supported |
-| **Streamlit Cloud** | Free tier | 5 min | Managed | ✅ Native | ✅ Supabase | 🟡 Alternative |
+| **Render** | ~$20/month free tier | 5 min (auto-deploy) | Horizontal (containers) |  Docker |  Supabase |  Current |
+| **DigitalOcean** | $5-20/month droplet | 15 min (manual) | Manual (VPS scaling) |  Docker |  Managed DB |  Tested |
+| **AWS (EC2+RDS)** | $20-100+/month | 30 min (console) | Horizontal (ASG) |  Docker/ECS |  RDS |  Supported |
+| **Self-hosted VPS** | $10+/month | 20 min (ssh) | Manual |  Docker |  PostgreSQL |  Supported |
+| **Streamlit Cloud** | Free tier | 5 min | Managed |  Native |  Supabase |  Alternative |
 
 ---
 
