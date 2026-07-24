@@ -1,0 +1,19 @@
+{
+  "global": {
+    "mape_percent": 13.43,
+    "r2": 0.9159,
+    "mae_vnd": 2184641689.0,
+    "mae_billion_vnd": 2.18,
+    "rmse_vnd": 3460019556.0,
+    "rmse_billion_vnd": 3.46,
+    "test_samples": 2087
+  },
+  "dataset": {
+    "total_samples": 10434,
+    "features": 81,
+    "train_samples": 6677,
+    "validation_samples": 1670,
+    "test_samples": 2087,
+    "split_ratio": "64/16/20"
+  }
+}

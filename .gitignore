@@ -24,6 +24,7 @@ wandb/
 # Block JSON and PNG by default, but allow critical files
 *.json
 !models/saved_models/locality_encoding.json
+!models/saved_models/metrics.json
 *.png
 !docs/figures/*.png
 

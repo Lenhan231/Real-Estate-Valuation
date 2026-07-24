@@ -11,6 +11,7 @@ Final production-ready training script (v2.6 - LOCKED).
 """
 
 import argparse
+import json
 import numpy as np
 import pandas as pd
 import sys
@@ -279,7 +280,6 @@ def main():
     # Save locality encoding maps for inference
     print("  Saving locality encoding maps...")
     if 'locality' in df.columns:
-        import json
         locality_price_map = df.loc[train_idx].groupby('locality')['price_vnd'].median().to_dict()
         train_data = df.loc[train_idx].copy()
         train_data['price_per_sqm'] = train_data['price_vnd'] / (train_data['area_m2'] + 1)
@@ -319,6 +319,32 @@ def main():
     print(f"Global MAE:   {mae/1e9:.2f} Billion VND")
     print(f"Global RMSE:  {rmse/1e9:.2f} Billion VND")
     print("=" * 70)
+
+    # Save metrics to JSON
+    metrics_dict = {
+        "global": {
+            "mape_percent": round(mape, 2),
+            "r2": round(r2, 4),
+            "mae_vnd": round(mae, 0),
+            "mae_billion_vnd": round(mae/1e9, 2),
+            "rmse_vnd": round(rmse, 0),
+            "rmse_billion_vnd": round(rmse/1e9, 2),
+            "test_samples": len(global_y_test)
+        },
+        "dataset": {
+            "total_samples": len(X),
+            "features": len(feature_names),
+            "train_samples": len(X_train),
+            "validation_samples": len(X_val),
+            "test_samples": len(X_test),
+            "split_ratio": "64/16/20"
+        }
+    }
+
+    metrics_path = MODEL_DIR / "metrics.json"
+    with open(metrics_path, 'w') as f:
+        json.dump(metrics_dict, f, indent=2)
+    print(f"\n✓ Metrics saved to {metrics_path}")
 
     # Log to W&B
     if args.wandb and WANDB_AVAILABLE:
