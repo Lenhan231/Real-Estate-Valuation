@@ -11,38 +11,28 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# Load environment variables (non-blocking)
+# Load environment variables
 try:
-    env_path = PROJECT_ROOT / ".env"
-    if env_path.exists():
-        load_dotenv(env_path)
-        print("[STREAMLIT-STARTUP] ✓ .env loaded successfully")
-    else:
-        print("[STREAMLIT-STARTUP] ℹ️  .env not found (using defaults)")
+    load_dotenv(PROJECT_ROOT / ".env")
+    print("[STREAMLIT-STARTUP] ✓ .env loaded successfully")
 except Exception as e:
-    print(f"[STREAMLIT-STARTUP] ⚠️  Error loading .env: {e} (continuing anyway)")
+    print(f"[STREAMLIT-STARTUP] ✗ Error loading .env: {e}")
 
 import pandas as pd
 import streamlit as st
 import requests
 from requests.exceptions import RequestException
 
+# Verify API connection
+print("[STREAMLIT-STARTUP] Verifying API connection...")
+
 try:
     import pydeck as pdk
 except Exception:
     pdk = None
 
-# Lazy import: don't load GeoLookup on startup (it fetches from Supabase)
-# Only load when needed in prediction flow
-_geo_cache = None
-
-def get_geo_lookup():
-    """Lazy load GeoLookup on first use (avoid blocking Streamlit startup)."""
-    global _geo_cache
-    if _geo_cache is None:
-        from app.core.geo import GeoLookup
-        _geo_cache = GeoLookup()
-    return _geo_cache
+# Import from consolidated app.core module
+from app.core.geo import GeoLookup
 
 # API Configuration (use environment variable for deployed backend, fallback to localhost for dev)
 API_BASE_URL = os.getenv("API_URL", "http://localhost:8000")
@@ -146,8 +136,7 @@ def api_localities():
 # ---------------------------------------------------------------------------
 @st.cache_resource
 def load_geo():
-    """Load GeoLookup (cached after first call, lazy-loaded on demand)."""
-    return get_geo_lookup()
+    return GeoLookup()
 
 @st.cache_data(show_spinner=False)
 def load_bi_data():
@@ -195,6 +184,8 @@ def load_bi_data():
     except Exception as e:
         print(f"Error loading BI data: {e}")
         return pd.DataFrame()
+
+geo = load_geo()
 
 # ---------------------------------------------------------------------------
 # Helper function for valuation
@@ -273,12 +264,8 @@ with col_title:
         "R² **0.9159** · MAPE **13.43%**"
     )
 with col_status:
-    try:
-        geo = load_geo()
-        status_color = "🟢" if geo.data_source == "Supabase" else "🟡"
-        st.caption(f"{status_color} {geo.data_source}")
-    except Exception as e:
-        st.caption(f"⚠️ Geo service unavailable")
+    status_color = "🟢" if geo.data_source == "Supabase" else "🟡"
+    st.caption(f"{status_color} {geo.data_source}")
 
 # ---------------------------------------------------------------------------
 # Tabs
@@ -353,17 +340,13 @@ with tab_valuation:
 
                 with loc_col2:
                     with st.expander("📍 Xem đường có sẵn"):
-                        try:
-                            geo = load_geo()
-                            available_streets = geo.streets_of(matched_locality)
-                            if available_streets:
-                                st.caption(f"**{len(available_streets)} đường** trong cache:")
-                                for i in range(0, min(len(available_streets), 15), 3):
-                                    st.caption(", ".join(available_streets[i:i+3]))
-                            else:
-                                st.caption("(Không có dữ liệu cache)")
-                        except Exception as e:
-                            st.caption(f"⚠️ Không thể tải danh sách đường: {e}")
+                        available_streets = geo.streets_of(matched_locality)
+                        if available_streets:
+                            st.caption(f"**{len(available_streets)} đường** trong cache:")
+                            for i in range(0, min(len(available_streets), 15), 3):
+                                st.caption(", ".join(available_streets[i:i+3]))
+                        else:
+                            st.caption("(Không có dữ liệu cache)")
 
                 st.divider()
 
@@ -667,18 +650,13 @@ with tab_valuation:
                 help="Chọn phường hoặc xã"
             )
 
-            try:
-                geo = load_geo()
-                streets = geo.streets_of(locality)
-                street_options = streets + ["✏️ Khác (nhập tay)"]
-                street_choice = st.selectbox(
-                    "🚗 Đường / Phố",
-                    street_options,
-                    help="Chọn từ danh sách hoặc nhập tay"
-                )
-            except Exception as e:
-                st.error(f"⚠️ Cannot load streets: {e}")
-                street_choice = "✏️ Khác (nhập tay)"
+            streets = geo.streets_of(locality)
+            street_options = streets + ["✏️ Khác (nhập tay)"]
+            street_choice = st.selectbox(
+                "🚗 Đường / Phố",
+                street_options,
+                help="Chọn từ danh sách hoặc nhập tay"
+            )
 
             if street_choice == "✏️ Khác (nhập tay)":
                 street = st.text_input(
