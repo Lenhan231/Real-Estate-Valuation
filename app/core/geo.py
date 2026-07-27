@@ -170,8 +170,16 @@ class GeoLookup:
         # 2. Skip Nominatim (too slow for production, app is TPHCM-only)
         # Nominatim would add 5-10s per request. Accept city center for now.
 
-        # 3. Fallback to locality center (tâm phường) - SHOULD ALWAYS WORK
+        # 3. Fallback to locality center (tâm phường)
+        # Try without prefix first, then with prefix
         sub = self.df[self.df['locality_n'] == locality_n]
+        if not len(sub):
+            # Try with phường/xã prefix
+            for prefix in ["phường ", "xã ", "thị trấn "]:
+                sub = self.df[self.df['locality_n'] == (prefix + locality_n)]
+                if len(sub):
+                    break
+
         if len(sub):
             lat, lon = float(sub['lat'].median()), float(sub['lon'].median())
             return lat, lon, f'cache (tâm {locality_n})'
