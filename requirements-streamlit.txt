@@ -1,5 +1,5 @@
-# Streamlit Deployment - Minimal Dependencies
-# Production Streamlit app only (no backend API, no ML training, no scraping)
+# Streamlit Deployment - Ultra-minimal Dependencies
+# Only essential packages for running the Streamlit app
 
 # Core UI
 streamlit>=1.28
@@ -7,7 +7,6 @@ streamlit>=1.28
 # Data processing
 pandas>=2.0
 numpy==1.26.4
-pyarrow>=12.0
 
 # ML Models (inference only)
 scikit-learn>=1.3
@@ -20,14 +19,9 @@ requests>=2.31
 supabase>=2.0
 python-dotenv>=1.0
 
-# Geo & Mapping
+# Geo & Mapping (essential for app)
 geopy>=2.3
 pydeck>=0.8.0
 
 # Visualization
 plotly>=5.17
-matplotlib>=3.8
-seaborn>=0.13
-
-# Text parsing (for listing descriptions)
-beautifulsoup4>=4.12
