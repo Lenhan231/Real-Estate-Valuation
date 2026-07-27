@@ -173,9 +173,9 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
         df['log_distance_to_center'] = np.log1p(df['distance_to_center_km'])
 
     if 'locality_population_density' in df.columns:
-        # Handle NaN before log transform
-        df['locality_population_density'] = df['locality_population_density'].fillna(0.0)
-        df['log_population_density'] = np.log1p(df['locality_population_density'])
+        df['log_population_density'] = np.log1p(df['locality_population_density'].fillna(0.0))
+        if df['log_population_density'].isna().any():
+            df['log_population_density'] = df['log_population_density'].fillna(df['log_population_density'].median())
 
     # Ratio features
     if 'width_m' in df.columns and 'road_width_m' in df.columns:
