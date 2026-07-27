@@ -27,9 +27,6 @@ import streamlit as st
 import requests
 from requests.exceptions import RequestException
 
-# Verify API connection
-print("[STREAMLIT-STARTUP] Verifying API connection...")
-
 try:
     import pydeck as pdk
 except Exception:
@@ -149,7 +146,7 @@ def api_localities():
 # ---------------------------------------------------------------------------
 @st.cache_resource
 def load_geo():
-    """Load GeoLookup (cached after first call)."""
+    """Load GeoLookup (cached after first call, lazy-loaded on demand)."""
     return get_geo_lookup()
 
 @st.cache_data(show_spinner=False)
@@ -198,8 +195,6 @@ def load_bi_data():
     except Exception as e:
         print(f"Error loading BI data: {e}")
         return pd.DataFrame()
-
-geo = load_geo()
 
 # ---------------------------------------------------------------------------
 # Helper function for valuation
@@ -278,8 +273,12 @@ with col_title:
         "R² **0.9159** · MAPE **13.43%**"
     )
 with col_status:
-    status_color = "🟢" if geo.data_source == "Supabase" else "🟡"
-    st.caption(f"{status_color} {geo.data_source}")
+    try:
+        geo = load_geo()
+        status_color = "🟢" if geo.data_source == "Supabase" else "🟡"
+        st.caption(f"{status_color} {geo.data_source}")
+    except Exception as e:
+        st.caption(f"⚠️ Geo service unavailable")
 
 # ---------------------------------------------------------------------------
 # Tabs
@@ -354,13 +353,17 @@ with tab_valuation:
 
                 with loc_col2:
                     with st.expander("📍 Xem đường có sẵn"):
-                        available_streets = geo.streets_of(matched_locality)
-                        if available_streets:
-                            st.caption(f"**{len(available_streets)} đường** trong cache:")
-                            for i in range(0, min(len(available_streets), 15), 3):
-                                st.caption(", ".join(available_streets[i:i+3]))
-                        else:
-                            st.caption("(Không có dữ liệu cache)")
+                        try:
+                            geo = load_geo()
+                            available_streets = geo.streets_of(matched_locality)
+                            if available_streets:
+                                st.caption(f"**{len(available_streets)} đường** trong cache:")
+                                for i in range(0, min(len(available_streets), 15), 3):
+                                    st.caption(", ".join(available_streets[i:i+3]))
+                            else:
+                                st.caption("(Không có dữ liệu cache)")
+                        except Exception as e:
+                            st.caption(f"⚠️ Không thể tải danh sách đường: {e}")
 
                 st.divider()
 
@@ -664,13 +667,18 @@ with tab_valuation:
                 help="Chọn phường hoặc xã"
             )
 
-            streets = geo.streets_of(locality)
-            street_options = streets + ["✏️ Khác (nhập tay)"]
-            street_choice = st.selectbox(
-                "🚗 Đường / Phố",
-                street_options,
-                help="Chọn từ danh sách hoặc nhập tay"
-            )
+            try:
+                geo = load_geo()
+                streets = geo.streets_of(locality)
+                street_options = streets + ["✏️ Khác (nhập tay)"]
+                street_choice = st.selectbox(
+                    "🚗 Đường / Phố",
+                    street_options,
+                    help="Chọn từ danh sách hoặc nhập tay"
+                )
+            except Exception as e:
+                st.error(f"⚠️ Cannot load streets: {e}")
+                street_choice = "✏️ Khác (nhập tay)"
 
             if street_choice == "✏️ Khác (nhập tay)":
                 street = st.text_input(
