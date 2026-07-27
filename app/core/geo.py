@@ -63,7 +63,6 @@ class GeoLookup:
     def __init__(self):
         # Load from Supabase only
         self.data_source = "Supabase"
-        self.df = None
 
         print("\n=== GeoLookup Init ===")
         print(f"DENSITY_CSV: {DENSITY_CSV}")
@@ -72,6 +71,7 @@ class GeoLookup:
 
         if df is None or df.empty:
             print(f"⚠️  No data from Supabase, Geo features will be unavailable")
+            self.df = pd.DataFrame()
             return
 
         print(f"✅ Loaded {len(df)} rows, source={self.data_source}")
