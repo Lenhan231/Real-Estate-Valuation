@@ -1,6 +1,11 @@
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+import os
+from supabase import create_client
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 HEADERS = {
@@ -133,6 +138,49 @@ def merge_density_with_alonhadat(
     return merged_df
 
 
+def upload_to_supabase(density_df: pd.DataFrame) -> None:
+    """Upload density data to Supabase"""
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+    table_name = os.getenv("SUPABASE_TABLE_LOCALITY_DENSITY", "locality_density")
+
+    if not supabase_url or not supabase_key:
+        print("❌ Missing SUPABASE_URL or SUPABASE_SERVICE_KEY in .env")
+        return
+
+    supabase = create_client(supabase_url, supabase_key)
+
+    # Convert numeric columns (replace comma with dot for proper decimal format)
+    density_df = density_df.copy()
+    for col in ["locality_square", "locality_population_density"]:
+        if col in density_df.columns:
+            density_df[col] = density_df[col].astype(str).str.replace(",", ".")
+            density_df[col] = pd.to_numeric(density_df[col], errors="coerce")
+
+    print(f"Uploading {len(density_df)} records to Supabase table '{table_name}'...")
+
+    # Clear existing data
+    try:
+        supabase.table(table_name).delete().neq("id", 0).execute()
+        print(f"  ✓ Cleared old data")
+    except Exception as e:
+        print(f"  ⚠️  Could not clear data: {e}")
+
+    # Insert new data
+    records = density_df.to_dict(orient="records")
+
+    try:
+        supabase.table(table_name).insert(records).execute()
+        print(f"  ✓ Uploaded {len(records)} records to Supabase")
+    except Exception as e:
+        print(f"  ❌ Failed to upload: {e}")
+        raise
+
+
 if __name__ == "__main__":
     density_df = load_density()
     print(density_df.head())
+
+    # Upload to Supabase
+    print("\n[Uploading to Supabase...]")
+    upload_to_supabase(density_df)
