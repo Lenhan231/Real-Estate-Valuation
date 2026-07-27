@@ -218,6 +218,7 @@ def build_row(meta, geo: GeoLookup, *,
             print(f" {error_msg}")
             final_error = "\n".join(error_log) if error_log else "Geocoding failed"
             return None, final_error
+        print(f" [BUILD_ROW] ✓ Geocoded: lat={lat:.4f}, lon={lon:.4f}, source={source}")
     except Exception as e:
         error_msg = f"Geocode error: {str(e)}"
         error_log.append(error_msg)
@@ -230,7 +231,7 @@ def build_row(meta, geo: GeoLookup, *,
 
     try:
         dist_km = geo.distance_to_center(lat, lon)
-        print(f" [BUILD_ROW] Distance calculated: {dist_km:.2f} km")
+        print(f" [BUILD_ROW] ✓ Distance: {dist_km:.2f} km (from {lat:.4f}, {lon:.4f} to HCM center)")
     except Exception as e:
         error_msg = f"Distance error: {str(e)}"
         error_log.append(error_msg)
