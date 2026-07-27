@@ -3,9 +3,9 @@ FROM python:3.11-slim as builder
 
 WORKDIR /app
 
-# Install dependencies (requirements-dev.txt deleted - only production deps)
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Install minimal dependencies for Streamlit (no backend API, no ML training, no scraping)
+COPY requirements-streamlit.txt ./
+RUN pip install --no-cache-dir -r requirements-streamlit.txt
 
 # Runtime stage
 FROM python:3.11-slim
