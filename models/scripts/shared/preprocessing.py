@@ -174,9 +174,10 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
 
     if 'locality_population_density' in df.columns:
         df['locality_population_density'] = df['locality_population_density'].fillna(0.0)
-        df['log_population_density'] = df['locality_population_density'].apply(np.log1p)
-        if df['log_population_density'].isna().any():
-            df['log_population_density'] = df['log_population_density'].fillna(df['log_population_density'].median())
+        # Use direct calculation to avoid numpy ufunc compatibility issues
+        df['log_population_density'] = np.log1p(df['locality_population_density'].values.astype(float))
+        if np.isnan(df['log_population_density']).any():
+            df['log_population_density'] = np.nan_to_num(df['log_population_density'], nan=0.0)
 
     # Ratio features
     if 'width_m' in df.columns and 'road_width_m' in df.columns:
