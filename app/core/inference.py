@@ -167,20 +167,20 @@ def build_row(meta, geo: GeoLookup, *,
     """
     error_log = []
     print(f"\n{'='*60}")
-    print(f"🚀 [BUILD_ROW v2.1] Called with street='{street}', locality='{locality}'")
+    print(f" [BUILD_ROW v2.1] Called with street='{street}', locality='{locality}'")
     print(f"{'='*60}")
     try:
         lat, lon, source = geo.geocode(street, locality)
         if lat is None:
             error_msg = f"Geocode returned None for street='{street}', locality='{locality}'"
             error_log.append(error_msg)
-            print(f"❌ {error_msg}")
+            print(f" {error_msg}")
             final_error = "\n".join(error_log) if error_log else "Geocoding failed"
             return None, final_error
     except Exception as e:
         error_msg = f"Geocode error: {str(e)}"
         error_log.append(error_msg)
-        print(f"❌ [BUILD_ROW] {error_msg}")
+        print(f" [BUILD_ROW] {error_msg}")
         import traceback
         traceback.print_exc()
         final_error = "\n".join(error_log) if error_log else "Geocoding exception"
@@ -189,11 +189,11 @@ def build_row(meta, geo: GeoLookup, *,
 
     try:
         dist_km = geo.distance_to_center(lat, lon)
-        print(f"✅ [BUILD_ROW] Distance calculated: {dist_km:.2f} km")
+        print(f" [BUILD_ROW] Distance calculated: {dist_km:.2f} km")
     except Exception as e:
         error_msg = f"Distance error: {str(e)}"
         error_log.append(error_msg)
-        print(f"❌ {error_msg}")
+        print(f" {error_msg}")
         final_error = "\n".join(error_log) if error_log else "Distance calculation failed"
         return None, final_error
 
@@ -201,7 +201,7 @@ def build_row(meta, geo: GeoLookup, *,
     try:
         poi_result = geo.poi_features(lat, lon)
         pois, cache_dist, poi_source = poi_result if len(poi_result) == 3 else (*poi_result, "cache")
-        print(f"✅ [BUILD_ROW] POI features loaded: source={poi_source}")
+        print(f" [BUILD_ROW] POI features loaded: source={poi_source}")
 
         def poi(col):
             v = pois.get(col) if pois else None
@@ -209,7 +209,7 @@ def build_row(meta, geo: GeoLookup, *,
     except Exception as e:
         error_msg = f"POI features error: {str(e)}"
         error_log.append(error_msg)
-        print(f"❌ {error_msg}")
+        print(f" {error_msg}")
         final_error = "\n".join(error_log) if error_log else "POI features error"
         return None, final_error
 
@@ -217,7 +217,7 @@ def build_row(meta, geo: GeoLookup, *,
     sq, dens = None, None
     try:
         sq, dens = geo.locality_stats(locality)
-        print(f"✅ [BUILD_ROW] Locality stats from geo: sq={sq}, dens={dens}")
+        print(f" [BUILD_ROW] Locality stats from geo: sq={sq}, dens={dens}")
     except Exception as e:
         print(f"[DEBUG] Geo lookup failed: {e}")
 
@@ -229,7 +229,7 @@ def build_row(meta, geo: GeoLookup, *,
                 sq = sq_db
             if dens_db is not None:
                 dens = dens_db
-            print(f"✅ [BUILD_ROW] Locality stats from Supabase: sq={sq}, dens={dens}")
+            print(f" [BUILD_ROW] Locality stats from Supabase: sq={sq}, dens={dens}")
         except Exception as e:
             print(f"[DEBUG] Supabase fallback failed: {e}")
 
@@ -287,6 +287,8 @@ def build_row(meta, geo: GeoLookup, *,
     # Run through preprocessing.preprocess() (single source of truth for 78 features)
     try:
         print(f"[DEBUG] Calling preprocess() with row_df shape={row_df.shape}")
+        print(f"[DEBUG] row_df columns: {row_df.columns.tolist()}")
+        print(f"[DEBUG] row_df values:\n{row_df.to_string()}")
         preprocess_func = _get_preprocess()
         preprocessed, _, _ = preprocess_func(row_df)
         print(f"[DEBUG] preprocess returned shape={preprocessed.shape if preprocessed is not None else None}")
