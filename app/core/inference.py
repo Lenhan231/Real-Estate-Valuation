@@ -60,9 +60,17 @@ def get_locality_density(locality: str, region: str) -> tuple:
         locality_lower = locality.lower().strip()
         print(f"[DEBUG] Querying Supabase for locality='{locality_lower}'")
 
+        # Remove prefix if already present
+        prefixes = ["phường ", "xã ", "thị trấn "]
+        locality_no_prefix = locality_lower
+        for prefix in prefixes:
+            if locality_no_prefix.startswith(prefix):
+                locality_no_prefix = locality_no_prefix[len(prefix):]
+                break
+
         # Try exact match first (with phường/xã prefix)
-        for prefix in ["phường ", "xã ", "thị trấn "]:
-            prefixed = prefix + locality_lower
+        for prefix in prefixes:
+            prefixed = prefix + locality_no_prefix
             print(f"[DEBUG] Trying exact match: '{prefixed}'")
             response = supabase.table("locality_density").select(
                 "locality_square,locality_population_density"
@@ -75,11 +83,11 @@ def get_locality_density(locality: str, region: str) -> tuple:
                     response.data[0].get("locality_population_density")
                 )
 
-        # Fallback to fuzzy match
-        print(f"[DEBUG] Trying fuzzy match: '%{locality_lower}%'")
+        # Fallback to fuzzy match (use locality without prefix)
+        print(f"[DEBUG] Trying fuzzy match: '%{locality_no_prefix}%'")
         response = supabase.table("locality_density").select(
             "locality_square,locality_population_density"
-        ).ilike("locality", f"%{locality_lower}%").execute()
+        ).ilike("locality", f"%{locality_no_prefix}%").execute()
 
         if response.data and len(response.data) > 0:
             matched_name = response.data[0]['locality']
@@ -353,6 +361,7 @@ def build_row(meta, geo: GeoLookup, *,
         row_dict = preprocessed.iloc[0].to_dict()
         row = {k: float(v) for k, v in row_dict.items() if k != 'price_vnd'}
         print(f"✅ [BUILD_ROW] Preprocessing successful, got {len(row)} features")
+        print(f"[DEBUG] Row dict sample: locality_square={row.get('locality_square')}, locality_population_density={row.get('locality_population_density')}")
     except Exception as e:
         error_msg = f"Preprocessing error: {str(e)}"
         error_log.append(error_msg)
