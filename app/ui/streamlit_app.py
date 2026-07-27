@@ -7,21 +7,27 @@ import traceback
 from pathlib import Path
 from dotenv import load_dotenv
 
+print("[STREAMLIT-STARTUP] Starting app initialization...", flush=True)
+
 try:
     # Setup path from PROJECT_ROOT only (before any module imports)
     # __file__ = app/ui/streamlit_app.py, so go up 3 levels to project root
     PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
     sys.path.insert(0, str(PROJECT_ROOT))
+    print(f"[STREAMLIT-STARTUP] PROJECT_ROOT: {PROJECT_ROOT}", flush=True)
 
     # Load environment variables
     try:
         load_dotenv(PROJECT_ROOT / ".env")
-        print("[STREAMLIT-STARTUP] ✓ .env loaded successfully")
+        print("[STREAMLIT-STARTUP] ✓ .env loaded successfully", flush=True)
     except Exception as e:
-        print(f"[STREAMLIT-STARTUP] ✗ Error loading .env: {e}")
+        print(f"[STREAMLIT-STARTUP] ✗ Error loading .env: {e}", flush=True)
 
+    print("[STREAMLIT-STARTUP] Importing pandas...", flush=True)
     import pandas as pd
+    print("[STREAMLIT-STARTUP] Importing streamlit...", flush=True)
     import streamlit as st
+    print("[STREAMLIT-STARTUP] Importing requests...", flush=True)
     import requests
     from requests.exceptions import RequestException
 
@@ -40,8 +46,13 @@ try:
     ROOT = PROJECT_ROOT
     BI_DATA_FILE = ROOT / "data" / "processed" / "model_training_data.csv"
 
+    print("[STREAMLIT-STARTUP] ✓ All imports successful!", flush=True)
+
 except Exception as e:
-    print(f"[STREAMLIT-STARTUP] ✗ FATAL ERROR during initialization:\n{traceback.format_exc()}")
+    error_msg = f"[STREAMLIT-STARTUP] ✗ FATAL ERROR:\n{traceback.format_exc()}"
+    print(error_msg, flush=True)
+    sys.stderr.write(error_msg + "\n")
+    sys.stderr.flush()
     sys.exit(1)
 
 st.set_page_config(
