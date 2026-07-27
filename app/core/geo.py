@@ -167,30 +167,8 @@ class GeoLookup:
             lat, lon = float(sub['lat'].median()), float(sub['lon'].median())
             return lat, lon, 'cache (đúng đường)'
 
-        # 2. Try Nominatim for addresses not in cache (accuracy > speed)
-        if street_n or locality_n:
-            try:
-                from geopy.geocoders import Nominatim
-                geocoder = Nominatim(user_agent='hpp_app', timeout=3)
-
-                # Try locality only first (faster, more reliable)
-                query = f"{locality_n}, Vietnam"
-                print(f"  [GEO] Nominatim: {query}")
-                loc = geocoder.geocode(query)
-                if loc:
-                    print(f"  [GEO] ✓ {loc.latitude:.4f}, {loc.longitude:.4f}")
-                    return float(loc.latitude), float(loc.longitude), 'Nominatim (locality)'
-
-                # If locality didn't work, try street+locality
-                if street_n:
-                    query = f"{street_n}, {locality_n}, Vietnam"
-                    print(f"  [GEO] Nominatim: {query}")
-                    loc = geocoder.geocode(query)
-                    if loc:
-                        print(f"  [GEO] ✓ {loc.latitude:.4f}, {loc.longitude:.4f}")
-                        return float(loc.latitude), float(loc.longitude), 'Nominatim (street)'
-            except Exception as e:
-                print(f"  [GEO] Nominatim timeout/error: {str(e)[:50]}")
+        # 2. Skip Nominatim (too slow for demo/production)
+        # Trade-off: Speed > accuracy for now. Nominatim adds 3-5s per request.
 
         # 3. Fallback to locality center (tâm phường)
         # Try without prefix first, then with prefix
