@@ -31,5 +31,5 @@ COPY .streamlit/config.toml /root/.streamlit/config.toml
 # Expose Streamlit port
 EXPOSE 8501
 
-# Run Streamlit with headless mode
-CMD ["streamlit", "run", "app/ui/streamlit_app.py", "--server.headless=true"]
+# Run Streamlit with headless mode and verbose logging
+CMD ["python", "-u", "-c", "import sys; print(f'Python startup: {sys.version}'); import streamlit.cli; streamlit.cli.main(['run', 'app/ui/streamlit_app.py', '--server.headless=true'])"]
