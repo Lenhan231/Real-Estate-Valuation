@@ -233,8 +233,9 @@ def build_row(meta, geo: GeoLookup, *,
         except Exception as e:
             print(f"[DEBUG] Supabase fallback failed: {e}")
 
-    loc_sq = sq
-    loc_dens = dens
+    # Default to 0 if still None (prevents filtering in preprocessing)
+    loc_sq = sq if sq is not None else 0.0
+    loc_dens = dens if dens is not None else 0.0
 
     # Build single-row DataFrame to pass through preprocessing.preprocess()
     # This reuses the exact feature engineering logic from training
@@ -245,7 +246,7 @@ def build_row(meta, geo: GeoLookup, *,
         "property_type": property_type,
         "legal_status": legal_status,
         "direction": direction,
-        "area_m2": float(area_m2),
+        "area_m2": float(area_m2) if float(area_m2) > 0 else 100.0,  # Default 100m² if not provided
         "num_floors": float(num_floors) if num_floors is not None else None,
         "num_bedrooms": float(num_bedrooms) if num_bedrooms is not None else None,
         "road_width_m": float(road_width_m) if road_width_m is not None else None,
