@@ -167,16 +167,32 @@ class GeoLookup:
             lat, lon = float(sub['lat'].median()), float(sub['lon'].median())
             return lat, lon, 'cache (đúng đường)'
 
-        # 2. Try Nominatim for new streets not in cache
-        if street_n:
+        # 2. Try Nominatim for new streets not in cache (try locality first, then with street)
+        if street_n or locality_n:
             try:
                 from geopy.geocoders import Nominatim
                 geocoder = Nominatim(user_agent='hpp_app', timeout=5)
-                loc = geocoder.geocode(f"{street_n}, {locality_n}, Hồ Chí Minh, Vietnam")
+
+                # Try locality only first (more reliable)
+                query = f"{locality_n}, Vietnam"
+                print(f"  [GEO] Trying Nominatim (locality): {query}")
+                loc = geocoder.geocode(query)
                 if loc:
-                    return float(loc.latitude), float(loc.longitude), 'Nominatim API'
+                    print(f"  [GEO] ✓ Nominatim result: {loc.latitude}, {loc.longitude}")
+                    return float(loc.latitude), float(loc.longitude), 'Nominatim API (locality)'
+
+                # If no luck, try with street too
+                if street_n:
+                    query = f"{street_n}, {locality_n}, Vietnam"
+                    print(f"  [GEO] Trying Nominatim (street+locality): {query}")
+                    loc = geocoder.geocode(query)
+                    if loc:
+                        print(f"  [GEO] ✓ Nominatim result: {loc.latitude}, {loc.longitude}")
+                        return float(loc.latitude), float(loc.longitude), 'Nominatim API (street)'
+
+                print(f"  [GEO] ✗ Nominatim returned None for both queries")
             except Exception as e:
-                pass  # Silently fail, try fallback
+                print(f"  [GEO] Nominatim error: {e}")
 
         # 3. Fallback to locality center (tâm phường) - SHOULD ALWAYS WORK
         sub = self.df[self.df['locality_n'] == locality_n]
