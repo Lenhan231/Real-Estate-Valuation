@@ -275,7 +275,31 @@ def main():
 
         models[f"{price_bin}"] = models_dict
 
-    print(f"  ✓ Training complete ({time.time() - t0:.1f}s)")
+    print(f"  ✓ Tier-based training complete ({time.time() - t0:.1f}s)")
+
+    # Train global models (no price tier split) for ensemble diversity
+    print("\n[4B/5] Training Global Ensemble (no tier split)...")
+    t0_global = time.time()
+    global_models, global_val_errors = train_ensemble_3models(X_train, y_log_train, X_val, y_log_val, "global")
+
+    # Evaluate global models on test set
+    y_log_pred_global, _ = ensemble_predictions(global_models, X_test, global_val_errors)
+    global_y_pred_all = np.expm1(np.clip(y_log_pred_global, 0, None))
+    global_y_test_all = np.expm1(y_log_test.values)
+
+    global_mape = mean_absolute_percentage_error(global_y_test_all, global_y_pred_all)
+    global_rmse = np.sqrt(mean_squared_error(global_y_test_all, global_y_pred_all))
+    global_r2 = r2_score(global_y_test_all, global_y_pred_all)
+
+    print(f"  Global MAPE: {global_mape:.2f}% | RMSE: ${global_rmse/1e9:.2f}B | R²: {global_r2:.4f}")
+
+    # Save global models
+    for model_name, model in global_models.items():
+        file_name = f"{model_name}_global.pkl"
+        model_path = MODEL_DIR / file_name
+        joblib.dump(model, model_path)
+
+    print(f"  ✓ Global training complete ({time.time() - t0_global:.1f}s)")
 
     # Save locality encoding maps for inference
     print("  Saving locality encoding maps...")
