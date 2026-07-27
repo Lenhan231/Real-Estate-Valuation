@@ -3,40 +3,46 @@ Chạy: streamlit run app/app.py
 """
 import sys
 import os
+import traceback
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Setup path from PROJECT_ROOT only (before any module imports)
-# __file__ = app/ui/streamlit_app.py, so go up 3 levels to project root
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
-# Load environment variables
 try:
-    load_dotenv(PROJECT_ROOT / ".env")
-    print("[STREAMLIT-STARTUP] ✓ .env loaded successfully")
+    # Setup path from PROJECT_ROOT only (before any module imports)
+    # __file__ = app/ui/streamlit_app.py, so go up 3 levels to project root
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+    # Load environment variables
+    try:
+        load_dotenv(PROJECT_ROOT / ".env")
+        print("[STREAMLIT-STARTUP] ✓ .env loaded successfully")
+    except Exception as e:
+        print(f"[STREAMLIT-STARTUP] ✗ Error loading .env: {e}")
+
+    import pandas as pd
+    import streamlit as st
+    import requests
+    from requests.exceptions import RequestException
+
+    try:
+        import pydeck as pdk
+    except Exception:
+        pdk = None
+
+    # API Configuration (use environment variable for deployed backend, fallback to localhost for dev)
+    API_BASE_URL = os.getenv("API_URL", "http://localhost:8000")
+    API_TIMEOUT = 30
+
+    # Feature version (same as app/core/constants.py)
+    FEATURE_VERSION = 1
+
+    ROOT = PROJECT_ROOT
+    BI_DATA_FILE = ROOT / "data" / "processed" / "model_training_data.csv"
+
 except Exception as e:
-    print(f"[STREAMLIT-STARTUP] ✗ Error loading .env: {e}")
-
-import pandas as pd
-import streamlit as st
-import requests
-from requests.exceptions import RequestException
-
-try:
-    import pydeck as pdk
-except Exception:
-    pdk = None
-
-# API Configuration (use environment variable for deployed backend, fallback to localhost for dev)
-API_BASE_URL = os.getenv("API_URL", "http://localhost:8000")
-API_TIMEOUT = 30
-
-# Feature version (same as app/core/constants.py)
-FEATURE_VERSION = 1
-
-ROOT = PROJECT_ROOT
-BI_DATA_FILE = ROOT / "data" / "processed" / "model_training_data.csv"
+    print(f"[STREAMLIT-STARTUP] ✗ FATAL ERROR during initialization:\n{traceback.format_exc()}")
+    sys.exit(1)
 
 st.set_page_config(
     page_title="Định giá & Phân tích BĐS TP.HCM",
