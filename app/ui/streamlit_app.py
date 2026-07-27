@@ -11,12 +11,16 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# Load environment variables
+# Load environment variables (non-blocking)
 try:
-    load_dotenv(PROJECT_ROOT / ".env")
-    print("[STREAMLIT-STARTUP] ✓ .env loaded successfully")
+    env_path = PROJECT_ROOT / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+        print("[STREAMLIT-STARTUP] ✓ .env loaded successfully")
+    else:
+        print("[STREAMLIT-STARTUP] ℹ️  .env not found (using defaults)")
 except Exception as e:
-    print(f"[STREAMLIT-STARTUP] ✗ Error loading .env: {e}")
+    print(f"[STREAMLIT-STARTUP] ⚠️  Error loading .env: {e} (continuing anyway)")
 
 import pandas as pd
 import streamlit as st
