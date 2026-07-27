@@ -15,9 +15,48 @@ from datetime import datetime
 import joblib
 import numpy as np
 import pandas as pd
+import os
+from supabase import create_client
 
-# Lazy import of preprocessing to avoid import errors in deployment
+# Lazy imports
 _preprocess_cache = None
+_supabase_client = None
+
+def _get_supabase():
+    """Lazily load Supabase client."""
+    global _supabase_client
+    if _supabase_client is None:
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+        if supabase_url and supabase_key:
+            _supabase_client = create_client(supabase_url, supabase_key)
+        else:
+            print("[WARN] Supabase credentials not found")
+    return _supabase_client
+
+def get_locality_density(locality: str, region: str) -> tuple:
+    """Query locality population density from Supabase.
+
+    Returns: (locality_square, locality_population_density) or (None, None)
+    """
+    try:
+        supabase = _get_supabase()
+        if not supabase:
+            return None, None
+
+        response = supabase.table("locality_density").select(
+            "locality_square,locality_population_density"
+        ).eq("locality", locality.lower()).eq("region", region.lower()).single().execute()
+
+        if response.data:
+            return (
+                response.data.get("locality_square"),
+                response.data.get("locality_population_density")
+            )
+    except Exception as e:
+        print(f"[DEBUG] Supabase query failed: {e}")
+
+    return None, None
 
 def _get_preprocess():
     """Lazily load preprocessing function."""
@@ -33,7 +72,6 @@ def _get_preprocess():
             spec.loader.exec_module(shared_preprocessing)
             _preprocess_cache = shared_preprocessing.preprocess
         else:
-            import os
             print(f"[DEBUG] Directory contents: {os.listdir(_preprocess_path.parent) if _preprocess_path.parent.exists() else 'parent not found'}")
             raise ImportError(f"Could not find preprocessing module at {_preprocess_path}")
     return _preprocess_cache
@@ -175,16 +213,27 @@ def build_row(meta, geo: GeoLookup, *,
         final_error = "\n".join(error_log) if error_log else "POI features error"
         return None, final_error
 
-    # Locality stats (geo lookup - may return None)
+    # Locality stats: try geo lookup first, fallback to Supabase
+    sq, dens = None, None
     try:
         sq, dens = geo.locality_stats(locality)
-        print(f"✅ [BUILD_ROW] Locality stats: sq={sq}, dens={dens}")
+        print(f"✅ [BUILD_ROW] Locality stats from geo: sq={sq}, dens={dens}")
     except Exception as e:
-        error_msg = f"Locality stats error: {str(e)}"
-        error_log.append(error_msg)
-        print(f"❌ [BUILD_ROW] {error_msg}")
-        sq, dens = None, None
-    loc_sq = sq  # Pass None, let preprocessing handle imputation
+        print(f"[DEBUG] Geo lookup failed: {e}")
+
+    # Fallback to Supabase if geo lookup didn't provide data
+    if sq is None or dens is None:
+        try:
+            sq_db, dens_db = get_locality_density(locality, locality)  # Try direct locality match
+            if sq_db is not None:
+                sq = sq_db
+            if dens_db is not None:
+                dens = dens_db
+            print(f"✅ [BUILD_ROW] Locality stats from Supabase: sq={sq}, dens={dens}")
+        except Exception as e:
+            print(f"[DEBUG] Supabase fallback failed: {e}")
+
+    loc_sq = sq
     loc_dens = dens
 
     # Build single-row DataFrame to pass through preprocessing.preprocess()
