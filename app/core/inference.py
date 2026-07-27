@@ -44,14 +44,17 @@ def get_locality_density(locality: str, region: str) -> tuple:
         if not supabase:
             return None, None
 
+        # Try to find by locality only (case-insensitive)
+        locality_lower = locality.lower().strip()
         response = supabase.table("locality_density").select(
             "locality_square,locality_population_density"
-        ).eq("locality", locality.lower()).eq("region", region.lower()).single().execute()
+        ).ilike("locality", f"%{locality_lower}%").execute()
 
-        if response.data:
+        if response.data and len(response.data) > 0:
+            # Take first match
             return (
-                response.data.get("locality_square"),
-                response.data.get("locality_population_density")
+                response.data[0].get("locality_square"),
+                response.data[0].get("locality_population_density")
             )
     except Exception as e:
         print(f"[DEBUG] Supabase query failed: {e}")
