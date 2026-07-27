@@ -350,12 +350,10 @@ def build_row(meta, geo: GeoLookup, *,
 
 
 def predict_price(models, meta, row, price_tier) -> float:
-    """Ensemble 6 models: 3 tier-specific + 3 global (no tier split).
-
-    Returns price in VND. Higher confidence with diverse models.
+    """Route to price tier, ensemble 3 models (LGBM+XGB+CatBoost), return price in VND.
 
     Args:
-        models: Loaded model dict (9 models: 3 tiers × 3 algos + 3 global)
+        models: Loaded model dict
         meta: Model metadata (includes feature_names)
         row: Feature dict (preprocessed)
         price_tier: 'low' (0-5B), 'mid' (5-20B), or 'high' (20B+)
@@ -363,13 +361,11 @@ def predict_price(models, meta, row, price_tier) -> float:
     Returns:
         Predicted price in VND
     """
-    # v2.7: 6-model ensemble (3-tier + 3-global)
-    tier_keys = [f"lgbm_{price_tier}", f"xgb_{price_tier}", f"cb_{price_tier}"]
-    global_keys = ["lgbm_global", "xgb_global", "cb_global"]
-    all_keys = tier_keys + global_keys
+    # v2.6: 3-tier (price only), 3 models per tier
+    lgbm_key = f"lgbm_{price_tier}"
+    xgb_key = f"xgb_{price_tier}"
+    cb_key = f"cb_{price_tier}"
 
-    # Check at least tier models exist
-    lgbm_key = tier_keys[0]
     if lgbm_key not in models:
         raise ValueError(f"Model {lgbm_key} not found. Available: {list(models.keys())}")
 
@@ -389,38 +385,33 @@ def predict_price(models, meta, row, price_tier) -> float:
     X = pd.DataFrame([X_dict])
     X = X[feat]  # Reorder to match training feature order
 
-    # Ensemble: average 6 models' log predictions (3 tier-specific + 3 global)
+    # Ensemble: average 3 models' log predictions
     predictions = []
-    for key in all_keys:
-        if key not in models:
-            print(f"[DEBUG] Model {key} not found, skipping")
-            continue
+    for key in [lgbm_key, xgb_key, cb_key]:
+        if key in models:
+            model = models[key]
 
-        model = models[key]
+            # Get model's expected features
+            try:
+                if hasattr(model, 'feature_names_in_'):
+                    model_features = list(model.feature_names_in_)
+                elif hasattr(model, 'feature_name'):
+                    model_features = list(model.feature_name())
+                else:
+                    model_features = list(X.columns)
 
-        # Get model's expected features
-        try:
-            if hasattr(model, 'feature_names_in_'):
-                model_features = list(model.feature_names_in_)
-            elif hasattr(model, 'feature_name'):
-                model_features = list(model.feature_name())
-            else:
-                model_features = list(X.columns)
+                # Use only features model expects
+                X_pred = X[[f for f in model_features if f in X.columns]]
+            except:
+                X_pred = X
 
-            # Use only features model expects
-            X_pred = X[[f for f in model_features if f in X.columns]]
-        except:
-            X_pred = X
-
-        pred_log = float(model.predict(X_pred)[0])
-        predictions.append(pred_log)
-        print(f"[DEBUG] {key}: {np.expm1(pred_log)/1e9:.2f}B")
+            pred_log = float(model.predict(X_pred)[0])
+            predictions.append(pred_log)
 
     if not predictions:
-        raise ValueError(f"No models available (checked {all_keys})")
+        raise ValueError(f"No models available for {price_tier}")
 
     pred_log = np.mean(predictions)  # Average in log space
     pred = float(np.expm1(pred_log))  # Back to VND
 
-    print(f"[DEBUG] Ensemble ({len(predictions)} models): {pred/1e9:.2f}B")
     return pred
