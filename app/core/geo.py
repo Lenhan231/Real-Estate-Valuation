@@ -63,6 +63,7 @@ class GeoLookup:
     def __init__(self):
         # Load from Supabase only
         self.data_source = "Supabase"
+        self.df = None
 
         print("\n=== GeoLookup Init ===")
         print(f"DENSITY_CSV: {DENSITY_CSV}")
@@ -70,8 +71,8 @@ class GeoLookup:
         df = self._load_from_supabase()
 
         if df is None or df.empty:
-            print(f"❌ ERROR: df={df}, empty={df.empty if df is not None else 'N/A'}")
-            raise FileNotFoundError("No data loaded from Supabase")
+            print(f"⚠️  No data from Supabase, Geo features will be unavailable")
+            return
 
         print(f"✅ Loaded {len(df)} rows, source={self.data_source}")
 
