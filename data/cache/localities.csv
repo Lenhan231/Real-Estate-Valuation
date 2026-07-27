@@ -1,3 +1,4 @@
-street,locality,region,old_address,lat,lon
-đường trương đình hội,phường phú định,hồ chí minh,"đường trương đình hội, phường 16, quận 8, hồ chí minh",10.7181265,106.6223149
-đường nguyễn thị xiếu,phường tân thuận,hồ chí minh,"đường nguyễn thị xiếu, phường tân thuận tây, quận 7, hồ chí minh",10.7529557,106.7209951
+street,locality,region,old_address,lat,lon,nearest_school_km,school_count_3km,nearest_hospital_km,hospital_count_5km,nearest_marketplace_km,marketplace_count_3km,nearest_supermarket_km,supermarket_count_3km,nearest_mall_km,mall_count_3km,nearest_bus_stop_km,bus_stop_count_1km,metro_count_5km
+đường trương đình hội,phường phú định,hồ chí minh,"đường trương đình hội, phường 16, quận 8, hồ chí minh",10.7181265,106.6223149,,,,,,,,,,,,,
+đường nguyễn thị xiếu,phường tân thuận,hồ chí minh,"đường nguyễn thị xiếu, phường tân thuận tây, quận 7, hồ chí minh",10.7529557,106.7209951,,,,,,,,,,,,,
+,,,,11.5328414,107.7814033,0.13210502263372134,1.0,2.975210394843238,2.0,0.7292035367900692,1.0,2.6374071220930944,1.0,3.8348825576186134,0.0,1.8915828382198683,0.0,0.0
