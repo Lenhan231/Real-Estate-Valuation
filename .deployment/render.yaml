@@ -2,7 +2,8 @@ services:
   - type: web
     name: real-estate-valuation-api
     runtime: docker
-    dockerfilePath: Dockerfile
+    dockerfilePath: ./Dockerfile
+    rootDir: .deployment
     autoDeploy: true
     envVars:
       - key: ENV
@@ -15,7 +16,8 @@ services:
   - type: web
     name: real-estate-valuation-streamlit
     runtime: docker
-    dockerfilePath: .deployment/Dockerfile.streamlit
+    dockerfilePath: ./Dockerfile.streamlit
+    rootDir: .deployment
     autoDeploy: true
     envVars:
       - key: API_URL
