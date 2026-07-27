@@ -28,12 +28,8 @@ COPY . .
 RUN mkdir -p /root/.streamlit
 COPY .streamlit/config.toml /root/.streamlit/config.toml
 
-# Debug: verify app file exists
-RUN ls -la app/ui/streamlit_app.py || (echo "ERROR: streamlit_app.py not found!" && exit 1)
-RUN echo "Working directory: $(pwd)" && ls -la app/
-
 # Expose Streamlit port
 EXPOSE 8501
 
-# Run Streamlit with headless mode
-CMD ["streamlit", "run", "app/ui/streamlit_app.py", "--server.headless=true"]
+# Run Streamlit (use environment variables from Render config)
+CMD ["streamlit", "run", "app/ui/streamlit_app.py"]
