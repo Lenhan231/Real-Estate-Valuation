@@ -1,10 +1,10 @@
 # Build stage
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt requirements-dev.txt ./
+# Install dependencies (production only)
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Runtime stage
