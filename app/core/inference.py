@@ -18,6 +18,18 @@ import pandas as pd
 import os
 from supabase import create_client
 
+# Setup logging
+import logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(Path(__file__).parent.parent.parent / "inference.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # Lazy imports
 _preprocess_cache = None
 _supabase_client = None
@@ -42,23 +54,49 @@ def get_locality_density(locality: str, region: str) -> tuple:
     try:
         supabase = _get_supabase()
         if not supabase:
+            print(f"[DEBUG] Supabase not available")
             return None, None
 
-        # Try to find by locality only (case-insensitive)
         locality_lower = locality.lower().strip()
+        print(f"[DEBUG] Querying Supabase for locality='{locality_lower}'")
+
+        # Try exact match first (with phường/xã prefix)
+        for prefix in ["phường ", "xã ", "thị trấn "]:
+            prefixed = prefix + locality_lower
+            print(f"[DEBUG] Trying exact match: '{prefixed}'")
+            response = supabase.table("locality_density").select(
+                "locality_square,locality_population_density"
+            ).eq("locality", prefixed).execute()
+
+            if response.data and len(response.data) > 0:
+                print(f"[DEBUG] ✓ Supabase exact match: {prefixed} → dens={response.data[0].get('locality_population_density')}")
+                return (
+                    response.data[0].get("locality_square"),
+                    response.data[0].get("locality_population_density")
+                )
+
+        # Fallback to fuzzy match
+        print(f"[DEBUG] Trying fuzzy match: '%{locality_lower}%'")
         response = supabase.table("locality_density").select(
             "locality_square,locality_population_density"
         ).ilike("locality", f"%{locality_lower}%").execute()
 
         if response.data and len(response.data) > 0:
-            # Take first match
+            matched_name = response.data[0]['locality']
+            matched_dens = response.data[0].get('locality_population_density')
+            print(f"[DEBUG] ✓ Supabase fuzzy match: '{matched_name}' → dens={matched_dens}")
             return (
                 response.data[0].get("locality_square"),
-                response.data[0].get("locality_population_density")
+                matched_dens
             )
+        else:
+            print(f"[DEBUG] ✗ No fuzzy match found for '%{locality_lower}%'")
     except Exception as e:
         print(f"[DEBUG] Supabase query failed: {e}")
+        import traceback
+        traceback.print_exc()
 
+    print(f"[DEBUG] Returning None, None")
     return None, None
 
 def _get_preprocess():
@@ -218,27 +256,35 @@ def build_row(meta, geo: GeoLookup, *,
 
     # Locality stats: try geo lookup first, fallback to Supabase
     sq, dens = None, None
+    print(f" [BUILD_ROW] Attempting locality stats lookup for '{locality}'")
     try:
         sq, dens = geo.locality_stats(locality)
-        print(f" [BUILD_ROW] Locality stats from geo: sq={sq}, dens={dens}")
+        print(f" [BUILD_ROW] ✓ Locality stats from geo: sq={sq}, dens={dens}")
     except Exception as e:
-        print(f"[DEBUG] Geo lookup failed: {e}")
+        print(f" [BUILD_ROW] ✗ Geo lookup failed: {e}")
 
     # Fallback to Supabase if geo lookup didn't provide data
     if sq is None or dens is None:
+        print(f" [BUILD_ROW] Fallback to Supabase (sq={sq}, dens={dens})")
         try:
-            sq_db, dens_db = get_locality_density(locality, locality)  # Try direct locality match
+            sq_db, dens_db = get_locality_density(locality, locality)
+            print(f" [BUILD_ROW] Supabase response: sq_db={sq_db}, dens_db={dens_db}")
             if sq_db is not None:
                 sq = sq_db
+                print(f" [BUILD_ROW] Updated sq to {sq}")
             if dens_db is not None:
                 dens = dens_db
-            print(f" [BUILD_ROW] Locality stats from Supabase: sq={sq}, dens={dens}")
+                print(f" [BUILD_ROW] Updated dens to {dens}")
         except Exception as e:
-            print(f"[DEBUG] Supabase fallback failed: {e}")
+            print(f" [BUILD_ROW] ✗ Supabase fallback failed: {e}")
+            import traceback
+            traceback.print_exc()
 
+    print(f" [BUILD_ROW] Final locality stats: sq={sq}, dens={dens}")
     # Default to 0 if still None (prevents filtering in preprocessing)
     loc_sq = sq if sq is not None else 0.0
     loc_dens = dens if dens is not None else 0.0
+    print(f" [BUILD_ROW] After defaulting to 0: loc_sq={loc_sq}, loc_dens={loc_dens}")
 
     # Build single-row DataFrame to pass through preprocessing.preprocess()
     # This reuses the exact feature engineering logic from training

@@ -118,7 +118,20 @@ class GeoLookup:
                 if DENSITY_CSV.exists():
                     print(f"Merging with density data...")
                     density = pd.read_csv(DENSITY_CSV)
-                    df = df.merge(density, on=['locality', 'region'], how='left')
+
+                    # Normalize for merge: remove phường/xã prefix from CSV
+                    density['locality_normalized'] = density['locality'].str.replace(r'^(phường|xã|thị trấn)\s+', '', regex=True).str.strip()
+                    df['locality_normalized'] = df['locality'].str.lower().str.strip()
+                    density['region_normalized'] = density['region'].str.lower().str.strip()
+                    df['region_normalized'] = df['region'].str.lower().str.strip()
+
+                    df = df.merge(
+                        density[['locality_normalized', 'region_normalized', 'locality_square', 'locality_population_density']],
+                        left_on=['locality_normalized', 'region_normalized'],
+                        right_on=['locality_normalized', 'region_normalized'],
+                        how='left'
+                    )
+                    df = df.drop(columns=['locality_normalized', 'region_normalized'], errors='ignore')
                     print(f"  ✅ Merged, now {len(df)} rows with density features")
 
                 return df
