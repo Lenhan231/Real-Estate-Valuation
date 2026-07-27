@@ -31,8 +31,17 @@ try:
 except Exception:
     pdk = None
 
-# Import from consolidated app.core module
-from app.core.geo import GeoLookup
+# Lazy import: don't load GeoLookup on startup (it fetches from Supabase)
+# Only load when needed in prediction flow
+_geo_cache = None
+
+def get_geo_lookup():
+    """Lazy load GeoLookup on first use (avoid blocking Streamlit startup)."""
+    global _geo_cache
+    if _geo_cache is None:
+        from app.core.geo import GeoLookup
+        _geo_cache = GeoLookup()
+    return _geo_cache
 
 # API Configuration (use environment variable for deployed backend, fallback to localhost for dev)
 API_BASE_URL = os.getenv("API_URL", "http://localhost:8000")
@@ -136,7 +145,8 @@ def api_localities():
 # ---------------------------------------------------------------------------
 @st.cache_resource
 def load_geo():
-    return GeoLookup()
+    """Load GeoLookup (cached after first call)."""
+    return get_geo_lookup()
 
 @st.cache_data(show_spinner=False)
 def load_bi_data():
