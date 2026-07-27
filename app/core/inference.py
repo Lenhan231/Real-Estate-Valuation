@@ -245,7 +245,7 @@ def build_row(meta, geo: GeoLookup, *,
     # Note: Pass None for missing values so preprocessing can apply hierarchical imputation
     row_df = pd.DataFrame([{
         "listing_id": 0,
-        "price_vnd": 10e9,  # Dummy price (10B - within preprocessing range of 2-50B)
+        "price_vnd": 15e9,  # Dummy price (15B - satisfies price/sqm filter: 30-800/m²)
         "property_type": property_type,
         "legal_status": legal_status,
         "direction": direction,
