@@ -27,16 +27,29 @@ def preprocess(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
     df = df.drop('created_at', axis=1, errors='ignore')
 
     # ===== OUTLIER FILTERING =====
+    # Filter price 
     if 'price_vnd' in df.columns:
         df = df.dropna(subset=['price_vnd'])
         price_b = df['price_vnd'] / 1e9
-        df = df[
-            (price_b >= 2.0) & (price_b <= 50.0) &
-            (df['area_m2'].isna() | df['area_m2'].between(15, 500) if 'area_m2' in df.columns else True)
-        ]
-        if 'area_m2' in df.columns:
-            price_sqm = df['price_vnd'] / 1e6 / df['area_m2']
-            df = df[price_sqm.isna() | ((price_sqm >= 30) & (price_sqm <= 800))]
+        df = df[(price_b >= 2.0) & (price_b <= 50.0)]
+
+    # Filter area 
+    if 'area_m2' in df.columns:
+        df = df[df['area_m2'].between(15, 500)]
+
+    # Filter price_per_sqm 
+    if 'price_vnd' in df.columns and 'area_m2' in df.columns:
+        price_sqm = df['price_vnd'] / (1e6 * df['area_m2'])
+        df = df[(price_sqm.isna()) | ((price_sqm >= 30) & (price_sqm <= 800))]
+
+    # Filter width & length, road width
+    df = df[df["width_m"].between(2, 20)]
+    df = df[df["length_m"].between(5, 60)]
+    df = df[df["road_width_m"].between(1, 50)]
+
+    # Filter num_bedrooms & num_floors
+    df = df[df["num_bedrooms"].between(0, 10)]
+    df = df[df["num_floors"].between(1, 10)]
 
     # ===== TEMPORAL FEATURES =====
     if "post_day" in df.columns:
@@ -332,3 +345,77 @@ def add_locality_features(X_train, X_test, df, train_idx, test_idx, y_train):
     X_test['price_per_sqm_market'] = locality_test.map(locality_sqm_map).fillna(global_sqm).values
 
     return X_train, X_test
+
+
+# ============================================================================
+# NOTEBOOK UTILITIES
+# ============================================================================
+
+def setup_matplotlib():
+    """Configure matplotlib for notebooks & scripts"""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    sns.set_style("whitegrid")
+    plt.rcParams['figure.figsize'] = (18, 12)
+    plt.rcParams['font.size'] = 10
+    return plt
+
+
+def get_data_paths(project_root=None):
+    """Get project data paths. If project_root not given, search upward for 'data' folder"""
+    from pathlib import Path
+    if project_root is None:
+        # Search upward from current file until we find a 'data' folder
+        current = Path(__file__).resolve().parent
+        while current != current.parent:
+            if (current / 'data').exists():
+                project_root = current
+                break
+            current = current.parent
+        if project_root is None:
+            project_root = Path.cwd()
+    else:
+        project_root = Path(project_root)
+
+    DATA_DIR = project_root / 'data'
+    VIZ_DIR = DATA_DIR / 'visualizations'
+    VIZ_DIR.mkdir(parents=True, exist_ok=True)
+    return project_root, DATA_DIR, VIZ_DIR
+
+
+def load_raw_data():
+    """Load raw data from Supabase"""
+    try:
+        from pipeline.supabase_handler import fetch_csv_from_supabase
+        df = fetch_csv_from_supabase("Raw_Features")
+        if len(df) > 0:
+            print(f"  ✓ Raw (Supabase): {df.shape}")
+            return df
+        else:
+            raise ValueError("No records from Supabase")
+    except Exception as e:
+        print(f"  ⚠ {e}")
+        return None
+
+
+def load_processed_data():
+    """Load processed training data. If not found, load raw + preprocess"""
+    _, DATA_DIR, _ = get_data_paths()
+    processed_path = DATA_DIR / 'processed/model_training_data.csv'
+
+    if processed_path.exists():
+        df = pd.read_csv(processed_path)
+        print(f"  ✓ Processed: {df.shape}")
+        return df
+    else:
+        print(f"  ⚠ {processed_path} not found")
+        print(f"  Loading raw data + preprocessing...")
+        df_raw = load_raw_data()
+        if df_raw is None:
+            raise FileNotFoundError(f"Processed data not found and cannot load raw data")
+        X, y, meta = preprocess(df_raw)
+        X['price_vnd'] = y
+        print(f"  ✓ Processed (on-the-fly): {X.shape}")
+        return X
