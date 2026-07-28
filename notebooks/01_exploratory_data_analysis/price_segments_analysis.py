@@ -2,23 +2,26 @@
 Figure 3: Data Distribution Across Price Segments (Low/Mid/High Tiers)
 Analyze how features vary across different price segments
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import pandas as pd
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import seaborn as sns
-from pathlib import Path
+from models.scripts.shared.preprocessing import setup_matplotlib, load_processed_data
 
-# Define paths
+plt = setup_matplotlib()
+
+# Get correct project root (parent of notebooks folder)
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = PROJECT_ROOT / 'data'
 VIZ_DIR = DATA_DIR / 'visualizations'
-VIZ_DIR.mkdir(exist_ok=True)
+VIZ_DIR.mkdir(parents=True, exist_ok=True)
 
-# Load processed data
-df = pd.read_csv(DATA_DIR / 'processed/model_training_data.csv')
-print(f"[Loading Data] {df.shape[0]:,} records")
+print(f"[DEBUG] VIZ_DIR: {VIZ_DIR}")
+print("[Loading Data]")
+df = load_processed_data()
+print(f"  {df.shape[0]:,} records")
 
 # Define price segments using custom bins
 # Low: 0-5B, Mid: 5-20B, High: >20B
@@ -63,9 +66,10 @@ ax2 = axes[1]
 data_to_plot = [df[df['price_tier'] == tier]['price_vnd'].dropna() / 1e9
                  for tier in ['Low', 'Mid', 'High']]
 
-bp = ax2.boxplot(data_to_plot, labels=['Low', 'Mid', 'High'], patch_artist=True,
+bp = ax2.boxplot(data_to_plot, patch_artist=True,
                  widths=0.6, showmeans=True,
                  meanprops=dict(marker='D', markerfacecolor='red', markersize=8))
+ax2.set_xticklabels(['Low', 'Mid', 'High'])
 
 for patch, tier in zip(bp['boxes'], ['Low', 'Mid', 'High']):
     patch.set_facecolor(tier_colors[tier])
@@ -135,9 +139,10 @@ for idx, feat in enumerate(key_features):
     # Prepare data for box plot
     data_to_plot = [df[df['price_tier'] == tier][feat].dropna() for tier in ['Low', 'Mid', 'High']]
 
-    bp = ax.boxplot(data_to_plot, labels=['Low', 'Mid', 'High'], patch_artist=True,
+    bp = ax.boxplot(data_to_plot, patch_artist=True,
                     widths=0.6, showmeans=True,
                     meanprops=dict(marker='D', markerfacecolor='red', markersize=6))
+    ax.set_xticklabels(['Low', 'Mid', 'High'])
 
     # Color boxes
     for patch, tier in zip(bp['boxes'], ['Low', 'Mid', 'High']):
