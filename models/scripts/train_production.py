@@ -222,6 +222,39 @@ def main():
     meta["features"] = list(X_train.columns)
     feature_names = meta["features"]
 
+    # Update W&B config with full hyperparameters and features
+    if args.wandb and WANDB_AVAILABLE:
+        try:
+            wandb.config.update({
+                "n_features": len(feature_names),
+                "feature_names": feature_names,
+                "dataset_size": len(X),
+                "train_samples": len(X_train),
+                "val_samples": len(X_val),
+                "test_samples": len(X_test),
+                "split_ratio": "64/16/20",
+                # LightGBM hyperparameters
+                "lgb_n_estimators": 1000,
+                "lgb_max_depth": 8,
+                "lgb_learning_rate": 0.05,
+                "lgb_subsample": 0.8,
+                "lgb_colsample_bytree": 0.8,
+                "lgb_reg_alpha": 0.1,
+                "lgb_reg_lambda": 1.0,
+                # XGBoost hyperparameters
+                "xgb_n_estimators": 1500,
+                "xgb_max_depth": 8,
+                "xgb_learning_rate": 0.03,
+                "xgb_subsample": 0.8,
+                "xgb_colsample_bytree": 0.8,
+                # CatBoost hyperparameters
+                "cb_iterations": 1500,
+                "cb_depth": 8,
+                "cb_learning_rate": 0.05,
+            })
+        except Exception as e:
+            print(f"⚠️  W&B config update failed: {e}")
+
     # Training
     print("\n[4/5] Training Price-Only Ensemble (3 tiers)...")
 
@@ -346,17 +379,71 @@ def main():
         json.dump(metrics_dict, f, indent=2)
     print(f"\n✓ Metrics saved to {metrics_path}")
 
-    # Log to W&B
+    # Calculate per-tier metrics for W&B
+    tier_metrics = {}
+    for price_bin in BIN_LABELS:
+        test_mask = pd.cut(test_prices, bins=BINS_VND, labels=BIN_LABELS) == price_bin
+        if test_mask.sum() > 0:
+            y_test_tier = global_y_test[test_mask]
+            y_pred_tier = global_y_pred[test_mask]
+            tier_mape = mean_absolute_percentage_error(y_test_tier, y_pred_tier)
+            tier_r2 = r2_score(y_test_tier, y_pred_tier)
+            tier_mae = mean_absolute_error(y_test_tier, y_pred_tier)
+            tier_rmse = np.sqrt(mean_squared_error(y_test_tier, y_pred_tier))
+            tier_metrics[price_bin] = {
+                "mape": tier_mape,
+                "r2": tier_r2,
+                "mae": tier_mae,
+                "rmse": tier_rmse,
+                "n_samples": test_mask.sum()
+            }
+
+    # Log to W&B (global + per-tier metrics, plots, model artifacts)
     if args.wandb and WANDB_AVAILABLE:
         try:
-            wandb.log({
-                "mape": mape,
-                "mae": mae,
-                "r2": r2,
-                "rmse": rmse,
-            })
+            log_dict = {
+                # Global metrics
+                "global/mape": mape,
+                "global/mae": mae,
+                "global/r2": r2,
+                "global/rmse": rmse,
+            }
+
+            # Per-tier metrics
+            for tier, metrics in tier_metrics.items():
+                log_dict[f"{tier}/mape"] = metrics["mape"]
+                log_dict[f"{tier}/r2"] = metrics["r2"]
+                log_dict[f"{tier}/mae"] = metrics["mae"]
+                log_dict[f"{tier}/rmse"] = metrics["rmse"]
+                log_dict[f"{tier}/samples"] = metrics["n_samples"]
+
+            # Log plots
+            feature_importance_path = PLOT_DIR / "feature_importance_production.png"
+            pred_vs_actual_path = PLOT_DIR / "pred_vs_actual_production.png"
+
+            if feature_importance_path.exists():
+                log_dict["visualizations/feature_importance"] = wandb.Image(str(feature_importance_path))
+                print(f"✓ Logged feature importance plot to W&B")
+            if pred_vs_actual_path.exists():
+                log_dict["visualizations/pred_vs_actual"] = wandb.Image(str(pred_vs_actual_path))
+                print(f"✓ Logged pred vs actual plot to W&B")
+
+            # Log model size
+            model_sizes = {}
+            total_size = 0
+            for pkl_file in MODEL_DIR.glob("*.pkl"):
+                file_size_mb = pkl_file.stat().st_size / (1024 * 1024)
+                model_sizes[pkl_file.name] = file_size_mb
+                total_size += file_size_mb
+            log_dict["model/total_size_mb"] = total_size
+
+            wandb.log(log_dict)
+            print(f"✓ Logged all metrics to W&B (model size: {total_size:.2f} MB)")
+
         except Exception as e:
             print(f"⚠️  W&B logging failed: {e}")
+            import traceback
+            traceback.print_exc()
 
     PLOT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -366,6 +453,17 @@ def main():
 
     plot_pred_vs_actual(global_y_test, global_y_pred, PLOT_DIR / "pred_vs_actual_production.png")
     print(f"✓ Plots saved to {PLOT_DIR}")
+
+    # Save model artifacts to W&B
+    if args.wandb and WANDB_AVAILABLE:
+        try:
+            for pkl_file in MODEL_DIR.glob("*.pkl"):
+                wandb.save(str(pkl_file), base_path=str(MODEL_DIR))
+            for json_file in MODEL_DIR.glob("*.json"):
+                wandb.save(str(json_file), base_path=str(MODEL_DIR))
+            print(f"✓ Model artifacts saved to W&B")
+        except Exception as e:
+            print(f"⚠️  Failed to save artifacts to W&B: {e}")
 
     print("\n✅ Production model training complete!")
     print(f"📊 Models saved to: {MODEL_DIR}")

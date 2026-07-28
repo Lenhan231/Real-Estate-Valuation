@@ -59,6 +59,7 @@ def _scrape_wiki_table(url: str) -> pd.DataFrame:
 
 
 def _clean_density_data(df: pd.DataFrame, locality_type: str, population_col: str, drop_cols: list) -> pd.DataFrame:
+    print(f"  Available columns: {list(df.columns)}")
     df = df[df["Thuộc tỉnh/thành phố"].isin(REGIONS)].copy()
 
     df["Thuộc tỉnh/thành phố"] = (
@@ -75,7 +76,7 @@ def _clean_density_data(df: pd.DataFrame, locality_type: str, population_col: st
         .str.lower()
     )
 
-    df = df.drop(columns=drop_cols)
+    df = df.drop(columns=drop_cols, errors='ignore')
 
     rename_cols = COLUMN_RENAME.copy()
     if population_col in rename_cols:
