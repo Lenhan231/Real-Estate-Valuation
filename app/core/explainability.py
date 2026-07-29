@@ -18,6 +18,8 @@ def get_feature_importance_from_model(models, meta):
             pass
 
     if importances:
+        # Aggregate importances across the loaded ensemble so the UI shows a global view,
+        # not a single-model explanation.
         all_features = set()
         for imp_dict in importances.values():
             all_features.update(imp_dict.keys())
