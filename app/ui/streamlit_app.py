@@ -6,6 +6,13 @@ import os
 import traceback
 from pathlib import Path
 from dotenv import load_dotenv
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.append(str(ROOT))
+
+from models.scripts.shared.preprocessing import preprocess
 
 print("[STREAMLIT-STARTUP] Starting app initialization...", flush=True)
 
@@ -188,8 +195,44 @@ def load_bi_data():
             return pd.DataFrame()
 
         df = df.dropna(subset=["lat", "lon", "price_vnd", "area_m2", "post_day"]).copy()
+
+        # Remove duplicates (from preprocess)
+        df = df.drop_duplicates(subset=['listing_id'], keep='first')
+
+        # Outlier filtering (from preprocess - data quality only, no feature engineering)
+        # Filter price: 2-50 billion VND
+        if 'price_vnd' in df.columns:
+            price_b = df['price_vnd'] / 1e9
+            df = df[(price_b >= 2.0) & (price_b <= 50.0)]
+
+        # Filter area: 15-500 m²
+        if 'area_m2' in df.columns:
+            df = df[df['area_m2'].between(15, 500)]
+
+        # Filter price per sqm: 30-800 million VND/m²
+        if 'price_vnd' in df.columns and 'area_m2' in df.columns:
+            price_sqm = df['price_vnd'] / (1e6 * df['area_m2'])
+            df = df[(price_sqm.isna()) | ((price_sqm >= 30) & (price_sqm <= 800))]
+
+        # Filter dimensions (if columns exist)
+        if 'width_m' in df.columns:
+            df = df[df["width_m"].between(2, 20)]
+        if 'length_m' in df.columns:
+            df = df[df["length_m"].between(5, 60)]
+        if 'road_width_m' in df.columns:
+            df = df[df["road_width_m"].between(1, 50)]
+
+        # Filter bedrooms & floors (if columns exist)
+        if 'num_bedrooms' in df.columns:
+            df = df[df["num_bedrooms"].between(0, 10)]
+        if 'num_floors' in df.columns:
+            df = df[df["num_floors"].between(1, 10)]
+
+        # Convert post_day to datetime
         df["post_day"] = pd.to_datetime(df["post_day"], errors="coerce")
         df = df.dropna(subset=["post_day"]).copy()
+
+        # Add BI computed columns
         df["price_billion_vnd"] = df["price_vnd"] / 1e9
         df["price_per_m2_million"] = (df["price_vnd"] / df["area_m2"]) / 1e6
         df["month"] = df["post_day"].dt.to_period("M").dt.to_timestamp()
@@ -1105,191 +1148,190 @@ with tab_analysis:
             if len(rank):
                 st.bar_chart(rank.set_index("locality")["median_price_per_m2_million"], use_container_width=True)
 
-    # ===== NEW BI VISUALIZATIONS =====
-    st.divider()
-    st.markdown("## 📈 Phân Tích Chi Tiết & So Sánh")
+            # ===== NEW BI VISUALIZATIONS =====
+            st.divider()
+            st.markdown("## 📈 Phân Tích Chi Tiết & So Sánh")
 
-    if not filt.empty:
-        # ===== VIZ 1: Property Type Comparison =====
-        viz1_col, viz2_col = st.columns(2)
+            if not filt.empty:
+                # ===== VIZ 1: Property Type Comparison =====
+                viz1_col, viz2_col = st.columns(2)
 
-        with viz1_col:
-            st.markdown("### 1️⃣ So Sánh Giá Theo Loại Nhà")
-            st.caption("Giá trung bình và số lượng listing theo loại nhà")
+                with viz1_col:
+                    st.markdown("### 1️⃣ So Sánh Giá Theo Loại Nhà")
+                    st.caption("Giá trung bình và số lượng listing theo loại nhà")
 
-            prop_type_analysis = (filt.groupby("property_type", as_index=False)
-                                 .agg(avg_price_billion=("price_billion_vnd", "mean"),
-                                      median_price_billion=("price_billion_vnd", "median"),
-                                      count=("price_billion_vnd", "size"),
-                                      avg_price_per_m2=("price_per_m2_million", "mean"))
-                                 .sort_values("avg_price_billion", ascending=False))
+                    prop_type_analysis = (filt.groupby("property_type", as_index=False)
+                                         .agg(avg_price_billion=("price_billion_vnd", "mean"),
+                                              median_price_billion=("price_billion_vnd", "median"),
+                                              count=("price_billion_vnd", "size"),
+                                              avg_price_per_m2=("price_per_m2_million", "mean"))
+                                         .sort_values("avg_price_billion", ascending=False))
 
-            if not prop_type_analysis.empty:
-                st.dataframe(
-                    prop_type_analysis[[
-                        "property_type", "avg_price_billion", "count"
-                    ]].round(2),
-                    hide_index=True,
-                    use_container_width=True
-                )
+                    if not prop_type_analysis.empty:
+                        st.dataframe(
+                            prop_type_analysis[[
+                                "property_type", "avg_price_billion", "count"
+                            ]].round(2),
+                            hide_index=True,
+                            use_container_width=True
+                        )
 
-                # Bar chart using altair for reliability
-                import altair as alt
-                chart_data = prop_type_analysis[["property_type", "avg_price_billion"]].copy()
-                chart_data.columns = ["Loại Nhà", "Giá Trung Bình (tỷ VND)"]
+                        # Bar chart using altair for reliability
+                        import altair as alt
+                        chart_data = prop_type_analysis[["property_type", "avg_price_billion"]].copy()
+                        chart_data.columns = ["Loại Nhà", "Giá Trung Bình (tỷ VND)"]
 
-                chart = alt.Chart(chart_data).mark_bar().encode(
-                    x=alt.X("Loại Nhà:N", title="Loại Nhà"),
-                    y=alt.Y("Giá Trung Bình (tỷ VND):Q", title="Giá (tỷ VND)"),
-                    color=alt.Color("Giá Trung Bình (tỷ VND):Q", scale=alt.Scale(scheme="viridis"))
-                ).properties(height=300).interactive()
+                        chart = alt.Chart(chart_data).mark_bar().encode(
+                            x=alt.X("Loại Nhà:N", title="Loại Nhà"),
+                            y=alt.Y("Giá Trung Bình (tỷ VND):Q", title="Giá (tỷ VND)"),
+                            color=alt.Color("Giá Trung Bình (tỷ VND):Q", scale=alt.Scale(scheme="viridis"))
+                        ).properties(height=300).interactive()
 
-                st.altair_chart(chart, use_container_width=True)
+                        st.altair_chart(chart, use_container_width=True)
+                    else:
+                        st.info("Không đủ dữ liệu loại nhà để phân tích")
+
+                # ===== VIZ 2: Area vs Price Scatter =====
+                with viz2_col:
+                    st.markdown("### 2️⃣ Mối Quan Hệ Diện Tích - Giá")
+                    st.caption("Scatter plot: Diện tích vs Giá (sắc độ = Giá/m²)")
+
+                    scatter_data = filt[["area_m2", "price_billion_vnd", "price_per_m2_million"]].dropna()
+
+                    if len(scatter_data) > 2:
+                        import altair as alt
+
+                        # Create scatter chart data
+                        scatter_chart = pd.DataFrame({
+                            "Diện Tích (m²)": scatter_data["area_m2"],
+                            "Giá (tỷ VND)": scatter_data["price_billion_vnd"],
+                            "Giá/m² (triệu)": scatter_data["price_per_m2_million"]
+                        })
+
+                        # Create Altair scatter plot
+                        chart = alt.Chart(scatter_chart).mark_circle(size=100).encode(
+                            x=alt.X("Diện Tích (m²):Q", title="Diện Tích (m²)"),
+                            y=alt.Y("Giá (tỷ VND):Q", title="Giá (tỷ VND)"),
+                            color=alt.Color("Giá/m² (triệu):Q", scale=alt.Scale(scheme="viridis"), title="Giá/m² (triệu)"),
+                            tooltip=["Diện Tích (m²)", "Giá (tỷ VND)", "Giá/m² (triệu)"]
+                        ).properties(height=300).interactive()
+
+                        st.altair_chart(chart, use_container_width=True)
+
+                        # Add correlation insight
+                        corr = scatter_data["area_m2"].corr(scatter_data["price_billion_vnd"])
+                        st.caption(f"📊 Correlation: {corr:.3f} " +
+                                 ("(Mạnh)" if abs(corr) > 0.7 else "(Trung bình)" if abs(corr) > 0.4 else "(Yếu)"))
+                    else:
+                        st.info("Không đủ dữ liệu để vẽ biểu đồ scatter")
+
+                st.divider()
+
+                # ===== VIZ 3: Price Distribution =====
+                dist_col, stats_col = st.columns([2, 1])
+
+                with dist_col:
+                    st.markdown("### 3️⃣ Phân Bố Giá (Histogram)")
+                    st.caption("Phân phối giá bán trong dữ liệu lọc")
+
+                    price_dist = filt["price_billion_vnd"].dropna()
+
+                    if len(price_dist) > 2:
+                        import altair as alt
+                        # Create histogram using pandas cut
+                        bins = 20
+                        hist_data = pd.cut(price_dist, bins=bins).value_counts().sort_index()
+
+                        hist_df = pd.DataFrame({
+                            "Khoảng Giá": [f"{interval.left:.1f}-{interval.right:.1f} tỷ" for interval in hist_data.index],
+                            "Số Lượng": hist_data.values
+                        })
+
+                        chart = alt.Chart(hist_df).mark_bar().encode(
+                            x=alt.X("Khoảng Giá:N", title="Khoảng Giá (tỷ VND)"),
+                            y=alt.Y("Số Lượng:Q", title="Số Lượng"),
+                            color=alt.value("#1f77b4")
+                        ).properties(height=300)
+
+                        st.altair_chart(chart, use_container_width=True)
+                    else:
+                        st.info("Không đủ dữ liệu để tạo histogram")
+
+                with stats_col:
+                    st.markdown("### 📊 Thống Kê Giá")
+                    st.caption("Các chỉ số phân bố giá")
+
+                    if not price_dist.empty:
+                        st.metric("Min", f"{price_dist.min():.2f} tỷ")
+                        st.metric("Q1 (25%)", f"{price_dist.quantile(0.25):.2f} tỷ")
+                        st.metric("Median", f"{price_dist.median():.2f} tỷ")
+                        st.metric("Q3 (75%)", f"{price_dist.quantile(0.75):.2f} tỷ")
+                        st.metric("Max", f"{price_dist.max():.2f} tỷ")
+                        st.metric("Std Dev", f"{price_dist.std():.2f} tỷ")
+
+                st.divider()
+
+                # ===== VIZ 4: Amenities Impact (using proxy metrics from available data) =====
+                st.markdown("### 4️⃣ Phân Tích Thuộc Tính Ảnh Hưởng Giá")
+                st.caption("So sánh giá theo các thuộc tính có sẵn trong dữ liệu")
+
+                amenity_col1, amenity_col2 = st.columns(2)
+
+                with amenity_col1:
+                    st.markdown("**By Floor Count Impact**")
+
+                    if "num_floors" in filt.columns:
+                        floor_analysis = (filt.groupby("num_floors", as_index=False)
+                                         .agg(median_price=("price_billion_vnd", "median"),
+                                              avg_price_per_m2=("price_per_m2_million", "mean"),
+                                              count=("price_billion_vnd", "size"))
+                                         .sort_values("num_floors"))
+
+                        if len(floor_analysis) > 0:
+                            import altair as alt
+                            floor_chart = pd.DataFrame({
+                                "Số Tầng": floor_analysis["num_floors"].astype(str),
+                                "Giá Trung Vị (tỷ)": floor_analysis["median_price"]
+                            })
+                            chart = alt.Chart(floor_chart).mark_bar().encode(
+                                x=alt.X("Số Tầng:N", title="Số Tầng"),
+                                y=alt.Y("Giá Trung Vị (tỷ):Q", title="Giá Trung Vị (tỷ VND)"),
+                                color=alt.value("#2ca02c")
+                            ).properties(height=300)
+                            st.altair_chart(chart, use_container_width=True)
+                    else:
+                        st.info("Dữ liệu số tầng không có sẵn")
+
+                with amenity_col2:
+                    st.markdown("**By Area Size Impact**")
+
+                    # Categorize properties by size
+                    filt_with_category = filt.copy()
+                    filt_with_category["size_category"] = pd.cut(
+                        filt_with_category["area_m2"],
+                        bins=[0, 50, 100, 150, 200, 1000],
+                        labels=["< 50m²", "50-100m²", "100-150m²", "150-200m²", "> 200m²"]
+                    )
+
+                    size_analysis = (filt_with_category.groupby("size_category", as_index=False)
+                                    .agg(median_price=("price_billion_vnd", "median"),
+                                         count=("price_billion_vnd", "size"))
+                                    .sort_values("median_price"))
+
+                    if len(size_analysis) > 0:
+                        import altair as alt
+                        size_chart = pd.DataFrame({
+                            "Diện Tích": size_analysis["size_category"].astype(str),
+                            "Giá Trung Vị (tỷ)": size_analysis["median_price"]
+                        })
+                        chart = alt.Chart(size_chart).mark_bar().encode(
+                            x=alt.X("Diện Tích:N", title="Loại Diện Tích"),
+                            y=alt.Y("Giá Trung Vị (tỷ):Q", title="Giá Trung Vị (tỷ VND)"),
+                            color=alt.value("#ff7f0e")
+                        ).properties(height=300)
+                        st.altair_chart(chart, use_container_width=True)
             else:
-                st.info("Không đủ dữ liệu loại nhà để phân tích")
-
-        # ===== VIZ 2: Area vs Price Scatter =====
-        with viz2_col:
-            st.markdown("### 2️⃣ Mối Quan Hệ Diện Tích - Giá")
-            st.caption("Scatter plot: Diện tích vs Giá (sắc độ = Giá/m²)")
-
-            scatter_data = filt[["area_m2", "price_billion_vnd", "price_per_m2_million"]].dropna()
-
-            if len(scatter_data) > 2:
-                import altair as alt
-
-                # Create scatter chart data
-                scatter_chart = pd.DataFrame({
-                    "Diện Tích (m²)": scatter_data["area_m2"],
-                    "Giá (tỷ VND)": scatter_data["price_billion_vnd"],
-                    "Giá/m² (triệu)": scatter_data["price_per_m2_million"]
-                })
-
-                # Create Altair scatter plot
-                chart = alt.Chart(scatter_chart).mark_circle(size=100).encode(
-                    x=alt.X("Diện Tích (m²):Q", title="Diện Tích (m²)"),
-                    y=alt.Y("Giá (tỷ VND):Q", title="Giá (tỷ VND)"),
-                    color=alt.Color("Giá/m² (triệu):Q", scale=alt.Scale(scheme="viridis"), title="Giá/m² (triệu)"),
-                    tooltip=["Diện Tích (m²)", "Giá (tỷ VND)", "Giá/m² (triệu)"]
-                ).properties(height=300).interactive()
-
-                st.altair_chart(chart, use_container_width=True)
-
-                # Add correlation insight
-                corr = scatter_data["area_m2"].corr(scatter_data["price_billion_vnd"])
-                st.caption(f"📊 Correlation: {corr:.3f} " +
-                         ("(Mạnh)" if abs(corr) > 0.7 else "(Trung bình)" if abs(corr) > 0.4 else "(Yếu)"))
-            else:
-                st.info("Không đủ dữ liệu để vẽ biểu đồ scatter")
-
-        st.divider()
-
-        # ===== VIZ 3: Price Distribution =====
-        dist_col, stats_col = st.columns([2, 1])
-
-        with dist_col:
-            st.markdown("### 3️⃣ Phân Bố Giá (Histogram)")
-            st.caption("Phân phối giá bán trong dữ liệu lọc")
-
-            price_dist = filt["price_billion_vnd"].dropna()
-
-            if len(price_dist) > 2:
-                import altair as alt
-                # Create histogram using pandas cut
-                bins = 20
-                hist_data = pd.cut(price_dist, bins=bins).value_counts().sort_index()
-
-                hist_df = pd.DataFrame({
-                    "Khoảng Giá": [f"{interval.left:.1f}-{interval.right:.1f} tỷ" for interval in hist_data.index],
-                    "Số Lượng": hist_data.values
-                })
-
-                chart = alt.Chart(hist_df).mark_bar().encode(
-                    x=alt.X("Khoảng Giá:N", title="Khoảng Giá (tỷ VND)"),
-                    y=alt.Y("Số Lượng:Q", title="Số Lượng"),
-                    color=alt.value("#1f77b4")
-                ).properties(height=300)
-
-                st.altair_chart(chart, use_container_width=True)
-            else:
-                st.info("Không đủ dữ liệu để tạo histogram")
-
-        with stats_col:
-            st.markdown("### 📊 Thống Kê Giá")
-            st.caption("Các chỉ số phân bố giá")
-
-            if not price_dist.empty:
-                st.metric("Min", f"{price_dist.min():.2f} tỷ")
-                st.metric("Q1 (25%)", f"{price_dist.quantile(0.25):.2f} tỷ")
-                st.metric("Median", f"{price_dist.median():.2f} tỷ")
-                st.metric("Q3 (75%)", f"{price_dist.quantile(0.75):.2f} tỷ")
-                st.metric("Max", f"{price_dist.max():.2f} tỷ")
-                st.metric("Std Dev", f"{price_dist.std():.2f} tỷ")
-
-        st.divider()
-
-        # ===== VIZ 4: Amenities Impact (using proxy metrics from available data) =====
-        st.markdown("### 4️⃣ Phân Tích Thuộc Tính Ảnh Hưởng Giá")
-        st.caption("So sánh giá theo các thuộc tính có sẵn trong dữ liệu")
-
-        amenity_col1, amenity_col2 = st.columns(2)
-
-        with amenity_col1:
-            st.markdown("**By Floor Count Impact**")
-
-            if "num_floors" in filt.columns:
-                floor_analysis = (filt.groupby("num_floors", as_index=False)
-                                 .agg(median_price=("price_billion_vnd", "median"),
-                                      avg_price_per_m2=("price_per_m2_million", "mean"),
-                                      count=("price_billion_vnd", "size"))
-                                 .sort_values("num_floors"))
-
-                if len(floor_analysis) > 0:
-                    import altair as alt
-                    floor_chart = pd.DataFrame({
-                        "Số Tầng": floor_analysis["num_floors"].astype(str),
-                        "Giá Trung Vị (tỷ)": floor_analysis["median_price"]
-                    })
-                    chart = alt.Chart(floor_chart).mark_bar().encode(
-                        x=alt.X("Số Tầng:N", title="Số Tầng"),
-                        y=alt.Y("Giá Trung Vị (tỷ):Q", title="Giá Trung Vị (tỷ VND)"),
-                        color=alt.value("#2ca02c")
-                    ).properties(height=300)
-                    st.altair_chart(chart, use_container_width=True)
-            else:
-                st.info("Dữ liệu số tầng không có sẵn")
-
-        with amenity_col2:
-            st.markdown("**By Area Size Impact**")
-
-            # Categorize properties by size
-            filt_with_category = filt.copy()
-            filt_with_category["size_category"] = pd.cut(
-                filt_with_category["area_m2"],
-                bins=[0, 50, 100, 150, 200, 1000],
-                labels=["< 50m²", "50-100m²", "100-150m²", "150-200m²", "> 200m²"]
-            )
-
-            size_analysis = (filt_with_category.groupby("size_category", as_index=False)
-                            .agg(median_price=("price_billion_vnd", "median"),
-                                 count=("price_billion_vnd", "size"))
-                            .sort_values("median_price"))
-
-            if len(size_analysis) > 0:
-                import altair as alt
-                size_chart = pd.DataFrame({
-                    "Diện Tích": size_analysis["size_category"].astype(str),
-                    "Giá Trung Vị (tỷ)": size_analysis["median_price"]
-                })
-                chart = alt.Chart(size_chart).mark_bar().encode(
-                    x=alt.X("Diện Tích:N", title="Loại Diện Tích"),
-                    y=alt.Y("Giá Trung Vị (tỷ):Q", title="Giá Trung Vị (tỷ VND)"),
-                    color=alt.value("#ff7f0e")
-                ).properties(height=300)
-                st.altair_chart(chart, use_container_width=True)
-
-    else:
-        st.warning("⚠️ Bộ lọc không có dữ liệu. Vui lòng điều chỉnh các bộ lọc để xem các visualizations.")
+                st.warning("⚠️ Bộ lọc không có dữ liệu. Vui lòng điều chỉnh các bộ lọc để xem các visualizations.")
 
 # =========================================================================
 # TAB 3: FEEDBACK ANALYTICS
