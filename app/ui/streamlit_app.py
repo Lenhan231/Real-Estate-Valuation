@@ -272,7 +272,7 @@ col_title, col_status = st.columns([3, 1])
 with col_title:
     st.caption(
         "Model: **v2.6 Ensemble (LightGBM + XGBoost + CatBoost)** · "
-        "R² **0.9159** · MAPE **13.43%**"
+        "R² **0.918** · MAPE **13.18%**"
     )
 with col_status:
     try:
