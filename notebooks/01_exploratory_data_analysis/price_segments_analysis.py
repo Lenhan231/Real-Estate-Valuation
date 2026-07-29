@@ -12,13 +12,13 @@ from models.scripts.shared.preprocessing import setup_matplotlib, load_processed
 
 plt = setup_matplotlib()
 
-# Get correct project root (parent of notebooks folder)
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-DATA_DIR = PROJECT_ROOT / 'data'
-VIZ_DIR = DATA_DIR / 'visualizations'
+# Save outputs to folder next to this script
+SCRIPT_DIR = Path(__file__).parent
+VIZ_DIR = SCRIPT_DIR / 'outputs'
 VIZ_DIR.mkdir(parents=True, exist_ok=True)
 
 print(f"[DEBUG] VIZ_DIR: {VIZ_DIR}")
+print(f"[DEBUG] VIZ_DIR exists: {VIZ_DIR.exists()}")
 print("[Loading Data]")
 df = load_processed_data()
 print(f"  {df.shape[0]:,} records")

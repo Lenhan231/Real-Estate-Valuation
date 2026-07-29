@@ -1,19 +1,19 @@
 {
   "global": {
-    "mape_percent": 13.87,
-    "r2": 0.9142,
-    "mae_vnd": 2101089814.0,
-    "mae_billion_vnd": 2.1,
-    "rmse_vnd": 3318356895.0,
-    "rmse_billion_vnd": 3.32,
-    "test_samples": 1648
+    "mape_percent": 13.2,
+    "r2": 0.9182,
+    "mae_vnd": 1936223940.0,
+    "mae_billion_vnd": 1.94,
+    "rmse_vnd": 3224766143.0,
+    "rmse_billion_vnd": 3.22,
+    "test_samples": 1649
   },
   "dataset": {
-    "total_samples": 8238,
+    "total_samples": 8243,
     "features": 78,
-    "train_samples": 5272,
-    "validation_samples": 1318,
-    "test_samples": 1648,
+    "train_samples": 5275,
+    "validation_samples": 1319,
+    "test_samples": 1649,
     "split_ratio": "64/16/20"
   }
 }
