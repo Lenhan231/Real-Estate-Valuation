@@ -1127,15 +1127,15 @@ with tab_analysis:
                         tooltip={"text": "Giá/m²: {price_per_m2_million} triệu"},
                     ), use_container_width=True)
 
-            with trend_col:
-                st.markdown("#### 📈 Xu hướng Thị trường")
-                trend = (filt.groupby("month", as_index=False)
-                         .agg(median_price_billion_vnd=("price_billion_vnd", "median"),
-                              listing_count=("price_billion_vnd", "size"))
-                         .sort_values("month"))
-                if len(trend):
-                    st.line_chart(trend.set_index("month")["median_price_billion_vnd"], use_container_width=True)
-                    st.bar_chart(trend.set_index("month")["listing_count"], use_container_width=True)
+            # with trend_col:
+            #     st.markdown("#### 📈 Xu hướng Thị trường")
+            #     trend = (filt.groupby("month", as_index=False)
+            #              .agg(median_price_billion_vnd=("price_billion_vnd", "median"),
+            #                   listing_count=("price_billion_vnd", "size"))
+            #              .sort_values("month"))
+            #     if len(trend):
+            #         st.line_chart(trend.set_index("month")["median_price_billion_vnd"], use_container_width=True)
+            #         st.bar_chart(trend.set_index("month")["listing_count"], use_container_width=True)
 
             # Top localities
             st.divider()
@@ -1183,7 +1183,7 @@ with tab_analysis:
 
                         chart = alt.Chart(chart_data).mark_bar().encode(
                             x=alt.X("Loại Nhà:N", title="Loại Nhà"),
-                            y=alt.Y("Giá Trung Bình (tỷ VND):Q", title="Giá (tỷ VND)"),
+                            y=alt.Y("Giá Trung Bình (tỷ VND):Q"),
                             color=alt.Color("Giá Trung Bình (tỷ VND):Q", scale=alt.Scale(scheme="viridis"))
                         ).properties(height=300).interactive()
 
@@ -1290,11 +1290,11 @@ with tab_analysis:
                         if len(floor_analysis) > 0:
                             import altair as alt
                             floor_chart = pd.DataFrame({
-                                "Số Tầng": floor_analysis["num_floors"].astype(str),
+                                "Số Tầng": floor_analysis["num_floors"].astype(int),
                                 "Giá Trung Vị (tỷ)": floor_analysis["median_price"]
                             })
                             chart = alt.Chart(floor_chart).mark_bar().encode(
-                                x=alt.X("Số Tầng:N", title="Số Tầng"),
+                                x=alt.X("Số Tầng:O", title="Số Tầng"),
                                 y=alt.Y("Giá Trung Vị (tỷ):Q", title="Giá Trung Vị (tỷ VND)"),
                                 color=alt.value("#2ca02c")
                             ).properties(height=300)
@@ -1330,6 +1330,101 @@ with tab_analysis:
                             color=alt.value("#ff7f0e")
                         ).properties(height=300)
                         st.altair_chart(chart, use_container_width=True)
+
+                # ===== More Attributes: Bedrooms, Road Width, Width, Length =====
+                attr_col1, attr_col2, attr_col3, attr_col4 = st.columns(4)
+
+                # 1. By Bedrooms
+                with attr_col1:
+                    st.markdown("**By Bedrooms Count**")
+                    if "num_bedrooms" in filt.columns:
+                        bed_analysis = (filt.groupby("num_bedrooms", as_index=False)
+                                       .agg(median_price=("price_billion_vnd", "median"),
+                                            count=("price_billion_vnd", "size"))
+                                       .sort_values("num_bedrooms"))
+                        if len(bed_analysis) > 0:
+                            import altair as alt
+                            bed_chart = pd.DataFrame({
+                                "Phòng ngủ": bed_analysis["num_bedrooms"].astype(int),
+                                "Giá Trung Vị (tỷ)": bed_analysis["median_price"]
+                            })
+                            chart = alt.Chart(bed_chart).mark_bar().encode(
+                                x=alt.X("Phòng ngủ:O", title="Số phòng ngủ"),
+                                y=alt.Y("Giá Trung Vị (tỷ):Q", title="Giá (tỷ VND)"),
+                                color=alt.value("#d62728")
+                            ).properties(height=300)
+                            st.altair_chart(chart, use_container_width=True)
+                    else:
+                        st.info("Dữ liệu phòng ngủ không có sẵn")
+
+                # 2. By Road Width
+                with attr_col2:
+                    st.markdown("**By Road Width**")
+                    if "road_width_m" in filt.columns:
+                        road_analysis = filt[["road_width_m", "price_billion_vnd"]].dropna()
+                        if len(road_analysis) > 5:
+                            road_bins = pd.cut(road_analysis["road_width_m"], bins=5)
+                            road_grouped = road_analysis.groupby(road_bins, as_index=True)["price_billion_vnd"].median()
+                            if len(road_grouped) > 0:
+                                import altair as alt
+                                road_chart = pd.DataFrame({
+                                    "Rộng đường (m)": [f"{interval.left:.0f}-{interval.right:.0f}" for interval in road_grouped.index],
+                                    "Giá Trung Vị (tỷ)": road_grouped.values
+                                })
+                                chart = alt.Chart(road_chart).mark_bar().encode(
+                                    x=alt.X("Rộng đường (m):N", title="Chiều rộng đường (m)"),
+                                    y=alt.Y("Giá Trung Vị (tỷ):Q", title="Giá (tỷ VND)"),
+                                    color=alt.value("#1f77b4")
+                                ).properties(height=300)
+                                st.altair_chart(chart, use_container_width=True)
+                    else:
+                        st.info("Dữ liệu rộng đường không có sẵn")
+
+                # 3. By Width
+                with attr_col3:
+                    st.markdown("**By Width (Chiều ngang)**")
+                    if "width_m" in filt.columns:
+                        width_analysis = filt[["width_m", "price_billion_vnd"]].dropna()
+                        if len(width_analysis) > 5:
+                            width_bins = pd.cut(width_analysis["width_m"], bins=5)
+                            width_grouped = width_analysis.groupby(width_bins, as_index=True)["price_billion_vnd"].median()
+                            if len(width_grouped) > 0:
+                                import altair as alt
+                                width_chart = pd.DataFrame({
+                                    "Chiều ngang (m)": [f"{interval.left:.0f}-{interval.right:.0f}" for interval in width_grouped.index],
+                                    "Giá Trung Vị (tỷ)": width_grouped.values
+                                })
+                                chart = alt.Chart(width_chart).mark_bar().encode(
+                                    x=alt.X("Chiều ngang (m):N", title="Chiều ngang (m)"),
+                                    y=alt.Y("Giá Trung Vị (tỷ):Q", title="Giá (tỷ VND)"),
+                                    color=alt.value("#2ca02c")
+                                ).properties(height=300)
+                                st.altair_chart(chart, use_container_width=True)
+                    else:
+                        st.info("Dữ liệu chiều ngang không có sẵn")
+
+                # 4. By Length
+                with attr_col4:
+                    st.markdown("**By Length (Chiều dài)**")
+                    if "length_m" in filt.columns:
+                        length_analysis = filt[["length_m", "price_billion_vnd"]].dropna()
+                        if len(length_analysis) > 5:
+                            length_bins = pd.cut(length_analysis["length_m"], bins=5)
+                            length_grouped = length_analysis.groupby(length_bins, as_index=True)["price_billion_vnd"].median()
+                            if len(length_grouped) > 0:
+                                import altair as alt
+                                length_chart = pd.DataFrame({
+                                    "Chiều dài (m)": [f"{interval.left:.0f}-{interval.right:.0f}" for interval in length_grouped.index],
+                                    "Giá Trung Vị (tỷ)": length_grouped.values
+                                })
+                                chart = alt.Chart(length_chart).mark_bar().encode(
+                                    x=alt.X("Chiều dài (m):N", title="Chiều dài (m)"),
+                                    y=alt.Y("Giá Trung Vị (tỷ):Q", title="Giá (tỷ VND)"),
+                                    color=alt.value("#ff7f0e")
+                                ).properties(height=300)
+                                st.altair_chart(chart, use_container_width=True)
+                    else:
+                        st.info("Dữ liệu chiều dài không có sẵn")
             else:
                 st.warning("⚠️ Bộ lọc không có dữ liệu. Vui lòng điều chỉnh các bộ lọc để xem các visualizations.")
 
