@@ -3,11 +3,27 @@ import matplotlib.pyplot as plt
 
 
 def plot_feature_importance(model, feature_names, save_path):
-    """Plot top 20 feature importances from model."""
-    importances = model.feature_importances_
+    """Plot the top 20 feature importances from the averaged ensemble."""
+    if isinstance(model, dict):
+        ensemble = []
+        for value in model.values():
+            if isinstance(value, dict):
+                for nested in value.values():
+                    if hasattr(nested, "feature_importances_"):
+                        ensemble.append(np.asarray(nested.feature_importances_, dtype=float))
+            elif hasattr(value, "feature_importances_"):
+                ensemble.append(np.asarray(value.feature_importances_, dtype=float))
+
+        if not ensemble:
+            raise ValueError("No feature_importances_ found in provided models")
+
+        importances = np.mean(ensemble, axis=0)
+    else:
+        importances = np.asarray(model.feature_importances_, dtype=float)
+
     indices = np.argsort(importances)[-20:]
     plt.figure(figsize=(10, 8))
-    plt.title("Top 20 Feature Importances (LGBM)")
+    plt.title("Global Top 20 Feature Importances (Ensemble)")
     plt.barh(range(len(indices)), importances[indices], align="center")
     plt.yticks(range(len(indices)), [feature_names[i] for i in indices])
     plt.xlabel("Relative Importance")

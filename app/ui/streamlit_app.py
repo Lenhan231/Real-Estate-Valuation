@@ -1127,14 +1127,14 @@ with tab_analysis:
                         tooltip={"text": "Giá/m²: {price_per_m2_million} triệu"},
                     ), use_container_width=True)
 
-            # with trend_col:
-            #     st.markdown("#### 📈 Xu hướng Thị trường")
-            #     trend = (filt.groupby("month", as_index=False)
-            #              .agg(median_price_billion_vnd=("price_billion_vnd", "median"),
-            #                   listing_count=("price_billion_vnd", "size"))
-            #              .sort_values("month"))
-            #     if len(trend):
-            #         st.line_chart(trend.set_index("month")["median_price_billion_vnd"], use_container_width=True)
+            with trend_col:
+                st.markdown("#### 📈 Xu hướng Thị trường")
+                trend = (filt.groupby("month", as_index=False)
+                         .agg(median_price_billion_vnd=("price_billion_vnd", "median"),
+                              listing_count=("price_billion_vnd", "size"))
+                         .sort_values("month"))
+                if len(trend):
+                    st.line_chart(trend.set_index("month")["median_price_billion_vnd"], use_container_width=True)
             #         st.bar_chart(trend.set_index("month")["listing_count"], use_container_width=True)
 
             # Top localities

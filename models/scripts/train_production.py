@@ -447,9 +447,8 @@ def main():
 
     PLOT_DIR.mkdir(parents=True, exist_ok=True)
 
-    if "mid" in models and "lgbm" in models["mid"]:
-        model_lgbm = models["mid"]["lgbm"]
-        plot_feature_importance(model_lgbm, feature_names, PLOT_DIR / "feature_importance_production.png")
+    if models:
+        plot_feature_importance(models, feature_names, PLOT_DIR / "feature_importance_production.png")
 
     plot_pred_vs_actual(global_y_test, global_y_pred, PLOT_DIR / "pred_vs_actual_production.png")
     print(f"✓ Plots saved to {PLOT_DIR}")
